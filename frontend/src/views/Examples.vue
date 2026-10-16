@@ -1,0 +1,140 @@
+<template>
+  <div>
+    <div class="page-head">
+      <h1>Примеры</h1>
+      <label class="check">
+        <input v-model="includeArchived" type="checkbox" @change="load" />
+        <span>Архив</span>
+      </label>
+    </div>
+    <p class="muted">Сюда кладутся файлы, которые прислал заказчик: pdf, таблицы, документы, картинки. Текст не обязателен.</p>
+    <form class="composer" @submit.prevent="upload">
+      <input ref="fileInput" type="file" @change="onFile" />
+      <input v-model="note" type="text" placeholder="Заметка, можно пустой" />
+      <button class="btn" type="submit" :disabled="busy">Добавить файл</button>
+    </form>
+    <p v-if="formError" class="error">{{ formError }}</p>
+    <form class="composer" @submit.prevent="load">
+      <input v-model="query" type="text" placeholder="Найти по названию" />
+      <button class="btn secondary" type="submit">Найти</button>
+    </form>
+    <p v-if="error" class="error">{{ error }}</p>
+    <p v-else-if="loading" class="muted">Загрузка…</p>
+    <p v-else-if="!items.length" class="muted">Файлов нет</p>
+    <div v-else class="list">
+      <article v-for="item in items" :key="item.id" class="list-row">
+        <div class="status-row">
+          <div>
+            <strong>{{ item.title }}</strong>
+            <div class="muted">
+              <span v-if="item.files && item.files.length">{{ item.files.map((file) => file.original_name).join(", ") }}</span>
+              <span v-else>файла нет</span>
+              <span v-if="item.note"> · {{ item.note }}</span>
+              <span v-if="item.archived"> · архив</span>
+            </div>
+          </div>
+          <ActionMenu :actions="actionsFor(item)" @choose="onAction($event, item)" />
+        </div>
+      </article>
+    </div>
+  </div>
+</template>
+
+<script>
+import { ref, watch } from "vue"
+import ActionMenu from "../components/ActionMenu.vue"
+import { api } from "../api"
+import { useNotice } from "../composables/useNotice"
+
+export default {
+  components: { ActionMenu },
+  props: { project: { type: Object, required: true } },
+  setup(props) {
+    const items = ref([])
+    const error = ref("")
+    const formError = ref("")
+    const loading = ref(true)
+    const busy = ref(false)
+    const query = ref("")
+    const note = ref("")
+    const file = ref(null)
+    const fileInput = ref(null)
+    const includeArchived = ref(false)
+    const notice = useNotice()
+
+    function onFile(event) {
+      const list = event.target.files
+      file.value = list && list.length ? list[0] : null
+    }
+
+    function actionsFor(item) {
+      const actions = []
+      const first = item.files && item.files[0]
+      if (first) actions.push({ id: "download", label: "Скачать" })
+      actions.push({ id: "delete", label: "Удалить", danger: true })
+      return actions
+    }
+
+    function onAction(action, item) {
+      if (action === "download" && item.files && item.files[0]) {
+        window.location.assign("/api/files/" + item.files[0].file_id)
+      }
+      if (action === "delete") remove(item)
+    }
+
+    async function load() {
+      loading.value = true
+      error.value = ""
+      try {
+        const params = new URLSearchParams()
+        if (includeArchived.value) params.set("include_archived", "true")
+        if (query.value.trim()) params.set("q", query.value.trim())
+        const data = await api("/api/projects/" + props.project.id + "/examples?" + params.toString())
+        items.value = data.items || []
+      } catch (err) {
+        items.value = []
+        error.value = err.message || "Список недоступен"
+      } finally {
+        loading.value = false
+      }
+    }
+
+    async function upload() {
+      formError.value = ""
+      if (!file.value) {
+        formError.value = "Выберите файл"
+        return
+      }
+      const body = new FormData()
+      body.append("file", file.value)
+      body.append("note", note.value)
+      busy.value = true
+      try {
+        await api("/api/projects/" + props.project.id + "/examples/upload", { method: "POST", body })
+        note.value = ""
+        file.value = null
+        if (fileInput.value) fileInput.value.value = ""
+        await load()
+      } catch (err) {
+        formError.value = err.message || "Не удалось добавить"
+      } finally {
+        busy.value = false
+      }
+    }
+
+    async function remove(item) {
+      const snapshot = items.value.slice()
+      items.value = items.value.filter((row) => row.id !== item.id)
+      try {
+        await api("/api/projects/" + props.project.id + "/examples/" + item.id, { method: "DELETE" })
+      } catch (err) {
+        items.value = snapshot
+        notice.show("Не удалось удалить пример. " + (err.message || "Ошибка"))
+      }
+    }
+
+    watch(() => props.project && props.project.id, load, { immediate: true })
+    return { items, error, formError, loading, busy, query, note, fileInput, includeArchived, onFile, load, upload, actionsFor, onAction }
+  },
+}
+</script>

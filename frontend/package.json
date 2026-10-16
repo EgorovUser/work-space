@@ -1,0 +1,21 @@
+{
+  "name": "workspace-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 8080",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 8080",
+    "test": "node --test src/composables/*.test.js"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.8",
+    "sortablejs": "^1.15.6",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^6.2.0"
+  }
+}

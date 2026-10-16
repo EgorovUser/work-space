@@ -1,0 +1,175 @@
+from __future__ import annotations
+
+from app.core.setting_defs import SettingDef
+
+
+def _s(**kwargs) -> SettingDef:
+    return SettingDef(module="tasks", **kwargs)
+
+
+_STATUSES = [
+    {"name": "К выполнению", "is_closed": False, "color": "#e7e1d6"},
+    {"name": "В работе", "is_closed": False, "color": "#d6e4f0"},
+    {"name": "Готово", "is_closed": True, "color": "#d7eadf"},
+]
+
+_PRIORITIES = [
+    {"id": "low", "label": "Низкий"},
+    {"id": "normal", "label": "Обычный"},
+    {"id": "high", "label": "Высокий"},
+]
+
+
+DEFS: tuple[SettingDef, ...] = (
+    _s(
+        key="title.max_length",
+        value_type="int",
+        default=300,
+        label="Максимальная длина названия задачи",
+        ui_hint="number",
+        min_value=1,
+        max_value=4000,
+    ),
+    _s(
+        key="description.max_length",
+        value_type="int",
+        default=50000,
+        label="Максимальная длина описания задачи",
+        ui_hint="number",
+        min_value=0,
+        max_value=500000,
+    ),
+    _s(
+        key="comment.max_length",
+        value_type="int",
+        default=10000,
+        label="Максимальная длина комментария",
+        ui_hint="number",
+        min_value=1,
+        max_value=100000,
+    ),
+    _s(
+        key="tag.name.max_length",
+        value_type="int",
+        default=40,
+        label="Максимальная длина метки",
+        ui_hint="number",
+        min_value=1,
+        max_value=200,
+    ),
+    _s(
+        key="checklist.title.max_length",
+        value_type="int",
+        default=300,
+        label="Максимальная длина пункта чеклиста",
+        ui_hint="number",
+        min_value=1,
+        max_value=4000,
+    ),
+    _s(
+        key="checklist.max_items",
+        value_type="int",
+        default=200,
+        label="Пунктов чеклиста на задачу",
+        ui_hint="number",
+        min_value=1,
+        max_value=5000,
+    ),
+    _s(
+        key="status.name.max_length",
+        value_type="int",
+        default=80,
+        label="Максимальная длина названия колонки",
+        ui_hint="number",
+        min_value=1,
+        max_value=500,
+    ),
+    _s(
+        key="status.color.max_length",
+        value_type="int",
+        default=20,
+        label="Максимальная длина цвета колонки",
+        ui_hint="number",
+        min_value=1,
+        max_value=80,
+    ),
+    _s(
+        key="status.color.default",
+        value_type="str",
+        default="#e7e1d6",
+        label="Цвет новой колонки",
+        description="Если цвет не указали при создании.",
+    ),
+    _s(
+        key="statuses.defaults",
+        value_type="json",
+        default=_STATUSES,
+        label="Колонки нового проекта",
+        description="Список объектов name, is_closed, color. Создаются вместе с проектом.",
+        ui_hint="json",
+    ),
+    _s(
+        key="priorities",
+        value_type="json",
+        default=_PRIORITIES,
+        label="Приоритеты",
+        description="Список объектов id и label.",
+        ui_hint="json",
+    ),
+    _s(
+        key="priority.default",
+        value_type="str",
+        default="normal",
+        label="Приоритет по умолчанию",
+        allowed_scopes=("global", "project"),
+    ),
+    _s(
+        key="progress.default",
+        value_type="str",
+        default="auto",
+        label="Режим прогресса по умолчанию",
+        description="auto — доля отмеченных пунктов, manual — число вручную.",
+        allowed_scopes=("global", "project"),
+        ui_hint="select",
+        options=("auto", "manual"),
+    ),
+    _s(
+        key="progress.max",
+        value_type="int",
+        default=100,
+        label="Максимум прогресса",
+        ui_hint="number",
+        min_value=1,
+        max_value=100000,
+    ),
+    _s(
+        key="deadlines.warn_days",
+        value_type="json",
+        default=[3, 1, 0],
+        label="За сколько дней предупреждать о дедлайне",
+        description="Список целых чисел. 0 — в день срока. Отрицательные не используются: просрочка считается отдельно.",
+        allowed_scopes=("global", "project"),
+        ui_hint="json",
+    ),
+    _s(
+        key="deadlines.interval_seconds",
+        value_type="int",
+        default=3600,
+        label="Как часто проверять дедлайны",
+        description="Секунды между проходами джобы tasks.deadlines.",
+        ui_hint="number",
+        min_value=1,
+        max_value=864000,
+    ),
+    _s(
+        key="board.max_tasks",
+        value_type="int",
+        default=500,
+        label="Задач на доске",
+        description="Сколько задач отдавать за один запрос.",
+        allowed_scopes=("global", "project"),
+        ui_hint="number",
+        min_value=1,
+        max_value=20000,
+    ),
+)
