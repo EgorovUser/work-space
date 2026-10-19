@@ -139,48 +139,139 @@ export default {
           onEnd: () => moveColumns(),
         })
       )
-      for (const list of root.value.querySelectorAll(".task-list")) {
-        sortables.push(
-          Sortable.create(list, {
-            group: "tasks",
-            animation: 0,
-            draggable: ".task-card",
-            handle: ".task-card",
-            filter: "a, button, input, textarea, select",
-            preventOnFilter: true,
-            forceFallback: true,
-            fallbackOnBody: true,
-            fallbackTolerance: 4,
-            emptyInsertThreshold: 160,
-            onEnd: (evt) => dropped(evt),
-          })
-        )
-      }
     }
 
-    function restore(evt) {
-      const item = evt.item
-      const list = evt.from
-      if (!item || !list) return
-      item.remove()
-      const cards = [...list.querySelectorAll(":scope > .task-card")]
-      list.insertBefore(item, cards[evt.oldIndex] || null)
+    let drag = null
+
+    function clearDrag() {
+      if (!drag) return
+      if (drag.ghost) drag.ghost.remove()
+      if (drag.card) drag.card.classList.remove("drag-source")
+      if (drag.column) drag.column.classList.remove("drop-target")
+      document.body.classList.remove("dragging-card")
+      drag = null
     }
 
-    function pointer(evt) {
-      const source = evt.originalEvent || {}
-      const touch = (source.changedTouches && source.changedTouches[0]) || (source.touches && source.touches[0])
-      const point = touch || source
-      return { x: point.clientX, y: point.clientY }
-    }
-
-    function listAt(x) {
-      if (!root.value || typeof x !== "number") return null
+    function columnAt(x, hold) {
+      if (!root.value || typeof x !== "number") return hold || null
+      let found = null
       for (const column of root.value.querySelectorAll(".kanban-col")) {
         const rect = column.getBoundingClientRect()
-        if (x >= rect.left && x <= rect.right) return column.querySelector(".task-list")
+        if (x >= rect.left && x <= rect.right) found = column
       }
-      return null
+      if (!found || !hold || found === hold) return found || hold || null
+      const rect = found.getBoundingClientRect()
+      const margin = Math.min(48, rect.width / 4)
+      if (x < rect.left + margin || x > rect.right - margin) return hold
+      return found
+    }
+
+    function onPointerDown(event) {
+      if (event.button !== 0 || !root.value) return
+      const card = event.target.closest && event.target.closest(".task-card")
+      if (!card || !root.value.contains(card)) return
+      if (event.target.closest("a, button, input, textarea, select, .col-handle")) return
+      drag = {
+        card,
+        id: Number(card.dataset.id),
+        startX: event.clientX,
+        startY: event.clientY,
+        active: false,
+        ghost: null,
+        column: card.closest(".kanban-col"),
+      }
+      window.addEventListener("pointermove", onPointerMove)
+      window.addEventListener("pointerup", onPointerUp)
+    }
+
+    function onPointerMove(event) {
+      if (!drag) return
+      const dx = event.clientX - drag.startX
+      const dy = event.clientY - drag.startY
+      if (!drag.active) {
+        if (dx * dx + dy * dy < 25) return
+        const rect = drag.card.getBoundingClientRect()
+        const ghost = drag.card.cloneNode(true)
+        ghost.classList.add("drag-ghost")
+        ghost.style.width = rect.width + "px"
+        ghost.style.transform = "translate(" + rect.left + "px, " + rect.top + "px)"
+        document.body.appendChild(ghost)
+        drag.ghost = ghost
+        drag.offsetX = event.clientX - rect.left
+        drag.offsetY = event.clientY - rect.top
+        drag.active = true
+        drag.card.classList.add("drag-source")
+        if (drag.column) drag.column.classList.add("drop-target")
+        document.body.classList.add("dragging-card")
+      }
+      drag.ghost.style.transform = "translate(" + (event.clientX - drag.offsetX) + "px, " + (event.clientY - drag.offsetY) + "px)"
+      const next = columnAt(event.clientX, drag.column)
+      if (next && next !== drag.column) {
+        drag.column.classList.remove("drop-target")
+        drag.column = next
+        next.classList.add("drop-target")
+      }
+    }
+
+    function idsOf(list, skipId) {
+      return [...list.querySelectorAll(":scope > .task-card")]
+        .map((node) => Number(node.dataset.id))
+        .filter((id) => id && id !== skipId)
+    }
+
+    function indexAt(list, y, skipId) {
+      const cards = [...list.querySelectorAll(":scope > .task-card")].filter((node) => Number(node.dataset.id) !== skipId)
+      for (let i = 0; i < cards.length; i += 1) {
+        const rect = cards[i].getBoundingClientRect()
+        if (y < rect.top + rect.height / 2) return i
+      }
+      return cards.length
+    }
+
+    async function onPointerUp(event) {
+      window.removeEventListener("pointermove", onPointerMove)
+      window.removeEventListener("pointerup", onPointerUp)
+      const state = drag
+      if (!state || !state.active) {
+        clearDrag()
+        return
+      }
+      const list = state.column && state.column.querySelector(".task-list")
+      const from = state.card.closest(".task-list")
+      clearDrag()
+      window.addEventListener("click", swallowClick, true)
+      if (!list || !from || !state.id) return
+      const fromIds = idsOf(from, state.id)
+      const same = list === from
+      const targetIds = same ? fromIds : idsOf(list, state.id)
+      targetIds.splice(indexAt(list, event.clientY, state.id), 0, state.id)
+      const orders = same
+        ? [{ status_id: Number(from.dataset.status), ids: targetIds }]
+        : [
+            { status_id: Number(from.dataset.status), ids: fromIds },
+            { status_id: Number(list.dataset.status), ids: targetIds },
+          ]
+      const snapshot = tasks.value.map((task) => ({ ...task }))
+      tasks.value = applyTaskOrders(tasks.value, orders)
+      try {
+        await api("/api/projects/" + props.project.id + "/tasks/reorder", { method: "POST", body: { orders } })
+      } catch (err) {
+        tasks.value = snapshot
+        notice.show("Не удалось перенести карточку. " + (err.message || "Ошибка"))
+      }
+    }
+
+    function swallowClick(event) {
+      event.preventDefault()
+      event.stopPropagation()
+      window.removeEventListener("click", swallowClick, true)
+    }
+
+    function unbindDrag() {
+      window.removeEventListener("pointermove", onPointerMove)
+      window.removeEventListener("pointerup", onPointerUp)
+      window.removeEventListener("click", swallowClick, true)
+      clearDrag()
     }
 
     async function moveColumns() {
@@ -197,42 +288,6 @@ export default {
         notice.show("Не удалось переместить колонку. " + (err.message || "Ошибка"))
         await nextTick()
         mountSort()
-      }
-    }
-
-    async function dropped(evt) {
-      const movedId = Number(evt.item && evt.item.dataset.id)
-      const point = pointer(evt)
-      const aimed = listAt(point.x) || evt.to
-      const lists = [evt.from, evt.to, aimed].filter((list, index, all) => list && all.indexOf(list) === index)
-      const orders = lists.map((list) => {
-        const ids = [...list.querySelectorAll(":scope > .task-card")]
-          .map((node) => Number(node.dataset.id))
-          .filter((id) => id && id !== movedId)
-        if (list === aimed && movedId) {
-          const cards = [...list.querySelectorAll(":scope > .task-card")].filter((node) => Number(node.dataset.id) !== movedId)
-          let index = ids.length
-          if (typeof point.y === "number") {
-            for (let i = 0; i < cards.length; i += 1) {
-              const rect = cards[i].getBoundingClientRect()
-              if (point.y < rect.top + rect.height / 2) {
-                index = i
-                break
-              }
-            }
-          }
-          ids.splice(index, 0, movedId)
-        }
-        return { status_id: Number(list.dataset.status), ids }
-      })
-      const snapshot = tasks.value.map((task) => ({ ...task }))
-      restore(evt)
-      tasks.value = applyTaskOrders(tasks.value, orders)
-      try {
-        await api("/api/projects/" + props.project.id + "/tasks/reorder", { method: "POST", body: { orders } })
-      } catch (err) {
-        tasks.value = snapshot
-        notice.show("Не удалось перенести карточку. " + (err.message || "Ошибка"))
       }
     }
 
@@ -362,8 +417,14 @@ export default {
     }
 
     watch(() => props.project.id, load)
-    onMounted(load)
-    onBeforeUnmount(destroySort)
+    onMounted(() => {
+      window.addEventListener("pointerdown", onPointerDown)
+      load()
+    })
+    onBeforeUnmount(() => {
+      unbindDrag()
+      destroySort()
+    })
     return {
       statuses, drafts, columnName, columnClosed, error, unavailable, busy, root, cardActions,
       tasksOf, priorityLabel, when, late, bar, columnActions, create, addColumn, rename, onCard, onColumn,
