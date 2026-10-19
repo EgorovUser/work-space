@@ -119,7 +119,7 @@ CORE_DEFS: tuple[SettingDef, ...] = (
         value_type="json",
         default=[],
         label="Разрешённые расширения",
-        description="Пустой список — любые. Без точки, например pdf.",
+        description="Пустой список — любые файлы (ограничение не задано). Без точки, например pdf, docx.",
         ui_hint="json",
     ),
     _s(
