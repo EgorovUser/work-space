@@ -96,6 +96,7 @@ export default {
     }
 
     async function remove(item) {
+      if (!window.confirm("Удалить заметку? Отменить будет нельзя.")) return
       busy.value = true
       error.value = ""
       try {

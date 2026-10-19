@@ -385,6 +385,7 @@ export default {
     }
 
     async function removeTag(tag) {
+      if (!window.confirm("Удалить хештег «" + tag.name + "» и его условия? Письма останутся.")) return
       busy.value = true
       tagError.value = ""
       try {
@@ -467,6 +468,7 @@ export default {
     }
 
     async function removeAccount(item) {
+      if (!window.confirm("Удалить ящик «" + item.name + "»? Настройки (сервер, логин, пароль) будут потеряны; сохранённые письма останутся.")) return
       busy.value = true
       try {
         await api("/api/mail/accounts/" + item.id, { method: "DELETE" })

@@ -55,7 +55,8 @@
       </form>
       <p v-if="createError" class="error">{{ createError }}</p>
       <p v-if="error" class="error">{{ error }}</p>
-      <p v-else-if="!items.length" class="muted">Проектов пока нет.</p>
+      <p v-else-if="loading" class="muted">Загрузка…</p>
+      <p v-else-if="!items.length" class="muted">Проектов пока нет. Создайте первый формой выше.</p>
       <div v-else class="list">
         <router-link v-for="project in items" :key="project.id" class="list-row" :to="'/projects/' + project.id">
           <strong>{{ project.name }} <span v-if="project.archived" class="muted">· архив</span></strong>
@@ -95,6 +96,7 @@ export default {
     const unavailable = ref(false)
     const includeArchived = ref(false)
     const busy = ref(false)
+    const loading = ref(true)
     const { settings, when } = useWhen()
     const router = useRouter()
 
@@ -104,22 +106,32 @@ export default {
     }
 
     async function load() {
+      loading.value = true
       error.value = ""
       unavailable.value = false
       try {
-        const [data, home] = await Promise.all([
-          api("/api/projects?include_archived=" + (includeArchived.value ? "true" : "false")),
-          api("/api/home"),
-        ])
+        const data = await api("/api/projects?include_archived=" + (includeArchived.value ? "true" : "false"))
         items.value = data.items || []
-        hot.value = home.tasks || []
-        letters.value = home.mail || []
-        events.value = home.events || []
-        sections.value = home.sections || { tasks: true, mail: true, events: true }
       } catch (err) {
         if (err.status === 503) unavailable.value = true
         else error.value = err.message || "Не удалось загрузить проекты"
+      } finally {
+        loading.value = false
       }
+      // Лента «Сегодня/Горящие/Новые письма» — второстепенный виджет: если он
+      // упал, список проектов всё равно должен работать.
+      api("/api/home")
+        .then((home) => {
+          hot.value = home.tasks || []
+          letters.value = home.mail || []
+          events.value = home.events || []
+          sections.value = home.sections || { tasks: true, mail: true, events: true }
+        })
+        .catch(() => {
+          hot.value = []
+          letters.value = []
+          events.value = []
+        })
     }
 
     async function create() {
@@ -139,7 +151,7 @@ export default {
     }
 
     onMounted(load)
-    return { items, hot, letters, events, sections, name, description, error, createError, unavailable, includeArchived, busy, when, stat, load, create }
+    return { items, hot, letters, events, sections, name, description, error, createError, unavailable, includeArchived, busy, loading, when, stat, load, create }
   },
 }
 </script>

@@ -2,9 +2,11 @@
   <div class="board-stage" :class="{ scroll: tab !== 'tasks' }">
     <Tabs v-model="tab" :tabs="pageTabs" />
 
-    <TaskBoard v-if="tab === 'tasks'" :project="project" />
+    <!-- v-show, а не v-if: доска не размонтируется при переключении вкладки,
+         черновики в композерах и скролл колонок переживают уход и возврат. -->
+    <TaskBoard v-show="tab === 'tasks'" :project="project" />
 
-    <div v-else-if="tab === 'summary'" class="board-fill">
+    <div v-if="tab === 'summary'" class="board-fill">
       <p v-if="error" class="error">{{ error }}</p>
       <div v-else class="board-fill-grid">
         <section class="card">

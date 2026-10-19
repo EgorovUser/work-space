@@ -118,6 +118,7 @@ export default {
     }
 
     async function remove(item) {
+      if (!window.confirm("Удалить секрет «" + item.title + "»? Отменить будет нельзя.")) return
       const snapshot = items.value.slice()
       items.value = items.value.filter((row) => row.id !== item.id)
       try {

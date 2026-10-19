@@ -127,6 +127,7 @@ export default {
     }
 
     async function remove(item) {
+      if (!window.confirm("Удалить пример «" + item.title + "» и его файлы?")) return
       const snapshot = items.value.slice()
       items.value = items.value.filter((row) => row.id !== item.id)
       try {

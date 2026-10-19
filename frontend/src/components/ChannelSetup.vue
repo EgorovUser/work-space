@@ -213,6 +213,7 @@ export default {
     }
 
     async function clearMail() {
+      if (!window.confirm("Стереть настройки SMTP-почты (сервер, логин, пароль, адреса)?")) return
       mailError.value = ""
       mailNote.value = ""
       error.value = ""

@@ -144,6 +144,7 @@ export default {
     }
 
     async function remove(item) {
+      if (!window.confirm("Удалить документ «" + item.title + "» и все его версии?")) return
       const snapshot = items.value.slice()
       items.value = items.value.filter((row) => row.id !== item.id)
       try {

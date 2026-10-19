@@ -9,7 +9,9 @@ const auth = useAuth()
 setUnauthorizedHandler(() => {
   auth.clear()
   if (router.currentRoute.value.path !== "/login") {
-    router.push("/login")
+    const current = router.currentRoute.value
+    const redirect = current.fullPath && current.fullPath !== "/" ? current.fullPath : null
+    router.push(redirect ? { path: "/login", query: { redirect } } : "/login")
   }
 })
 

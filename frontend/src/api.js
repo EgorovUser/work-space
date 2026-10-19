@@ -24,12 +24,19 @@ export async function api(path, options = {}) {
     headers["Content-Type"] = "application/json"
     body = JSON.stringify(body)
   }
-  const response = await fetch(path, {
-    credentials: "include",
-    ...options,
-    headers,
-    body,
-  })
+  let response
+  try {
+    response = await fetch(path, {
+      credentials: "include",
+      ...options,
+      headers,
+      body,
+    })
+  } catch {
+    // fetch бросает TypeError("Failed to fetch") при лежащем сервере и обрывах сети —
+    // пользователь не должен видеть английский текст браузера.
+    throw new ApiError("Нет связи с сервером. Проверьте сеть и попробуйте снова.", 0)
+  }
   const text = await response.text()
   let data = null
   if (text) {
@@ -41,7 +48,16 @@ export async function api(path, options = {}) {
   }
   if (!response.ok) {
     const detail = data && data.detail
-    const message = typeof detail === "string" ? detail : "Запрос не выполнен"
+    let message
+    if (typeof detail === "string" && detail.trim()) {
+      message = detail
+    } else if (response.status === 429) {
+      message = "Слишком много попыток. Подождите немного и попробуйте снова."
+    } else if (response.status === 422) {
+      message = "Проверьте заполнение полей."
+    } else {
+      message = "Запрос не выполнен"
+    }
     const moduleName = data && data.module
     const quiet = path.startsWith("/api/auth/login") || path.startsWith("/api/auth/me")
     if (response.status === 401 && !quiet && onUnauthorized) {

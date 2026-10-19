@@ -2,6 +2,7 @@
   <section>
     <p v-if="unavailable" class="banner">Модуль недоступен</p>
     <p v-else-if="error" class="error">{{ error }}</p>
+    <p v-else-if="loading && !statuses.length" class="muted">Загрузка…</p>
     <div v-else class="kanban">
       <div ref="root" class="kanban-cols">
       <section v-for="status in statuses" :key="status.id" class="kanban-col" :data-status="status.id" :style="{ borderTop: '3px solid ' + (status.color || '#c5cdd4') }">
@@ -66,6 +67,7 @@ export default {
     const error = ref("")
     const unavailable = ref(false)
     const busy = ref(false)
+    const loading = ref(true)
     const root = ref(null)
     const { settings, when } = useWhen()
     const notice = useNotice()
@@ -358,12 +360,15 @@ export default {
         tasks.value = []
         if (err.status === 503) unavailable.value = true
         else error.value = err.message || "Доска недоступна"
+      } finally {
+        loading.value = false
       }
       await nextTick()
       mountSort()
     }
 
     async function create(status) {
+      if (busy.value) return
       const title = (drafts[status.id] || "").trim()
       if (!title) return
       busy.value = true
@@ -435,6 +440,7 @@ export default {
     }
 
     async function removeTask(task) {
+      if (!window.confirm("Удалить задачу «" + task.title + "»? Отменить будет нельзя.")) return
       const snapshot = tasks.value.map((item) => ({ ...item }))
       tasks.value = tasks.value.filter((item) => item.id !== task.id)
       try {
@@ -446,6 +452,7 @@ export default {
     }
 
     async function removeColumn(status) {
+      if (!window.confirm("Удалить колонку «" + status.name + "»?")) return
       const snapshot = statuses.value.slice()
       statuses.value = statuses.value.filter((item) => item.id !== status.id)
       try {
@@ -476,7 +483,7 @@ export default {
       destroySort()
     })
     return {
-      statuses, drafts, columnName, columnClosed, error, unavailable, busy, root, cardActions,
+      statuses, drafts, columnName, columnClosed, error, unavailable, busy, loading, root, cardActions,
       tasksOf, priorityLabel, when, late, bar, columnActions, create, addColumn, rename, onCard, onColumn,
     }
   },

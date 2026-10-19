@@ -68,12 +68,12 @@
       <section v-show="tab === 'checks'" class="card">
         <form class="row-actions" @submit.prevent="addCheck">
           <input v-model="checkTitle" type="text" placeholder="Пункт" />
-          <button class="btn secondary" type="submit">Добавить</button>
+          <button class="btn secondary" type="submit" :disabled="busy">Добавить</button>
         </form>
         <div v-for="item in task.checklist" :key="item.id" class="check check-row">
           <input :checked="item.done" type="checkbox" @change="toggleCheck(item, $event)" />
           <span>{{ item.title }}</span>
-          <button class="btn secondary" type="button" @click="removeCheck(item)">Убрать</button>
+          <button class="btn secondary" type="button" :disabled="busy" @click="removeCheck(item)">Убрать</button>
         </div>
         <p v-if="!(task.checklist && task.checklist.length)" class="muted">Пунктов нет. Пустой чеклист даёт прогресс 0 в автоматическом режиме.</p>
       </section>
@@ -115,7 +115,7 @@
             <option value="document">Документ</option>
             <option value="example">Пример</option>
           </select>
-          <button class="btn secondary" type="submit">Прикрепить</button>
+          <button class="btn secondary" type="submit" :disabled="busy">Прикрепить</button>
         </form>
         <div v-for="file in task.files" :key="file.kind + '-' + file.id" class="status-row">
           <div>
@@ -130,9 +130,9 @@
 
       <section v-show="tab === 'feed'" class="card">
         <form class="stack" @submit.prevent="comment">
-          <textarea v-model="commentBody" placeholder="Комментарий" />
+          <textarea v-model="commentBody" placeholder="Комментарий" rows="3" />
           <div>
-            <button class="btn secondary" type="submit">Написать</button>
+            <button class="btn secondary" type="submit" :disabled="busy">Написать</button>
           </div>
         </form>
         <article v-for="item in task.events" :key="item.id" class="setting">
@@ -303,17 +303,34 @@ export default {
       }
     }
 
+    // Обновляет карточку задачи без перезаписи формы: то, что пользователь
+    // печатает в полях (описание, дедлайн, метки), не пропадает от побочных
+    // действий вроде комментария или нового пункта чеклиста.
+    function refreshTask(data) {
+      if (!data) return
+      task.value = data
+    }
+
     async function addCheck() {
+      if (busy.value) return
+      const title = checkTitle.value.trim()
+      if (!title) {
+        formError.value = "Введите текст пункта"
+        return
+      }
       formError.value = ""
+      busy.value = true
       try {
-        await api("/api/projects/" + props.project.id + "/tasks/" + route.params.taskId + "/checklist", {
+        const item = await api("/api/projects/" + props.project.id + "/tasks/" + route.params.taskId + "/checklist", {
           method: "POST",
-          body: { title: checkTitle.value },
+          body: { title },
         })
         checkTitle.value = ""
-        await load()
+        task.value.checklist = (task.value.checklist || []).concat([item])
       } catch (err) {
         formError.value = err.message || "Пункт не добавлен"
+      } finally {
+        busy.value = false
       }
     }
 
@@ -347,62 +364,93 @@ export default {
     }
 
     async function comment() {
+      if (busy.value) return
+      const text = commentBody.value.trim()
+      if (!text) {
+        formError.value = "Комментарий пустой"
+        return
+      }
       formError.value = ""
+      busy.value = true
       try {
         const saved = await api("/api/projects/" + props.project.id + "/tasks/" + route.params.taskId + "/comments", {
           method: "POST",
-          body: { body: commentBody.value },
+          body: { body: text },
         })
         commentBody.value = ""
-        fill(saved)
+        // Сервер возвращает всю задачу; форму не трогаем — там могут быть
+        // несохранённые правки.
+        refreshTask(saved)
       } catch (err) {
         formError.value = err.message || "Комментарий не сохранён"
+      } finally {
+        busy.value = false
       }
     }
 
     async function createTag() {
+      if (busy.value) return
+      const name = newTag.value.trim()
+      if (!name) return
       formError.value = ""
+      busy.value = true
       try {
         const tag = await api("/api/projects/" + props.project.id + "/tags", {
           method: "POST",
-          body: { name: newTag.value },
+          body: { name },
         })
         newTag.value = ""
         tags.value = tags.value.concat(tag)
         form.tag_ids = form.tag_ids.concat(tag.id)
       } catch (err) {
         formError.value = err.message || "Метка не создана"
+      } finally {
+        busy.value = false
       }
     }
 
     async function upload() {
+      if (busy.value) return
       const input = fileInput.value
       const file = input && input.files && input.files[0]
-      if (!file) return
+      if (!file) {
+        formError.value = "Выберите файл"
+        return
+      }
       const body = new FormData()
       body.append("file", file)
       body.append("kind", fileKind.value)
       formError.value = ""
+      busy.value = true
       try {
-        await api("/api/projects/" + props.project.id + "/tasks/" + route.params.taskId + "/files", {
+        const ref = await api("/api/projects/" + props.project.id + "/tasks/" + route.params.taskId + "/files", {
           method: "POST",
           body,
         })
         input.value = ""
-        await load()
+        task.value.files = (task.value.files || []).concat([ref])
       } catch (err) {
         formError.value = err.message || "Файл не прикрепился"
+      } finally {
+        busy.value = false
       }
     }
 
     async function removeFile(file) {
+      if (busy.value) return
+      const snapshot = (task.value.files || []).slice()
+      task.value.files = snapshot.filter((row) => !(row.id === file.id && row.kind === file.kind))
+      formError.value = ""
+      busy.value = true
       try {
         await api("/api/projects/" + props.project.id + "/tasks/" + route.params.taskId + "/files/" + file.id + "?kind=" + encodeURIComponent(file.kind || ""), {
           method: "DELETE",
         })
-        await load()
       } catch (err) {
+        task.value.files = snapshot
         formError.value = err.message || "Файл не откреплён"
+      } finally {
+        busy.value = false
       }
     }
 

@@ -40,7 +40,9 @@ router.beforeEach(async (to) => {
     await auth.refresh()
   }
   if (to.meta.auth && !auth.user.value) {
-    return "/login"
+    // Глубокая ссылка или истёкшая сессия: после входа возвращаем туда,
+    // куда пользователь шел изначально.
+    return { path: "/login", query: { redirect: to.fullPath } }
   }
   if (to.path === "/login" && auth.user.value) {
     return "/"
@@ -54,7 +56,7 @@ router.beforeEach(async (to) => {
 router.onError((err, to) => {
   console.error("[router] навигация не удалась:", err)
   if (to && to.meta.auth && router.currentRoute.value.path !== "/login") {
-    router.push("/login")
+    router.push({ path: "/login", query: { redirect: to.fullPath } })
   }
 })
 
