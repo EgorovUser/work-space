@@ -87,6 +87,35 @@ def init_db() -> None:
         # База уже под управлением Alembic
         command.upgrade(alembic_cfg, "head")
 
+    _warn_schema_drift()
+
+
+def _warn_schema_drift() -> None:
+    """Явно ругаемся в лог, если БД отстала от моделей.
+
+    Иначе первый симптом дрейфа — криптичное "no such column" из глубины
+    seed()/роутеров. Предупреждение называет таблицу и колонки.
+    """
+    from app.core.logging import logger
+
+    inspector = inspect(_engine)
+    existing_tables = set(inspector.get_table_names())
+    problems: list[str] = []
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            problems.append(f"нет таблицы {table.name}")
+            continue
+        existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
+        missing = [c.name for c in table.columns if c.name not in existing_cols]
+        if missing:
+            problems.append(f"{table.name}: нет колонок {', '.join(missing)}")
+    if problems:
+        logger.warning(
+            "Схема БД отстала от моделей ({}): {} — добавьте миграцию",
+            len(problems),
+            "; ".join(problems),
+        )
+
 
 def session_factory() -> Session:
     if SessionLocal is None:
