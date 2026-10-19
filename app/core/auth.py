@@ -20,6 +20,11 @@ class LoginIn(BaseModel):
     password: str
 
 
+class PasswordChangeIn(BaseModel):
+    old_password: str
+    new_password: str
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -54,10 +59,16 @@ def _dummy() -> str:
 
 def require_user(request: Request, db: Session = Depends(get_db)) -> User:
     user_id = request.session.get("user_id")
+    session_version = request.session.get("session_version")
     if not user_id:
         raise HTTPException(status_code=401, detail="Требуется вход")
     user = db.get(User, user_id)
-    if user is None or not user.is_active:
+    if (
+        user is None
+        or not user.is_active
+        or session_version is None
+        or session_version != user.session_version
+    ):
         request.session.clear()
         raise HTTPException(status_code=401, detail="Требуется вход")
     user_id_var.set(str(user.id))
@@ -74,6 +85,7 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)) -> Use
             logger.warning("login failed username={}", body.username)
             raise HTTPException(status_code=401, detail="Неверный логин или пароль")
         request.session["user_id"] = user.id
+        request.session["session_version"] = user.session_version
         user_id_var.set(str(user.id))
         logger.info("login user_id={}", user.id)
         return user
@@ -87,13 +99,56 @@ def logout(request: Request, user: User = Depends(require_user)) -> dict:
     return {"ok": True}
 
 
+@router.post("/api/auth/logout-all")
+def logout_all(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)) -> dict:
+    with log_scope("auth", "logout-all", user_id=user.id):
+        user.session_version += 1
+        db.add(user)
+        db.commit()
+        request.session.clear()
+        logger.info("logout-all user_id={}", user.id)
+    return {"ok": True}
+
+
+@router.post("/api/auth/password")
+def change_password(
+    body: PasswordChangeIn,
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    with log_scope("auth", "password", user_id=user.id):
+        if not verify_password(body.old_password, user.password_hash):
+            logger.warning("password change failed user_id={}", user.id)
+            raise HTTPException(status_code=400, detail="Неверный текущий пароль")
+        if body.new_password == body.old_password:
+            raise HTTPException(status_code=400, detail="Новый пароль совпадает со старым")
+        if len(body.new_password.encode("utf-8")) > 72:
+            raise HTTPException(status_code=400, detail="Пароль длиннее 72 байт")
+        if len(body.new_password) < 8:
+            raise HTTPException(status_code=400, detail="Пароль короче 8 символов")
+        user.password_hash = hash_password(body.new_password)
+        user.session_version += 1
+        db.add(user)
+        db.commit()
+        request.session.clear()
+        logger.info("password changed user_id={}", user.id)
+    return {"ok": True}
+
+
 @router.get("/api/auth/me")
 def me(request: Request, db: Session = Depends(get_db)):
     user_id = request.session.get("user_id")
+    session_version = request.session.get("session_version")
     if not user_id:
         return None
     user = db.get(User, user_id)
-    if user is None or not user.is_active:
+    if (
+        user is None
+        or not user.is_active
+        or session_version is None
+        or session_version != user.session_version
+    ):
         request.session.clear()
         return None
     user_id_var.set(str(user.id))
