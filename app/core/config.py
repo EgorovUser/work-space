@@ -24,7 +24,7 @@ class AppConfig(BaseSettings):
     database_url: str = ""
     host: str = "0.0.0.0"
     port: int = 8000
-    log_level: str = "DEBUG"
+    log_level: str = "INFO"
     seed_username: str = "admin"
     seed_password: str = ""
 
