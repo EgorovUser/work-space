@@ -73,6 +73,14 @@ npm run dev
 
 Если `.env` нет, в режиме dev ключи создаются сами и пишутся в `data/bootstrap.env`. Первый пользователь берётся из `SEED_USERNAME` и `SEED_PASSWORD`. Если пароль не задан — `admin` / `admin`, и в лог пишется предупреждение. Свои значения — скопировать `.env.example` в `.env`.
 
+## Тесты
+
+Бэкенд: `pip install -r requirements.txt -r requirements-dev.txt`, затем `python -m unittest discover -s tests` — 43 проверки на временной базе (юнит-ядро, HTTP-слой через TestClient, санитайзер писем).
+
+Фронтенд: `cd frontend && npm install && npm test`.
+
+GitHub Actions (`.github/workflows/ci.yml`) гоняет оба набора на каждый пуш и pull request.
+
 ## Деплой на Ubuntu
 
 На сервере нужны Docker и плагин Compose (`docker compose version` должен ответить). Репозиторий уже склонирован — дальше из его каталога.
