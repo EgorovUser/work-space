@@ -72,11 +72,17 @@ def init_db() -> None:
     tables = set(inspector.get_table_names())
     alembic_cfg = Config(str(ROOT / "alembic.ini"))
 
-    if not tables or "alembic_version" not in tables:
-        # Свежая база или старая без alembic_version
+    if not tables:
+        # Свежая база: схема целиком через create_all (модели уже включают индексы)
         Base.metadata.create_all(_engine)
-        if "alembic_version" not in inspect(_engine).get_table_names():
-            command.stamp(alembic_cfg, "head")
+        command.stamp(alembic_cfg, "head")
+    elif "alembic_version" not in tables:
+        # Старая база до alembic: досоздаём недостающие таблицы и
+        # проигрываем реальные миграции (0002+), а не перепрыгиваем их.
+        # 0001 — baseline-заглушка («схема из create_all»), поэтому stamp на неё.
+        Base.metadata.create_all(_engine)
+        command.stamp(alembic_cfg, "0001")
+        command.upgrade(alembic_cfg, "head")
     else:
         # База уже под управлением Alembic
         command.upgrade(alembic_cfg, "head")

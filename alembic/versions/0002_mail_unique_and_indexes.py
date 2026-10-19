@@ -42,6 +42,7 @@ def upgrade() -> None:
         "mail_messages",
         ["received_at"],
         unique=False,
+        if_not_exists=True,
     )
 
 
