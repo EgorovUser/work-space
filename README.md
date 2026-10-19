@@ -52,25 +52,82 @@ npm run dev
 
 ## Деплой на Ubuntu
 
-На сервере нужны Docker и Docker Compose.
+На сервере нужны Docker и плагин Compose (`docker compose version` должен ответить). Репозиторий уже склонирован — дальше из его каталога.
 
 ```bash
+cd ~/work-space
+apt-get update
+apt-get install -y docker.io docker-compose-v2
+systemctl enable --now docker
+```
+
+Имена пакетов на Debian такие же. Если `docker compose` уже есть, установку пропускают.
+
+Дальше ключи и файл окружения. `SECRET_KEY` — любая длинная случайная строка. `FERNET_KEY` — ключ Fernet, не обычный пароль: им шифруются секреты, пароль ящика и SMTP. Потерять его нельзя, иначе старые записи не прочитаются. `SEED_PASSWORD` нужен только при первом запуске, когда в базе ещё нет пользователей. Потом смена этой строки вход не меняет.
+
+```bash
+cd ~/work-space
 cp .env.example .env
-# заполнить SECRET_KEY, FERNET_KEY, SEED_PASSWORD
+python3 - <<'PY'
+import secrets
+print("SECRET_KEY=" + secrets.token_urlsafe(32))
+PY
+docker run --rm python:3.12-slim bash -c "pip install -q cryptography && python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+```
+
+Первая команда печатает `SECRET_KEY`. Вторая — сам ключ Fernet, его надо вписать в строку `FERNET_KEY=`. Пакет `cryptography` на хосте для этого не нужен.
+
+В `.env` должны быть свои значения, не заглушки из примера:
+
+```env
+APP_ENV=prod
+SECRET_KEY=сюда-длинная-случайная-строка
+FERNET_KEY=сюда-ключ-fernet
+DATA_DIR=./data
+DATABASE_URL=
+LOG_LEVEL=INFO
+SEED_USERNAME=admin
+SEED_PASSWORD=сюда-пароль-первого-входа
+```
+
+`DATA_DIR=./data` внутри контейнера — это `/app/data`. Compose монтирует туда каталог `./data` с сервера, поэтому база и файлы переживают пересборку. Процесс внутри контейнера всегда слушает `8000`. Наружу этот порт публикует `HTTP_PORT` из `.env` (если строки нет — тоже 8000). `HOST` и `PORT` образ не читает. Если 8000 на сервере занят, в `.env` пишут, например, `HTTP_PORT=8088` и открывают в браузере `http://IP-СЕРВЕРА:8088`. Проверка здоровья внутри контейнера по-прежнему ходит на `127.0.0.1:8000`, её менять не надо.
+
+Сборка и запуск. Первый раз качает образы Node и Python и ставит зависимости, это несколько минут.
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f app
+```
+
+В логе должно появиться `application ready` и строка про созданного пользователя. Выход из логов — Ctrl+C, контейнер при этом не останавливается.
+
+Проверка с самого сервера:
+
+```bash
+curl -sS http://127.0.0.1:8000/healthz
+```
+
+В браузере — `http://IP-СЕРВЕРА:8000` (или порт из `HTTP_PORT`), логин и пароль из `SEED_USERNAME` / `SEED_PASSWORD`. `COOKIE_SECURE` оставляют `false`, пока нет HTTPS: иначе браузер не сохраняет сессию, вход отвечает 200 и сразу выкидывает обратно на страницу входа. Когда перед приложением появится сертификат, в `.env` ставят `COOKIE_SECURE=true` и пересоздают контейнер. Если страница не открывается снаружи, порт закрыт файрволом:
+
+```bash
+ufw allow 8000/tcp
+```
+
+Логи приложения, не демона Docker: `data/logs/app.log` и `data/logs/errors.log` на хосте. База — `data/app.db`, вложения — `data/files`. Этот каталог в git не входит, его надо хранить и бэкапить вместе с `.env`.
+
+Обновление после новых коммитов:
+
+```bash
+cd ~/work-space
+git pull
 docker compose up -d --build
 ```
 
-Сборка в два шага: Node собирает фронт, затем образ Python. Uvicorn один, без отдельных воркеров, и сам отдаёт собранный фронт. Приложение слушает порт 8000. Каталог `./data` смонтирован в контейнер: там база, файлы и логи.
+`.env` и `./data` при этом не трогаются. Останавливать всё: `docker compose down` (данные на диске остаются). `docker compose down -v` тома не удалит, потому что каталог примонтирован папкой, а не именованным томом — но саму папку `data` удалять нельзя.
 
-Ключ Fernet:
+HTTPS в образ не встроен. Если нужен адрес с сертификатом, перед портом 8000 ставят Caddy или nginx и проксируют на `127.0.0.1:8000`. В `docker-compose.yml` тогда публикуют порт только на localhost: `"127.0.0.1:8000:8000"`.
 
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-`SECRET_KEY` — длинная случайная строка. При `APP_ENV=prod` без `SECRET_KEY` и `FERNET_KEY` процесс не стартует. Смена `FERNET_KEY` делает уже сохранённые секреты, пароль ящика и пароль SMTP нечитаемыми.
-
-Проверка контейнера — `GET /healthz` каждые 30 секунд.
 
 ## Вход
 

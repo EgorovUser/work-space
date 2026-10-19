@@ -27,6 +27,7 @@ class AppConfig(BaseSettings):
     log_level: str = "DEBUG"
     seed_username: str = "admin"
     seed_password: str = ""
+    cookie_secure: bool = False
 
     def data_path(self) -> Path:
         if self.data_dir:

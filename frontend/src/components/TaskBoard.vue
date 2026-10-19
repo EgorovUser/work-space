@@ -139,12 +139,14 @@ export default {
           onEnd: () => moveColumns(),
         })
       )
-      for (const list of root.value.querySelectorAll(".task-list")) {
+      for (const column of root.value.querySelectorAll(".kanban-col")) {
         sortables.push(
-          Sortable.create(list, {
+          Sortable.create(column, {
             group: "tasks",
             animation: 0,
-            handle: ".drag-handle",
+            draggable: ".task-card",
+            handle: ".task-card .drag-handle",
+            emptyInsertThreshold: 280,
             onEnd: (evt) => dropped(evt),
           })
         )
@@ -153,9 +155,11 @@ export default {
 
     function restore(evt) {
       const item = evt.item
+      const list = evt.from && evt.from.querySelector(".task-list")
+      if (!item || !list) return
       item.remove()
-      const children = [...evt.from.children]
-      evt.from.insertBefore(item, children[evt.oldIndex] || null)
+      const cards = [...list.querySelectorAll(".task-card")]
+      list.insertBefore(item, cards[evt.oldIndex] || null)
     }
 
     async function moveColumns() {

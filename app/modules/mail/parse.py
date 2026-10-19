@@ -160,13 +160,29 @@ def _html_text(value: str) -> str:
 
 
 def _date(msg) -> datetime:
-    raw = msg.get("Date")
-    if not raw:
-        return utcnow()
+    for name in ("Date", "Resent-Date"):
+        found = _parse_date(msg.get(name))
+        if found is not None:
+            return found
+    for line in msg.get_all("Received") or []:
+        if ";" not in line:
+            continue
+        found = _parse_date(line.rsplit(";", 1)[-1])
+        if found is not None:
+            return found
+    return utcnow()
+
+
+def _parse_date(raw) -> datetime | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
     try:
-        parsed = parsedate_to_datetime(raw)
+        parsed = parsedate_to_datetime(text)
     except Exception:
-        return utcnow()
+        return None
+    if parsed is None:
+        return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)

@@ -27,6 +27,7 @@ const router = createRouter({
         { path: "mail", component: () => import("./views/Mail.vue") },
         { path: "mail/:messageId", component: () => import("./views/MailPage.vue") },
         { path: "time", component: () => import("./views/Time.vue") },
+        { path: "notes", component: () => import("./views/ProjectNotes.vue") },
         { path: "settings", component: () => import("./views/ProjectSettings.vue") },
       ],
     },

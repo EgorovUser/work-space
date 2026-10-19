@@ -41,6 +41,7 @@
       <p v-if="mailNote" class="ok-text">{{ mailNote }}</p>
       <div class="row-actions">
         <button class="btn secondary" type="button" :disabled="busy" @click="testMail">Проверить почту</button>
+        <button class="btn secondary" type="button" :disabled="busy" @click="clearMail">Очистить почту</button>
       </div>
     </section>
 
@@ -211,13 +212,46 @@ export default {
       }
     }
 
+    async function clearMail() {
+      mailError.value = ""
+      mailNote.value = ""
+      error.value = ""
+      busy.value = true
+      try {
+        const keys = ["smtp.host", "smtp.port", "smtp.ssl", "smtp.starttls", "smtp.username", "smtp.password", "smtp.from", "smtp.to"]
+        for (const key of keys) {
+          for (const scope of ["user", "global"]) {
+            await api("/api/settings/reset", {
+              method: "POST",
+              body: { module: "notifications", key, scope },
+            })
+          }
+        }
+        form.host = ""
+        form.port = 587
+        form.ssl = false
+        form.starttls = true
+        form.username = ""
+        form.password = ""
+        form.from = ""
+        form.to = ""
+        flags.password = false
+        await load()
+        mailNote.value = "Почта уведомлений сброшена: сервер, логин и пароль очищены."
+      } catch (err) {
+        mailError.value = err.message || "Не удалось очистить"
+      } finally {
+        busy.value = false
+      }
+    }
+
     onMounted(() => {
       load().catch((err) => {
         error.value = err.message || "Настройки недоступны"
       })
     })
 
-    return { form, flags, error, note, telegramError, telegramNote, mailError, mailNote, busy, save, testTelegram, testMail }
+    return { form, flags, error, note, telegramError, telegramNote, mailError, mailNote, busy, save, testTelegram, testMail, clearMail }
   },
 }
 </script>

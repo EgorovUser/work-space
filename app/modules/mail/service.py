@@ -1055,7 +1055,7 @@ def _grouped_messages(session: Session, rows: list[MailMessage], project_id: int
     result = []
     for key in order:
         members = groups[key]
-        latest = members[0]
+        latest = max(members, key=lambda item: (item.received_at, item.id))
         payload = _message_out(session, latest, full=False)
         cleaned = _clean_subject(latest.subject, project_id)
         if cleaned:
@@ -1067,6 +1067,7 @@ def _grouped_messages(session: Session, rows: list[MailMessage], project_id: int
         if payload["thread_unread"]:
             payload["read"] = False
         result.append(payload)
+    result.sort(key=lambda item: item.get("received_at") or "", reverse=True)
     return result
 
 

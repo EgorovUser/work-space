@@ -78,6 +78,35 @@
         <p v-if="!(task.checklist && task.checklist.length)" class="muted">Пунктов нет. Пустой чеклист даёт прогресс 0 в автоматическом режиме.</p>
       </section>
 
+      <section v-show="tab === 'time'" class="card stack">
+        <p class="muted">Минуты записываются на эту задачу. Старт запускает таймер сразу с ней.</p>
+        <div class="compact-grid">
+          <label class="tight">
+            Дата
+            <input v-model="spent.day" type="date" />
+          </label>
+          <label class="tight">
+            Минуты
+            <input v-model.number="spent.minutes" type="number" min="1" />
+          </label>
+          <label class="tight">
+            Заметка
+            <input v-model="spent.note" type="text" />
+          </label>
+        </div>
+        <p v-if="timeError" class="error">{{ timeError }}</p>
+        <div class="row-actions">
+          <button class="btn" type="button" :disabled="busy" @click="logTime">Списать</button>
+          <button class="btn secondary" type="button" :disabled="busy" @click="startOnTask">Старт таймера</button>
+        </div>
+        <p v-if="!timeEntries.length" class="muted">По этой задаче записей за окно отчёта нет</p>
+        <div v-for="item in timeEntries" :key="item.id" class="inbox-row">
+          <div>{{ item.running ? "Идёт" : item.minutes + " мин" }}<span v-if="item.note"> · {{ item.note }}</span></div>
+          <span class="when">{{ when(item.started_at) }}</span>
+          <span></span>
+        </div>
+      </section>
+
       <section v-show="tab === 'files'" class="card">
         <p class="muted">Файл создаётся как документ или пример и появляется в их списке. В задаче остаётся только ссылка.</p>
         <form class="composer" @submit.prevent="upload">
@@ -154,6 +183,7 @@ export default {
       { id: "about", label: "О задаче" },
       { id: "checks", label: "Чеклист" },
       { id: "files", label: "Файлы" },
+      { id: "time", label: "Время" },
       { id: "feed", label: "Лента" },
     ]
     const task = ref(null)
@@ -169,6 +199,9 @@ export default {
     const newTag = ref("")
     const fileInput = ref(null)
     const fileKind = ref("document")
+    const timeEntries = ref([])
+    const timeError = ref("")
+    const spent = reactive({ day: todayInput(), minutes: 30, note: "" })
     const priorities = ref([])
     const progressMax = ref(100)
     const form = reactive({
@@ -377,6 +410,62 @@ export default {
       }
     }
 
+    function todayInput() {
+      const now = new Date()
+      const month = String(now.getMonth() + 1).padStart(2, "0")
+      const day = String(now.getDate()).padStart(2, "0")
+      return now.getFullYear() + "-" + month + "-" + day
+    }
+
+    async function loadTime() {
+      timeError.value = ""
+      try {
+        const data = await api("/api/projects/" + props.project.id + "/time")
+        const id = Number(route.params.taskId)
+        timeEntries.value = (data.entries || []).filter((item) => Number(item.task_id) === id)
+      } catch (err) {
+        timeError.value = err.message || "Время недоступно"
+      }
+    }
+
+    async function logTime() {
+      busy.value = true
+      timeError.value = ""
+      try {
+        await api("/api/projects/" + props.project.id + "/time/entries", {
+          method: "POST",
+          body: {
+            task_id: Number(route.params.taskId),
+            minutes: Number(spent.minutes),
+            day: spent.day,
+            note: spent.note,
+          },
+        })
+        spent.note = ""
+        await loadTime()
+      } catch (err) {
+        timeError.value = err.message || "Не записалось"
+      } finally {
+        busy.value = false
+      }
+    }
+
+    async function startOnTask() {
+      busy.value = true
+      timeError.value = ""
+      try {
+        await api("/api/projects/" + props.project.id + "/time/start", {
+          method: "POST",
+          body: { task_id: Number(route.params.taskId), note: spent.note },
+        })
+        await loadTime()
+      } catch (err) {
+        timeError.value = err.message || "Таймер не запустился"
+      } finally {
+        busy.value = false
+      }
+    }
+
     function kindName(kind) {
       if (kind === "document") return "Документ"
       if (kind === "example") return "Пример"
@@ -384,6 +473,9 @@ export default {
     }
 
     watch(() => route.params.taskId, load)
+    watch(tab, (value) => {
+      if (value === "time") loadTime()
+    })
     onMounted(load)
     return {
       task,
@@ -399,6 +491,9 @@ export default {
       newTag,
       fileInput,
       fileKind,
+      timeEntries,
+      timeError,
+      spent,
       priorities,
       progressMax,
       form,
@@ -417,6 +512,8 @@ export default {
       upload,
       removeFile,
       kindName,
+      logTime,
+      startOnTask,
     }
   },
 }

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.bridge import card_summary, dashboard_blocks, inbox_items, run_project_created, search_groups
@@ -10,7 +10,7 @@ from app.core.events_catalog import PROJECT_ARCHIVED, PROJECT_CREATED, PROJECT_U
 from app.core.logging import log_scope, logger
 from app.core.outbox import enqueue
 from app.core.settings_store import get_bool, get_int
-from app.modules.projects.models import Project
+from app.modules.projects.models import Project, ProjectNote
 
 
 def load_project(session: Session, project_id: int) -> Project | None:
@@ -184,6 +184,74 @@ def _card(session: Session, project: Project, user_id: int) -> dict:
         "hours_week": summary["hours_week"],
         "new_mail": summary["new_mail"],
     }
+
+
+def list_notes(session: Session, project_id: int) -> list[dict]:
+    rows = session.scalars(
+        select(ProjectNote).where(ProjectNote.project_id == project_id).order_by(ProjectNote.updated_at.desc(), ProjectNote.id.desc())
+    ).all()
+    return [_note_out(row) for row in rows]
+
+
+def create_note(session: Session, project_id: int, user_id: int, body: str) -> dict:
+    text = _clean_note(body)
+    count = session.scalar(select(func.count()).select_from(ProjectNote).where(ProjectNote.project_id == project_id)) or 0
+    if count >= get_int("projects", "note.max_items"):
+        raise HTTPException(status_code=400, detail="Слишком много заметок")
+    now = utcnow()
+    row = ProjectNote(project_id=project_id, body=text, created_at=now, updated_at=now)
+    session.add(row)
+    session.flush()
+    touch_project(session, project_id)
+    with log_scope("projects", "note", user_id=user_id):
+        logger.info("note created id={} project={}", row.id, project_id)
+    return _note_out(row)
+
+
+def update_note(session: Session, project_id: int, user_id: int, note_id: int, body: str) -> dict:
+    row = _note(session, project_id, note_id)
+    row.body = _clean_note(body)
+    row.updated_at = utcnow()
+    session.flush()
+    touch_project(session, project_id)
+    with log_scope("projects", "note", user_id=user_id):
+        logger.info("note updated id={} project={}", row.id, project_id)
+    return _note_out(row)
+
+
+def delete_note(session: Session, project_id: int, user_id: int, note_id: int) -> None:
+    row = _note(session, project_id, note_id)
+    session.delete(row)
+    session.flush()
+    touch_project(session, project_id)
+    with log_scope("projects", "note", user_id=user_id):
+        logger.info("note deleted id={} project={}", note_id, project_id)
+
+
+def _note(session: Session, project_id: int, note_id: int) -> ProjectNote:
+    row = session.get(ProjectNote, note_id)
+    if row is None or row.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Заметка не найдена")
+    return row
+
+
+def _note_out(row: ProjectNote) -> dict:
+    return {
+        "id": row.id,
+        "body": row.body,
+        "created_at": row.created_at.isoformat(),
+        "updated_at": row.updated_at.isoformat(),
+    }
+
+
+def _clean_note(body: str | None) -> str:
+    text = (body or "").strip()
+    limit = get_int("projects", "note.max_length")
+    if not text:
+        raise HTTPException(status_code=400, detail="Пустая заметка")
+    if len(text) > limit:
+        raise HTTPException(status_code=400, detail="Заметка длиннее " + str(limit) + " символов")
+    return text
 
 
 def _clean_name(name: str) -> str:

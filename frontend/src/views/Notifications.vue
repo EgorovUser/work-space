@@ -11,22 +11,16 @@
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="loading" class="muted">Загрузка…</p>
     <p v-else-if="!items.length" class="muted">Уведомлений нет</p>
-    <div v-else class="cards">
-      <article v-for="item in items" :key="item.id" class="card">
-        <div class="status-row">
-          <div>
-            <strong :class="{ unread: !item.read }">{{ item.title }}</strong>
-            <div class="muted">{{ item.event_label }} · {{ when(item.created_at) }}</div>
-            <p v-if="item.body" class="snippet">{{ item.body }}</p>
-            <p v-if="item.link"><router-link :to="item.link">Открыть</router-link></p>
-            <ul v-if="item.deliveries.length" class="plain-list">
-              <li v-for="delivery in item.deliveries" :key="delivery.channel">
-                {{ delivery.channel_label }}: {{ delivery.status_label }}
-                <span v-if="delivery.last_error" class="muted"> — {{ delivery.last_error }}</span>
-              </li>
-            </ul>
-          </div>
-          <button v-if="!item.read" class="btn secondary" type="button" :disabled="busy" @click="read(item)">Прочитано</button>
+    <div v-else class="inbox-list">
+      <article v-for="item in items" :key="item.id" class="inbox-row">
+        <div>
+          <strong :class="{ unread: !item.read }">{{ line(item) }}</strong>
+          <div v-if="extra(item)" class="muted">{{ extra(item) }}</div>
+        </div>
+        <span class="when">{{ when(item.created_at) }}</span>
+        <div class="inbox-actions">
+          <router-link v-if="item.link" :to="item.link">Открыть</router-link>
+          <button v-if="!item.read" class="text-btn" type="button" :disabled="busy" @click="read(item)">Прочитано</button>
         </div>
       </article>
     </div>
@@ -92,6 +86,22 @@ export default {
 
     function when(value) {
       return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
+    }
+
+    function line(item) {
+      const event = String(item.event_label || "").trim()
+      const title = String(item.title || "").trim()
+      if (event && title && event !== title) return event + " · " + title
+      return title || event || "Уведомление"
+    }
+
+    function extra(item) {
+      const body = String(item.body || "").trim()
+      if (!body) return ""
+      const event = String(item.event_label || "").trim()
+      const title = String(item.title || "").trim()
+      if (body === event || body === title || body === line(item)) return ""
+      return body
     }
 
     async function load() {
@@ -182,7 +192,7 @@ export default {
 
     return {
       items, events, channels, matrix, error, matrixError, matrixNote, loading, busy, unreadOnly, tab, pageTabs,
-      when, load, saveMatrix, read, readAll, picked, setChannel,
+      when, line, extra, load, saveMatrix, read, readAll, picked, setChannel,
     }
   },
 }

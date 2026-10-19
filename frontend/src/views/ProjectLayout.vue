@@ -53,6 +53,7 @@ export default {
         { to: "/projects/" + id + "/secrets", label: "Секреты" },
         { to: "/projects/" + id + "/mail", label: "Почта" },
         { to: "/projects/" + id + "/time", label: "Учёт времени" },
+        { to: "/projects/" + id + "/notes", label: "Заметки" },
         { to: "/projects/" + id + "/settings", label: "Настройки" },
       ]
     })

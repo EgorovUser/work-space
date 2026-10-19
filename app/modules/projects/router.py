@@ -88,6 +88,51 @@ def archive_project(
     return service.set_archived(db, project, user.id, body.archived)
 
 
+class NoteBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    body: str
+
+
+@router.get("/api/projects/{project_id}/notes")
+def list_notes(
+    project: Project = Depends(require_project),
+    db: Session = Depends(get_db),
+) -> dict:
+    return {"items": service.list_notes(db, project.id)}
+
+
+@router.post("/api/projects/{project_id}/notes", status_code=201)
+def create_note(
+    body: NoteBody,
+    project: Project = Depends(require_project),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    return service.create_note(db, project.id, user.id, body.body)
+
+
+@router.patch("/api/projects/{project_id}/notes/{note_id}")
+def patch_note(
+    note_id: int,
+    body: NoteBody,
+    project: Project = Depends(require_project),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    return service.update_note(db, project.id, user.id, note_id, body.body)
+
+
+@router.delete("/api/projects/{project_id}/notes/{note_id}", status_code=204)
+def delete_note(
+    note_id: int,
+    project: Project = Depends(require_project),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> None:
+    service.delete_note(db, project.id, user.id, note_id)
+
+
 @router.get("/api/projects/{project_id}/dashboard")
 def dashboard(
     project: Project = Depends(require_project),
