@@ -8,7 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.core import auth, files
 from app.core.auth import require_user
-from app.core.config import ROOT, prepare
+from app.core.config import ROOT, prepare, get as get_config
 from app.core.db import init_db
 from app.core.logging import apply_settings, bootstrap, log_scope, logger
 from app.core.middleware import RequestContextMiddleware
@@ -54,7 +54,7 @@ def create_app() -> FastAPI:
         session_cookie="session",
         max_age=get_int("core", "auth.session_max_age_hours") * 3600,
         same_site="lax",
-        https_only=False,
+        https_only=cfg.cookie_secure,
     )
     app.include_router(auth.router)
     app.include_router(settings_router)
