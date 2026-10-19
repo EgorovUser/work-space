@@ -1,35 +1,23 @@
+"""Колонки доски: сид стандартных статусов, CRUD и порядок.
+
+Отдельный файл от задач: колонки живут своей жизнью — создаются при
+появлении проекта из ``statuses.defaults`` и не зависят от карточек.
+"""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
-
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.db import utcnow
-from app.core.bridge import materialize
-from app.core.events_catalog import (
-    TASK_ASSIGNED,
-    TASK_CHECKLIST_ADDED,
-    TASK_CHECKLIST_DONE,
-    TASK_COMMENT,
-    TASK_CREATED,
-    TASK_DEADLINE_CHANGED,
-    TASK_DEADLINE_SOON,
-    TASK_DELETED,
-    TASK_FILE,
-    TASK_OVERDUE,
-    TASK_STATUS_CHANGED,
-    TASK_UPDATED,
-)
 from app.core.logging import log_scope, logger
-from app.core.models import FileLink, StoredFile, User
-from app.core.outbox import enqueue
-from app.core.settings_store import get, get_int, get_str
+from app.core.settings_store import get, get_int
 from app.modules.projects.service import touch_project
-from app.modules.tasks import events
-from app.modules.tasks.models import ChecklistItem, Tag, Task, TaskEvent, TaskNotice, TaskRef, TaskStatus, TaskTag
+from app.modules.tasks.models import Task, TaskStatus
+from app.modules.tasks.service._queries import _status, _statuses
+from app.modules.tasks.service._serialize import _status_out
+from app.modules.tasks.service._validators import _clean, _color
 
 
 def seed_project(session: Session, project) -> None:
@@ -73,10 +61,6 @@ def backfill_statuses() -> None:
     with session_scope() as session:
         for project_id in list_project_ids(session):
             seed_project_id(session, project_id)
-
-
-def load_task(session: Session, task_id: int) -> Task | None:
-    return session.get(Task, task_id)
 
 
 def list_statuses(session: Session, project_id: int) -> list[dict]:
@@ -142,43 +126,11 @@ def order_statuses(session: Session, project_id: int, user_id: int, ids: list[in
     return [_status_out(rows[status_id]) for status_id in ids]
 
 
-def list_tags(session: Session, project_id: int) -> list[dict]:
-    rows = session.scalars(select(Tag).where(Tag.project_id == project_id).order_by(Tag.name.asc(), Tag.id.asc())).all()
-    return [_tag_out(row) for row in rows]
-
-
-def create_tag(session: Session, project_id: int, user_id: int, name: str) -> dict:
-    text = _clean(name, "tag.name.max_length", "Укажите метку")
-    rows = session.scalars(select(Tag).where(Tag.project_id == project_id)).all()
-    if any(row.name.casefold() == text.casefold() for row in rows):
-        raise HTTPException(status_code=400, detail="Такая метка уже есть")
-    row = Tag(project_id=project_id, name=text)
-    session.add(row)
-    session.flush()
-    with log_scope("tasks", "tag.create", user_id=user_id):
-        logger.info("tag created id={} project={}", row.id, project_id)
-    return _tag_out(row)
-
-
-def delete_tag(session: Session, project_id: int, user_id: int, tag_id: int) -> None:
-    row = session.get(Tag, tag_id)
-    if row is None or row.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Метка не найдена")
-    for link in session.scalars(select(TaskTag).where(TaskTag.tag_id == row.id)).all():
-        session.delete(link)
-    session.delete(row)
-    session.flush()
-    with log_scope("tasks", "tag.delete", user_id=user_id):
-        logger.info("tag deleted id={} project={}", tag_id, project_id)
-
-
-def list_tasks(session: Session, project_id: int) -> dict:
-    limit = get_int("tasks", "board.max_tasks", project_id=project_id)
-    rows = session.scalars(
-        select(Task).where(Task.project_id == project_id).order_by(Task.position.asc(), Task.id.asc()).limit(limit)
-    ).all()
-    return {"items": [_task_brief(session, row) for row in rows], "truncated": len(rows) >= limit}
-
-
-def get_task(session: Session, project_id: int, task_id: int) -> dict:
-    return _task_full(session, _task(session, project_id, task_id))
+def _sync_closed_flags(session: Session, project_id: int, status: TaskStatus) -> None:
+    rows = session.scalars(select(Task).where(Task.project_id == project_id, Task.status_id == status.id)).all()
+    now = utcnow()
+    for task in rows:
+        if status.is_closed and task.closed_at is None:
+            task.closed_at = now
+        if not status.is_closed:
+            task.closed_at = None
