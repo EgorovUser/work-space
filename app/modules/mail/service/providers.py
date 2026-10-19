@@ -115,7 +115,18 @@ def card_provider(session: Session, project_id: int, user_id: int | None) -> dic
     rules = [rule for rule in _rules(session, project_id) if rule.enabled]
     if not rules:
         return {"new_mail": 0}
-    rows = session.scalars(select(MailMessage).where(MailMessage.read.is_(False), MailMessage.archived.is_(False))).all()
+    # Правилам нужны только эти поля. Прежний select(MailMessage) грузил
+    # непрочитанные письма целиком (html_body, attachments_json) в память
+    # на каждую карточку проекта — теперь берём тонкие строки.
+    rows = session.execute(
+        select(
+            MailMessage.from_name,
+            MailMessage.from_addr,
+            MailMessage.to_addr,
+            MailMessage.subject,
+            MailMessage.body,
+        ).where(MailMessage.read.is_(False), MailMessage.archived.is_(False))
+    ).all()
     count = sum(1 for row in rows if _row_matches(rules, row, project_id))
     return {"new_mail": count}
 

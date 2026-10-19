@@ -52,6 +52,7 @@ def init_db() -> None:
     _engine = create_engine(
         cfg.sqlite_url(),
         connect_args={"check_same_thread": False, "timeout": 30},
+        pool_pre_ping=True,
     )
 
     @event.listens_for(_engine, "connect")
