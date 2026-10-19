@@ -12,9 +12,13 @@ from app.core.logging import log_scope, logger
 _jobs: dict[str, Job] = {}
 _next: dict[str, float] = {}
 _last: dict[str, dict] = {}
+_running_long: set[str] = set()
 _lock = threading.Lock()
 _stop = threading.Event()
 _thread: threading.Thread | None = None
+
+# Долгие джобы, которые не должны блокировать быстрые
+_LONG_JOBS = {"mail.poll", "documents.extract"}
 
 
 @dataclass
@@ -143,21 +147,46 @@ def _loop() -> None:
             due = _next.get(job.name, 0)
             if now < due:
                 continue
-            token = request_id_var.set("job:" + job.name + ":" + str(int(time.time())))
-            try:
-                with log_scope(job.module, job.action):
-                    logger.info("job start name={}", job.name)
-                    try:
-                        job.fn()
-                        logger.info("job done name={}", job.name)
-                        _remember(job.name, True, "")
-                    except Exception as exc:
-                        logger.opt(exception=True).warning("job failed name={}", job.name)
-                        _remember(job.name, False, str(exc) or "ошибка")
-            finally:
-                request_id_var.reset(token)
+            if job.name in _LONG_JOBS:
+                _start_long(job)
+            else:
+                _run(job)
             _next[job.name] = time.monotonic() + interval
         _stop.wait(_tick_seconds())
+
+
+def _start_long(job: Job) -> None:
+    with _lock:
+        if job.name in _running_long:
+            logger.info("job skip already running name={}", job.name)
+            return
+        _running_long.add(job.name)
+    thread = threading.Thread(target=_run_long, args=(job,), name="job-" + job.name, daemon=True)
+    thread.start()
+
+
+def _run_long(job: Job) -> None:
+    try:
+        _run(job)
+    finally:
+        with _lock:
+            _running_long.discard(job.name)
+
+
+def _run(job: Job) -> None:
+    token = request_id_var.set("job:" + job.name + ":" + str(int(time.time())))
+    try:
+        with log_scope(job.module, job.action):
+            logger.info("job start name={}", job.name)
+            try:
+                job.fn()
+                logger.info("job done name={}", job.name)
+                _remember(job.name, True, "")
+            except Exception as exc:
+                logger.opt(exception=True).warning("job failed name={}", job.name)
+                _remember(job.name, False, str(exc) or "ошибка")
+    finally:
+        request_id_var.reset(token)
 
 
 def _remember(name: str, ok: bool, error: str) -> None:
