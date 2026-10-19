@@ -110,7 +110,37 @@ a { color: var(--accent); }
   padding: 20px 24px 64px;
 }
 
-.project-bar { margin-bottom: 16px; }
+.project-wrap.board-page {
+  max-width: none;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 12px;
+}
+
+.project-wrap.board-page .project-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.board-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.board-stage.scroll { overflow: auto; }
+
+.board-stage:not(.scroll) > section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
 .page-head {
   display: flex;
@@ -467,7 +497,13 @@ input[type="color"] { width: 72px; height: 36px; padding: 2px; }
   margin-bottom: 18px;
 }
 
-.kanban-cols { display: flex; gap: 10px; flex: 0 0 auto; }
+.kanban-cols {
+  display: flex;
+  gap: 10px;
+  flex: 0 0 auto;
+  align-items: stretch;
+  height: 100%;
+}
 
 .compact-grid {
   display: grid;
@@ -482,16 +518,25 @@ label.tight textarea { min-height: 56px; }
 .tag-row input[type="text"] { width: 160px; }
 
 .kanban {
+  flex: 1;
+  min-height: 0;
   display: flex;
   gap: 10px;
-  overflow-x: auto;
-  align-items: flex-start;
-  padding-bottom: 8px;
+  overflow: auto;
+  align-items: stretch;
+  padding-bottom: 4px;
+  cursor: grab;
 }
+
+.kanban.panning { cursor: grabbing; }
+.kanban input, .kanban textarea, .kanban select { cursor: text; }
+.kanban.panning, .kanban.panning * { cursor: grabbing; }
 
 .kanban-col {
   flex: 0 0 280px;
   width: 280px;
+  height: 100%;
+  max-height: 100%;
   background: #eef0f3;
   border-radius: 8px;
   padding: 8px;
@@ -526,7 +571,7 @@ label.tight textarea { min-height: 56px; }
   font-size: 0.85rem;
 }
 
-.task-list { display: grid; gap: 8px; align-content: start; flex: 1; min-height: 120px; }
+.task-list { display: grid; gap: 8px; align-content: start; flex: 1; min-height: 0; overflow: auto; }
 
 .kanban-col.drop-target { outline: 2px solid var(--accent); outline-offset: -2px; }
 .task-card {
@@ -695,6 +740,7 @@ textarea.mono { min-height: 220px; }
   }
   .pop.up .pop-panel { left: auto; right: 0; bottom: auto; top: calc(100% + 8px); }
   .page, .project-wrap { padding: 16px 12px 40px; }
+  .project-wrap.board-page { height: calc(100vh - 72px); padding-bottom: 12px; }
   .kanban-col { flex: 0 0 260px; width: 260px; }
   .home-grid { grid-template-columns: 1fr; }
   .settings-grid { grid-template-columns: 1fr; }

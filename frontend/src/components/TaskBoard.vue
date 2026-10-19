@@ -142,6 +142,7 @@ export default {
     }
 
     let drag = null
+    let pan = null
 
     function clearDrag() {
       if (!drag) return
@@ -169,19 +170,37 @@ export default {
     function onPointerDown(event) {
       if (event.button !== 0 || !root.value) return
       const card = event.target.closest && event.target.closest(".task-card")
-      if (!card || !root.value.contains(card)) return
-      if (event.target.closest("a, button, input, textarea, select, .col-handle")) return
-      drag = {
-        card,
-        id: Number(card.dataset.id),
+      if (card && root.value.contains(card)) {
+        if (event.target.closest("a, button, input, textarea, select, .col-handle")) return
+        drag = {
+          card,
+          id: Number(card.dataset.id),
+          startX: event.clientX,
+          startY: event.clientY,
+          active: false,
+          ghost: null,
+          column: card.closest(".kanban-col"),
+        }
+        window.addEventListener("pointermove", onPointerMove)
+        window.addEventListener("pointerup", onPointerUp)
+        return
+      }
+      const board = event.target.closest && event.target.closest(".kanban")
+      if (!board || board !== root.value.parentElement) return
+      if (event.target.closest("a, button, input, textarea, select, .drag-handle, .col-handle, .pop, .pop-panel")) return
+      const list = event.target.closest(".task-list")
+      pan = {
+        board,
+        list,
         startX: event.clientX,
         startY: event.clientY,
+        left: board.scrollLeft,
+        top: board.scrollTop,
+        listTop: list ? list.scrollTop : 0,
         active: false,
-        ghost: null,
-        column: card.closest(".kanban-col"),
       }
-      window.addEventListener("pointermove", onPointerMove)
-      window.addEventListener("pointerup", onPointerUp)
+      window.addEventListener("pointermove", onPanMove)
+      window.addEventListener("pointerup", onPanUp)
     }
 
     function onPointerMove(event) {
@@ -267,10 +286,36 @@ export default {
       window.removeEventListener("click", swallowClick, true)
     }
 
+    function onPanMove(event) {
+      if (!pan) return
+      const dx = event.clientX - pan.startX
+      const dy = event.clientY - pan.startY
+      if (!pan.active) {
+        if (dx * dx + dy * dy < 9) return
+        pan.active = true
+        pan.board.classList.add("panning")
+      }
+      pan.board.scrollLeft = pan.left - dx
+      if (pan.list) pan.list.scrollTop = pan.listTop - dy
+      else pan.board.scrollTop = pan.top - dy
+    }
+
+    function onPanUp() {
+      window.removeEventListener("pointermove", onPanMove)
+      window.removeEventListener("pointerup", onPanUp)
+      if (pan && pan.active) window.addEventListener("click", swallowClick, true)
+      if (pan && pan.board) pan.board.classList.remove("panning")
+      pan = null
+    }
+
     function unbindDrag() {
       window.removeEventListener("pointermove", onPointerMove)
       window.removeEventListener("pointerup", onPointerUp)
+      window.removeEventListener("pointermove", onPanMove)
+      window.removeEventListener("pointerup", onPanUp)
       window.removeEventListener("click", swallowClick, true)
+      if (pan && pan.board) pan.board.classList.remove("panning")
+      pan = null
       clearDrag()
     }
 

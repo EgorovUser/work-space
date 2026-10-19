@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="board-stage" :class="{ scroll: tab !== 'tasks' }">
     <Tabs v-model="tab" :tabs="pageTabs" />
 
     <TaskBoard v-if="tab === 'tasks'" :project="project" />

@@ -1,6 +1,6 @@
 <template>
   <AppShell bare>
-    <div class="project-wrap">
+    <div class="project-wrap" :class="{ 'board-page': isBoard }">
       <header v-if="project" class="project-bar">
         <div class="page-head">
           <h1>{{ project.name }}</h1>
@@ -21,9 +21,11 @@
       </header>
       <p v-if="unavailable" class="banner">Модуль недоступен</p>
       <p v-else-if="error" class="error">{{ error }}</p>
-      <router-view v-else-if="project" v-slot="{ Component }">
-        <component :is="Component" :project="project" @changed="load" />
-      </router-view>
+      <div v-else-if="project" class="project-body">
+        <router-view v-slot="{ Component }">
+          <component :is="Component" :project="project" @changed="load" />
+        </router-view>
+      </div>
       <p v-else class="muted">Загрузка…</p>
     </div>
   </AppShell>
@@ -43,6 +45,7 @@ export default {
     const error = ref("")
     const unavailable = ref(false)
     const projectId = computed(() => route.params.projectId)
+    const isBoard = computed(() => route.path === "/projects/" + projectId.value)
 
     const links = computed(() => {
       const id = projectId.value
@@ -73,7 +76,7 @@ export default {
     provide("reloadProject", load)
     watch(projectId, load)
     onMounted(load)
-    return { route, project, error, unavailable, links, load }
+    return { route, project, error, unavailable, links, load, isBoard }
   },
 }
 </script>
