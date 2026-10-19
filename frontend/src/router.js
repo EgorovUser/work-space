@@ -48,4 +48,14 @@ router.beforeEach(async (to) => {
   return true
 })
 
+// Сбой сети в auth.refresh() или ленивом импорте view раньше оставлял
+// пользователя на пустом экране без объяснений. Теперь причина видна в
+// консоли, а закрытые маршруты отправляют на страницу входа.
+router.onError((err, to) => {
+  console.error("[router] навигация не удалась:", err)
+  if (to && to.meta.auth && router.currentRoute.value.path !== "/login") {
+    router.push("/login")
+  }
+})
+
 export default router

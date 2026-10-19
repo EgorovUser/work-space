@@ -13,4 +13,11 @@ setUnauthorizedHandler(() => {
   }
 })
 
-createApp(App).use(router).mount("#app")
+const app = createApp(App)
+app.use(router)
+// Ошибки компонентов (рендер, setup, watcher) больше не глотаются молча:
+// последний успешный рендер остаётся на экране, причина — в консоли.
+app.config.errorHandler = (err, _instance, info) => {
+  console.error("[app] ошибка Vue:", info, err)
+}
+app.mount("#app")
