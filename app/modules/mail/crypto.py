@@ -1,26 +1,8 @@
-"""Пароль ящика шифруется тем же FERNET_KEY, что и секреты."""
+"""Пароль ящика. Тот же ключ, что у настроек и секретов."""
 
-from __future__ import annotations
-
-from cryptography.fernet import Fernet, InvalidToken
-
-from app.core.config import get as get_config
-
-
-def encrypt(text: str) -> str:
-    if text == "":
-        return ""
-    return _box().encrypt(text.encode("utf-8")).decode("ascii")
+from app.core.crypto import decrypt as _decrypt
+from app.core.crypto import encrypt
 
 
 def decrypt(token: str) -> str:
-    if not token:
-        return ""
-    try:
-        return _box().decrypt(token.encode("ascii")).decode("utf-8")
-    except (InvalidToken, ValueError) as exc:
-        raise ValueError("не удалось прочитать пароль") from exc
-
-
-def _box() -> Fernet:
-    return Fernet(get_config().fernet_key.encode("ascii"))
+    return _decrypt(token, "не удалось прочитать пароль")

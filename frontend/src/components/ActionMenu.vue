@@ -1,7 +1,7 @@
 <template>
   <Pop align="end">
     <template #trigger="{ toggle }">
-      <button class="text-btn" type="button" @click="toggle">Действия</button>
+      <button class="text-btn menu-btn" type="button" title="Действия" @click="toggle">⋯</button>
     </template>
     <template #default="{ close }">
       <button

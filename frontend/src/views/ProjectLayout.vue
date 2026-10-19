@@ -1,23 +1,9 @@
 <template>
   <AppShell bare>
     <div class="project-wrap" :class="{ 'board-page': isBoard }">
-      <header v-if="project" class="project-bar">
-        <div class="page-head">
-          <h1>{{ project.name }}</h1>
-          <router-link to="/">Все проекты</router-link>
-        </div>
-        <p v-if="project.description" class="muted">{{ project.description }}</p>
-        <p v-if="project.archived" class="banner">Проект в архиве</p>
-        <nav class="section-nav">
-          <router-link
-            v-for="link in links"
-            :key="link.to"
-            :to="link.to"
-            :class="{ active: link.exact ? route.path === link.to : route.path.startsWith(link.to) }"
-          >
-            {{ link.label }}
-          </router-link>
-        </nav>
+      <header v-if="project && (project.description || project.archived)" class="project-bar">
+        <p v-if="project.description" class="muted clip">{{ project.description }}</p>
+        <span v-if="project.archived" class="pill warn">Архив</span>
       </header>
       <p v-if="unavailable" class="banner">Модуль недоступен</p>
       <p v-else-if="error" class="error">{{ error }}</p>
@@ -32,15 +18,17 @@
 </template>
 
 <script>
-import { computed, onMounted, provide, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue"
 import { useRoute } from "vue-router"
 import AppShell from "../components/AppShell.vue"
 import { api } from "../api"
+import { useChrome } from "../composables/useChrome"
 
 export default {
   components: { AppShell },
   setup() {
     const route = useRoute()
+    const chrome = useChrome()
     const project = ref(null)
     const error = ref("")
     const unavailable = ref(false)
@@ -74,8 +62,12 @@ export default {
     }
 
     provide("reloadProject", load)
+    watch([project, links], () => {
+      if (project.value) chrome.setProject(project.value.name, links.value)
+    })
     watch(projectId, load)
     onMounted(load)
+    onBeforeUnmount(() => chrome.clear())
     return { route, project, error, unavailable, links, load, isBoard }
   },
 }

@@ -153,9 +153,9 @@ import { onMounted, reactive, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
 import Tabs from "../components/Tabs.vue"
-import { useSettings } from "../composables/useSettings"
-import { useNotice } from "../composables/useNotice"
 import { formatWhen } from "../composables/formatDate"
+import { useWhen } from "../composables/useWhen"
+import { useNotice } from "../composables/useNotice"
 
 const KINDS = {
   created: "Создана",
@@ -176,7 +176,7 @@ export default {
   setup(props) {
     const route = useRoute()
     const router = useRouter()
-    const settings = useSettings()
+    const { settings, when, localDay } = useWhen()
     const notice = useNotice()
     const tab = ref("about")
     const pageTabs = [
@@ -201,7 +201,7 @@ export default {
     const fileKind = ref("document")
     const timeEntries = ref([])
     const timeError = ref("")
-    const spent = reactive({ day: todayInput(), minutes: 30, note: "" })
+    const spent = reactive({ day: localDay(), minutes: 30, note: "" })
     const priorities = ref([])
     const progressMax = ref(100)
     const form = reactive({
@@ -215,10 +215,6 @@ export default {
       progress_manual: 0,
       tag_ids: [],
     })
-
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
-    }
 
     function kindLabel(kind) {
       return KINDS[kind] || kind
@@ -408,13 +404,6 @@ export default {
       } catch (err) {
         formError.value = err.message || "Файл не откреплён"
       }
-    }
-
-    function todayInput() {
-      const now = new Date()
-      const month = String(now.getMonth() + 1).padStart(2, "0")
-      const day = String(now.getDate()).padStart(2, "0")
-      return now.getFullYear() + "-" + month + "-" + day
     }
 
     async function loadTime() {

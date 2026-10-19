@@ -1,17 +1,17 @@
 <template>
   <AppShell>
-    <section v-if="sections.events" class="card today-card">
-      <h2>Сегодня</h2>
-      <p v-if="!events.length" class="muted">Событий из почты на сегодня нет</p>
-      <div v-for="item in events" :key="item.id" class="status-row">
-        <div>
-          <router-link :to="'/mail/' + item.message_id">{{ item.summary }}</router-link>
-          <div v-if="item.location" class="muted">{{ item.location }}</div>
-        </div>
-        <span class="muted">{{ when(item.starts_at) }}</span>
-      </div>
-    </section>
     <div class="home-grid">
+      <section v-if="sections.events" class="card">
+        <h2>Сегодня</h2>
+        <p v-if="!events.length" class="muted">Событий из почты на сегодня нет</p>
+        <div v-for="item in events" :key="item.id" class="status-row">
+          <div>
+            <router-link :to="'/mail/' + item.message_id">{{ item.summary }}</router-link>
+            <div v-if="item.location" class="muted">{{ item.location }}</div>
+          </div>
+          <span class="muted">{{ when(item.starts_at) }}</span>
+        </div>
+      </section>
       <section v-if="sections.tasks" class="card">
         <h2>Горящие задачи</h2>
         <p v-if="!hot.length" class="muted">Нет задач со сроком</p>
@@ -78,8 +78,7 @@ import { onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
 import AppShell from "../components/AppShell.vue"
 import { api } from "../api"
-import { useSettings } from "../composables/useSettings"
-import { formatWhen } from "../composables/formatDate"
+import { useWhen } from "../composables/useWhen"
 
 export default {
   components: { AppShell },
@@ -96,15 +95,8 @@ export default {
     const unavailable = ref(false)
     const includeArchived = ref(false)
     const busy = ref(false)
-    const settings = useSettings()
+    const { settings, when } = useWhen()
     const router = useRouter()
-
-    function when(value) {
-      const pattern = settings.get("core", "ui.date_format")
-      const zone = settings.get("core", "ui.timezone") || undefined
-      settings.values.value
-      return formatWhen(value, pattern, zone)
-    }
 
     function stat(value) {
       if (value === null || value === undefined) return "недоступно"

@@ -25,7 +25,7 @@
       <article v-for="item in items" :key="item.id" class="list-row">
         <div class="status-row">
           <div>
-            <strong>{{ item.title }}</strong>
+            <router-link :to="'/projects/' + project.id + '/examples/' + item.id">{{ item.title }}</router-link>
             <div class="muted">
               <span v-if="item.files && item.files.length">{{ item.files.map((file) => file.original_name).join(", ") }}</span>
               <span v-else>файла нет</span>
@@ -33,6 +33,7 @@
               <span v-if="item.archived"> · архив</span>
             </div>
           </div>
+          <span class="muted">{{ when(item.updated_at) }}</span>
           <ActionMenu :actions="actionsFor(item)" @choose="onAction($event, item)" />
         </div>
       </article>
@@ -42,8 +43,10 @@
 
 <script>
 import { ref, watch } from "vue"
+import { useRouter } from "vue-router"
 import ActionMenu from "../components/ActionMenu.vue"
-import { api } from "../api"
+import { api, downloadFile } from "../api"
+import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 
 export default {
@@ -61,6 +64,8 @@ export default {
     const fileInput = ref(null)
     const includeArchived = ref(false)
     const notice = useNotice()
+    const router = useRouter()
+    const { when } = useWhen()
 
     function onFile(event) {
       const list = event.target.files
@@ -68,7 +73,7 @@ export default {
     }
 
     function actionsFor(item) {
-      const actions = []
+      const actions = [{ id: "open", label: "Открыть" }]
       const first = item.files && item.files[0]
       if (first) actions.push({ id: "download", label: "Скачать" })
       actions.push({ id: "delete", label: "Удалить", danger: true })
@@ -76,9 +81,8 @@ export default {
     }
 
     function onAction(action, item) {
-      if (action === "download" && item.files && item.files[0]) {
-        window.location.assign("/api/files/" + item.files[0].file_id)
-      }
+      if (action === "open") router.push("/projects/" + props.project.id + "/examples/" + item.id)
+      if (action === "download" && item.files && item.files[0]) downloadFile(item.files[0].file_id)
       if (action === "delete") remove(item)
     }
 
@@ -134,7 +138,7 @@ export default {
     }
 
     watch(() => props.project && props.project.id, load, { immediate: true })
-    return { items, error, formError, loading, busy, query, note, fileInput, includeArchived, onFile, load, upload, actionsFor, onAction }
+    return { items, error, formError, loading, busy, query, note, fileInput, includeArchived, when, onFile, load, upload, actionsFor, onAction }
   },
 }
 </script>

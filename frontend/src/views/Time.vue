@@ -124,9 +124,8 @@ import { onBeforeUnmount, ref, watch } from "vue"
 import TimeChart from "../components/TimeChart.vue"
 import Tabs from "../components/Tabs.vue"
 import { api } from "../api"
-import { useSettings } from "../composables/useSettings"
+import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
-import { formatWhen } from "../composables/formatDate"
 
 export default {
   components: { Tabs, TimeChart },
@@ -146,10 +145,10 @@ export default {
     const loading = ref(true)
     const busy = ref(false)
     const tick = ref(0)
+    const { settings, when, localDay } = useWhen()
     const draft = ref({ note: "", task_id: "" })
-    const manual = ref({ day: todayInput(), minutes: 30, note: "", task_id: "" })
+    const manual = ref({ day: localDay(), minutes: 30, note: "", task_id: "" })
     const edit = ref(null)
-    const settings = useSettings()
     const notice = useNotice()
     const tab = ref("timer")
     const pageTabs = [
@@ -159,17 +158,6 @@ export default {
     ]
     let clock = null
     let refreshTimer = null
-
-    function todayInput() {
-      const now = new Date()
-      const month = String(now.getMonth() + 1).padStart(2, "0")
-      const day = String(now.getDate()).padStart(2, "0")
-      return now.getFullYear() + "-" + month + "-" + day
-    }
-
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
-    }
 
     function minutesLabel(value) {
       const total = Math.max(0, Number(value) || 0)

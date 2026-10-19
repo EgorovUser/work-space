@@ -30,8 +30,7 @@
 <script>
 import { onMounted, ref } from "vue"
 import { api } from "../api"
-import { useSettings } from "../composables/useSettings"
-import { formatWhen } from "../composables/formatDate"
+import { useWhen } from "../composables/useWhen"
 
 export default {
   props: { project: { type: Object, required: true } },
@@ -43,11 +42,7 @@ export default {
     const error = ref("")
     const loading = ref(true)
     const busy = ref(false)
-    const settings = useSettings()
-
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
-    }
+    const { settings, when } = useWhen()
 
     async function load() {
       loading.value = true

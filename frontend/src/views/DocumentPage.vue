@@ -82,9 +82,8 @@ import { computed, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
 import Tabs from "../components/Tabs.vue"
-import { useSettings } from "../composables/useSettings"
+import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
-import { formatWhen } from "../composables/formatDate"
 
 export default {
   components: { Tabs },
@@ -111,7 +110,7 @@ export default {
     const fileInput = ref(null)
     const fullText = ref("")
     const fullLoaded = ref(false)
-    const settings = useSettings()
+    const { settings, when } = useWhen()
     const notice = useNotice()
 
     const shownText = computed(() => {
@@ -119,10 +118,6 @@ export default {
       if (fullLoaded.value) return fullText.value
       return doc.value.preview || ""
     })
-
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
-    }
 
     function sizeLabel(bytes) {
       const value = Number(bytes) || 0

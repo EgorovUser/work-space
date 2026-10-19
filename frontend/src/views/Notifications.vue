@@ -58,9 +58,8 @@ import MultiSelect from "../components/MultiSelect.vue"
 import ChannelSetup from "../components/ChannelSetup.vue"
 import Tabs from "../components/Tabs.vue"
 import { api } from "../api"
-import { useSettings } from "../composables/useSettings"
+import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
-import { formatWhen } from "../composables/formatDate"
 
 export default {
   components: { AppShell, ChannelSetup, MultiSelect, Tabs },
@@ -81,12 +80,8 @@ export default {
       { id: "routes", label: "Какие события" },
       { id: "setup", label: "Куда писать" },
     ]
-    const settings = useSettings()
+    const { settings, when } = useWhen()
     const notice = useNotice()
-
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
-    }
 
     function line(item) {
       const event = String(item.event_label || "").trim()

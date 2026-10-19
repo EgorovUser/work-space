@@ -4,10 +4,9 @@ import copy
 import json
 import threading
 
-from cryptography.fernet import Fernet
+from app.core.crypto import fernet
 from sqlalchemy import delete, select
 
-from app.core.config import get as get_config
 from app.core.db import session_scope, utcnow
 from app.core.logging import log_scope, logger
 from app.core.models import SettingDefinitionRow, SettingValue
@@ -156,7 +155,7 @@ def set_value(
                     "Это не токен бота. Скопируйте его из BotFather целиком: число, двоеточие и длинный ключ, без пробелов."
                 )
             value = cleaned
-        stored = json.dumps(_fernet().encrypt(value.encode("utf-8")).decode("ascii"))
+        stored = json.dumps(fernet().encrypt(value.encode("utf-8")).decode("ascii"))
         shown = "***"
     else:
         coerced = _coerce(item, value)
@@ -300,7 +299,7 @@ def _decode(item: SettingDef, raw: str):
         if item.secret:
             if not isinstance(value, str) or value == "":
                 return _INVALID
-            return _fernet().decrypt(value.encode("ascii")).decode("utf-8")
+            return fernet().decrypt(value.encode("ascii")).decode("utf-8")
         return _coerce(item, value)
     except Exception:
         with log_scope("settings", "read"):
@@ -398,10 +397,6 @@ def _row_fields(item: SettingDef) -> dict:
         "min_value": item.min_value,
         "max_value": item.max_value,
     }
-
-
-def _fernet() -> Fernet:
-    return Fernet(get_config().fernet_key.encode("ascii"))
 
 
 def _invalidate(module: str, key: str) -> None:

@@ -1,21 +1,30 @@
 <template>
-  <Pop class="bell" placement="up">
-    <template #trigger="{ toggle }">
-      <button class="btn secondary" type="button" @click="toggle">
+  <Pop align="end" wide>
+    <template #trigger="{ toggle, open }">
+      <button class="icon-btn" type="button" :class="{ on: open }" title="Уведомления" @click="toggle">
         Новые
-        <span v-if="count" class="bell-count">{{ count }}</span>
+        <span v-if="count" class="bell-count">{{ count > 99 ? "99+" : count }}</span>
       </button>
     </template>
     <template #default="{ close }">
+      <div class="bell-head">
+        <strong>Уведомления</strong>
+        <button class="text-btn" type="button" :disabled="!count || busy" @click="readAll">Прочитать все</button>
+      </div>
       <p v-if="error" class="error">{{ error }}</p>
-      <p v-else-if="!items.length" class="muted">Нет новых</p>
-      <ul v-else class="plain-list">
-        <li v-for="item in items" :key="item.id">
-          <router-link :to="item.link || '/notifications'" @click="read(item, close)">{{ item.title }}</router-link>
-          <div class="muted">{{ item.event_label }}</div>
-        </li>
-      </ul>
-      <p><router-link to="/notifications" @click="close">Все уведомления</router-link></p>
+      <p v-else-if="!items.length" class="muted">Новых нет</p>
+      <div v-else class="bell-list">
+        <article v-for="item in items" :key="item.id" class="bell-item">
+          <div>
+            <router-link :to="item.link || '/notifications'" @click="read(item, close)">{{ item.title }}</router-link>
+            <div class="muted">{{ item.event_label }}</div>
+          </div>
+          <button class="text-btn" type="button" :disabled="busy" @click="read(item)">Прочитано</button>
+        </article>
+      </div>
+      <div class="bell-foot">
+        <router-link to="/notifications" @click="close">Все уведомления</router-link>
+      </div>
     </template>
   </Pop>
 </template>
@@ -33,6 +42,7 @@ export default {
     const items = ref([])
     const count = ref(0)
     const error = ref("")
+    const busy = ref(false)
     const settings = useSettings()
     const notice = useNotice()
     let timer = null
@@ -44,12 +54,12 @@ export default {
         count.value = data.count || 0
         error.value = ""
       } catch (err) {
-        error.value = err.message || "Не удалось загрузить"
+        if (err.status !== 401) error.value = err.message || "Не удалось загрузить"
       }
     }
 
     async function read(item, close) {
-      close()
+      if (close) close()
       const previousItems = items.value.slice()
       const previousCount = count.value
       items.value = items.value.filter((row) => row.id !== item.id)
@@ -60,6 +70,23 @@ export default {
         items.value = previousItems
         count.value = previousCount
         notice.show("Не удалось отметить уведомление. " + (err.message || "Ошибка"))
+      }
+    }
+
+    async function readAll() {
+      busy.value = true
+      const previousItems = items.value.slice()
+      const previousCount = count.value
+      items.value = []
+      count.value = 0
+      try {
+        await api("/api/notifications/read-all", { method: "POST" })
+      } catch (err) {
+        items.value = previousItems
+        count.value = previousCount
+        notice.show("Не удалось отметить уведомления. " + (err.message || "Ошибка"))
+      } finally {
+        busy.value = false
       }
     }
 
@@ -77,7 +104,7 @@ export default {
     })
     onBeforeUnmount(() => clearInterval(timer))
 
-    return { items, count, error, read }
+    return { items, count, error, busy, read, readAll }
   },
 }
 </script>

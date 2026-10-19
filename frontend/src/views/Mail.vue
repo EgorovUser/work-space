@@ -69,8 +69,7 @@
 import { ref, watch } from "vue"
 import { api } from "../api"
 import Tabs from "../components/Tabs.vue"
-import { useSettings } from "../composables/useSettings"
-import { formatWhen } from "../composables/formatDate"
+import { useWhen } from "../composables/useWhen"
 
 export default {
   components: { Tabs },
@@ -100,11 +99,7 @@ export default {
     const file = ref(null)
     const account = ref({ name: "", host: "", port: 993, use_ssl: true, username: "", password: "", folder: "INBOX" })
     const rule = ref({ name: "", field: "from", op: "contains", value: "", action: "keep" })
-    const settings = useSettings()
-
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
-    }
+    const { settings, when } = useWhen()
 
     function fromLine(item) {
       if (item.from_name && item.from_addr) return item.from_name + " <" + item.from_addr + ">"

@@ -1,7 +1,7 @@
 <template>
   <AppShell>
     <h1>Настройки</h1>
-    <p class="muted">Токен бота и SMTP — в уведомлениях, туда же галочки «куда слать». Здесь остальные параметры, по три карточки в ряд.</p>
+    <p class="muted">Токен бота и SMTP — в уведомлениях, туда же галочки «куда слать». Здесь остальные параметры.</p>
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="loading" class="muted">Загрузка…</p>
     <template v-else>

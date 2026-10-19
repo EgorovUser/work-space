@@ -64,9 +64,10 @@
             <span v-if="item.has_secret"> · секрет задан</span>
             <span v-else> · секрета нет</span>
             <span v-if="item.archived"> · архив</span>
+            · {{ when(item.updated_at) }}
           </div>
         </div>
-        <span class="muted">{{ when(item.updated_at) }}</span>
+        <ActionMenu :actions="rowActions" @choose="onAction($event, item)" />
       </div>
     </div>
     </div>
@@ -75,13 +76,15 @@
 
 <script>
 import { ref, watch } from "vue"
+import { useRouter } from "vue-router"
 import { api } from "../api"
+import ActionMenu from "../components/ActionMenu.vue"
 import Tabs from "../components/Tabs.vue"
-import { useSettings } from "../composables/useSettings"
-import { formatWhen } from "../composables/formatDate"
+import { useWhen } from "../composables/useWhen"
+import { useNotice } from "../composables/useNotice"
 
 export default {
-  components: { Tabs },
+  components: { ActionMenu, Tabs },
   props: {
     project: { type: Object, required: true },
   },
@@ -101,10 +104,28 @@ export default {
     ]
     const showSecret = ref(false)
     const form = ref({ title: "", kind: "", username: "", url: "", note: "", secret: "" })
-    const settings = useSettings()
+    const { settings, when } = useWhen()
+    const notice = useNotice()
+    const router = useRouter()
+    const rowActions = [
+      { id: "open", label: "Открыть" },
+      { id: "delete", label: "Удалить", danger: true },
+    ]
 
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
+    function onAction(action, item) {
+      if (action === "open") router.push("/projects/" + props.project.id + "/secrets/" + item.id)
+      if (action === "delete") remove(item)
+    }
+
+    async function remove(item) {
+      const snapshot = items.value.slice()
+      items.value = items.value.filter((row) => row.id !== item.id)
+      try {
+        await api("/api/projects/" + props.project.id + "/secrets/" + item.id, { method: "DELETE" })
+      } catch (err) {
+        items.value = snapshot
+        notice.show("Не удалось удалить секрет. " + (err.message || "Ошибка"))
+      }
     }
 
     function applyKinds(list) {
@@ -180,7 +201,7 @@ export default {
 
     return {
       items, kinds, error, formError, loading, busy, query, includeArchived, showSecret, form, tab, pageTabs,
-      when, load, create, generate,
+      when, rowActions, load, create, generate, onAction,
     }
   },
 }

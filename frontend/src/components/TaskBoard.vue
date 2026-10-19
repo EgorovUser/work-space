@@ -50,10 +50,9 @@ import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import ActionMenu from "./ActionMenu.vue"
 import { api } from "../api"
-import { useSettings } from "../composables/useSettings"
+import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 import { applyTaskOrders } from "../composables/taskOrder"
-import { formatWhen } from "../composables/formatDate"
 
 export default {
   components: { ActionMenu },
@@ -68,7 +67,7 @@ export default {
     const unavailable = ref(false)
     const busy = ref(false)
     const root = ref(null)
-    const settings = useSettings()
+    const { settings, when } = useWhen()
     const notice = useNotice()
     const router = useRouter()
     const sortables = []
@@ -92,10 +91,6 @@ export default {
     function priorityLabel(task) {
       const found = priorities().find((item) => item && item.id === task.priority)
       return found ? found.label : ""
-    }
-
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
     }
 
     function late(task) {
@@ -185,18 +180,19 @@ export default {
         window.addEventListener("pointerup", onPointerUp)
         return
       }
-      const board = event.target.closest && event.target.closest(".kanban")
-      if (!board || board !== root.value.parentElement) return
+      const board = root.value.closest(".kanban")
+      if (!board || !board.contains(event.target)) return
       if (event.target.closest("a, button, input, textarea, select, .drag-handle, .col-handle, .pop, .pop-panel")) return
       const list = event.target.closest(".task-list")
+      const scroller = scrolling(board)
       pan = {
         board,
-        list,
+        scroller,
+        list: list && list.scrollHeight > list.clientHeight + 2 ? list : null,
         startX: event.clientX,
         startY: event.clientY,
-        left: board.scrollLeft,
-        top: board.scrollTop,
-        listTop: list ? list.scrollTop : 0,
+        left: scroller.scrollLeft,
+        top: (list && list.scrollHeight > list.clientHeight + 2 ? list : scroller).scrollTop,
         active: false,
       }
       window.addEventListener("pointermove", onPanMove)
@@ -286,6 +282,15 @@ export default {
       window.removeEventListener("click", swallowClick, true)
     }
 
+    function scrolling(node) {
+      let current = node
+      while (current) {
+        if (current.scrollWidth > current.clientWidth + 2 || current.scrollHeight > current.clientHeight + 2) return current
+        current = current.parentElement
+      }
+      return node
+    }
+
     function onPanMove(event) {
       if (!pan) return
       const dx = event.clientX - pan.startX
@@ -295,9 +300,9 @@ export default {
         pan.active = true
         pan.board.classList.add("panning")
       }
-      pan.board.scrollLeft = pan.left - dx
-      if (pan.list) pan.list.scrollTop = pan.listTop - dy
-      else pan.board.scrollTop = pan.top - dy
+      pan.scroller.scrollLeft = pan.left - dx
+      const vertical = pan.list || pan.scroller
+      vertical.scrollTop = pan.top - dy
     }
 
     function onPanUp() {

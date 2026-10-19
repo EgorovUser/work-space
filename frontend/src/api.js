@@ -12,6 +12,11 @@ export function setUnauthorizedHandler(handler) {
   onUnauthorized = handler
 }
 
+export function downloadFile(fileId) {
+  if (!fileId) return
+  window.location.assign("/api/files/" + fileId)
+}
+
 export async function api(path, options = {}) {
   const headers = { ...(options.headers || {}) }
   let body = options.body

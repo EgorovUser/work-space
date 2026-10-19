@@ -2,9 +2,11 @@
   <AppShell>
     <div class="page-head">
       <h1>Почта</h1>
+      <p class="muted">
+        <template v-if="sync && sync.automatic">Новые письма забираются сами, каждые {{ sync.every_seconds }} с.</template>
+        <template v-else>Автозабор выключен. Порцию можно забрать у ящика.</template>
+      </p>
     </div>
-    <p v-if="sync && sync.automatic" class="muted">Само, без кнопки. Каждые {{ sync.every_seconds }} с забирается до {{ sync.batches_per_run }} порций по {{ sync.batch_size }} ещё не скачанных писем. Кнопка ниже — только если не хочется ждать.</p>
-    <p v-else class="muted">Автозабор выключен в настройках почты. Тогда следующую порцию нескачанных писем берёт кнопка.</p>
     <Tabs v-model="tab" :tabs="pageTabs" />
     <div v-show="tab === 'letters'">
       <form class="row-actions" @submit.prevent="load">
@@ -157,8 +159,7 @@ import { reactive, ref, onMounted } from "vue"
 import AppShell from "../components/AppShell.vue"
 import Tabs from "../components/Tabs.vue"
 import { api } from "../api"
-import { useSettings } from "../composables/useSettings"
-import { formatWhen } from "../composables/formatDate"
+import { useWhen } from "../composables/useWhen"
 
 export default {
   components: { AppShell, Tabs },
@@ -195,12 +196,8 @@ export default {
       { id: "notify", label: "Уведомления" },
       { id: "accounts", label: "Ящик" },
     ]
-    const settings = useSettings()
+    const { settings, when } = useWhen()
     let opened = false
-
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
-    }
 
     function fromLine(item) {
       if (item.from_name && item.from_addr) return item.from_name + " <" + item.from_addr + ">"

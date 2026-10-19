@@ -4,9 +4,9 @@
 
     <TaskBoard v-if="tab === 'tasks'" :project="project" />
 
-    <div v-else-if="tab === 'summary'">
+    <div v-else-if="tab === 'summary'" class="board-fill">
       <p v-if="error" class="error">{{ error }}</p>
-      <div v-else class="split">
+      <div v-else class="board-fill-grid">
         <section class="card">
           <h2>Ближайшие дедлайны</h2>
           <p v-if="!board" class="muted">Загрузка…</p>
@@ -29,7 +29,7 @@
             </p>
           </template>
         </section>
-        <section class="card">
+        <section class="card wide">
           <h2>Создание и закрытие</h2>
           <p v-if="!board" class="muted">Загрузка…</p>
           <p v-else-if="board.chart == null" class="banner">Модуль недоступен</p>
@@ -63,16 +63,15 @@
       </div>
     </div>
 
-    <section v-else class="card">
-      <h2>Поиск по проекту</h2>
+    <div v-else class="board-fill">
       <form class="row-actions" @submit.prevent="runSearch">
         <input v-model="query" type="text" placeholder="Слово в названии или тексте" />
         <button class="btn" type="submit">Найти</button>
       </form>
       <p v-if="searchError" class="error">{{ searchError }}</p>
-      <div v-if="groups" class="split tight">
-        <div v-for="group in groupList" :key="group.key">
-          <h3>{{ group.label }}</h3>
+      <div v-if="groups" class="board-fill-grid">
+        <section v-for="group in groupList" :key="group.key" class="card">
+          <h2>{{ group.label }}</h2>
           <p v-if="group.items === null" class="banner">Модуль недоступен</p>
           <p v-else-if="!group.items.length" class="muted">Ничего не найдено</p>
           <ul v-else class="plain-list">
@@ -86,17 +85,16 @@
               <span v-if="item.snippet" class="muted"> — {{ item.snippet }}</span>
             </li>
           </ul>
-        </div>
+        </section>
       </div>
-    </section>
+    </div>
   </div>
 </template>
 
 <script>
 import { computed, ref, watch } from "vue"
 import { api } from "../api"
-import { useSettings } from "../composables/useSettings"
-import { formatWhen } from "../composables/formatDate"
+import { useWhen } from "../composables/useWhen"
 import TaskBoard from "../components/TaskBoard.vue"
 import TrendChart from "../components/TrendChart.vue"
 import ModuleNote from "../components/ModuleNote.vue"
@@ -127,16 +125,12 @@ export default {
       { id: "summary", label: "Сводка" },
       { id: "search", label: "Поиск" },
     ]
-    const settings = useSettings()
+    const { settings, when } = useWhen()
 
     const groupList = computed(() => {
       if (!groups.value) return []
       return LABELS.map(([key, label]) => ({ key, label, items: groups.value[key] }))
     })
-
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
-    }
 
     async function load() {
       error.value = ""

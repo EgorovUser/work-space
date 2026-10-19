@@ -54,12 +54,11 @@
 <script>
 import { ref, watch } from "vue"
 import { useRouter } from "vue-router"
-import { api } from "../api"
+import { api, downloadFile } from "../api"
 import Tabs from "../components/Tabs.vue"
 import ActionMenu from "../components/ActionMenu.vue"
-import { useSettings } from "../composables/useSettings"
+import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
-import { formatWhen } from "../composables/formatDate"
 
 export default {
   components: { ActionMenu, Tabs },
@@ -82,13 +81,9 @@ export default {
       { id: "list", label: "Список" },
       { id: "add", label: "Загрузить" },
     ]
-    const settings = useSettings()
+    const { settings, when } = useWhen()
     const notice = useNotice()
     const router = useRouter()
-
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
-    }
 
     function onFile(event) {
       const list = event.target.files
@@ -144,7 +139,7 @@ export default {
 
     function onAction(action, item) {
       if (action === "open") router.push("/projects/" + props.project.id + "/documents/" + item.id)
-      if (action === "download" && item.current) window.location.assign("/api/files/" + item.current.file_id)
+      if (action === "download" && item.current) downloadFile(item.current.file_id)
       if (action === "delete") remove(item)
     }
 

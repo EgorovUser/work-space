@@ -9,14 +9,28 @@
         <router-link to="/settings">Настройки</router-link>
         <router-link to="/system">Состояние</router-link>
       </nav>
+      <nav v-if="extra.length" class="rail-nav">
+        <div class="rail-label">{{ caption }}</div>
+        <router-link
+          v-for="link in extra"
+          :key="link.to"
+          :to="link.to"
+          :class="{ 'router-link-active': link.exact ? route.path === link.to : route.path.startsWith(link.to) }"
+        >
+          {{ link.label }}
+        </router-link>
+      </nav>
       <div class="rail-foot">
-        <Bell />
         <div v-if="user" class="rail-user">{{ user.display_name || user.username }}</div>
         <button class="btn secondary" type="button" @click="onLogout">Выйти</button>
       </div>
     </aside>
     <main class="app-main">
-      <div :class="bare ? '' : 'page'">
+      <header class="topbar">
+        <div class="topbar-title">{{ heading }}</div>
+        <Bell />
+      </header>
+      <div class="app-body" :class="bare ? 'bare' : 'page'">
         <slot />
       </div>
     </main>
@@ -25,9 +39,10 @@
 
 <script>
 import { computed, onMounted } from "vue"
-import { useRouter } from "vue-router"
+import { useRoute, useRouter } from "vue-router"
 import Bell from "./Bell.vue"
 import { useAuth } from "../composables/useAuth"
+import { useChrome } from "../composables/useChrome"
 import { useSettings } from "../composables/useSettings"
 
 export default {
@@ -38,7 +53,18 @@ export default {
   setup(props) {
     const auth = useAuth()
     const settings = useSettings()
+    const chrome = useChrome()
     const router = useRouter()
+    const route = useRoute()
+
+    const heading = computed(() => {
+      if (chrome.caption.value) return chrome.caption.value
+      if (route.path.startsWith("/mail")) return "Почта"
+      if (route.path.startsWith("/notifications")) return "Уведомления"
+      if (route.path.startsWith("/settings")) return "Настройки"
+      if (route.path.startsWith("/system")) return "Состояние"
+      return settings.title.value || "Проекты"
+    })
 
     onMounted(() => {
       settings.load().catch(() => {})
@@ -53,6 +79,10 @@ export default {
       user: auth.user,
       title: settings.title,
       bare: computed(() => props.bare),
+      caption: chrome.caption,
+      extra: chrome.extra,
+      heading,
+      route,
       onLogout,
     }
   },

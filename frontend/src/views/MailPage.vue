@@ -68,10 +68,9 @@
 <script>
 import { computed, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { api } from "../api"
-import { useSettings } from "../composables/useSettings"
+import { api, downloadFile } from "../api"
+import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
-import { formatWhen } from "../composables/formatDate"
 
 export default {
   props: { project: { type: Object, default: null } },
@@ -84,7 +83,7 @@ export default {
     const error = ref("")
     const formError = ref("")
     const busy = ref(false)
-    const settings = useSettings()
+    const { settings, when } = useWhen()
     const notice = useNotice()
 
     const fromLine = computed(() => {
@@ -126,10 +125,6 @@ export default {
       return "/api/mail/messages/" + route.params.messageId
     }
 
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
-    }
-
     async function pullFile(item) {
       formError.value = ""
       busy.value = true
@@ -139,7 +134,7 @@ export default {
           { method: "POST" }
         )
         item.file_id = saved.file_id
-        window.location.assign("/api/files/" + saved.file_id)
+        downloadFile(saved.file_id)
       } catch (err) {
         formError.value = err.message || "Вложение не скачалось"
       } finally {

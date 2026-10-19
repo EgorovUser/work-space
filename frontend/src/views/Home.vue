@@ -45,8 +45,7 @@
 import { onMounted, ref } from "vue"
 import AppShell from "../components/AppShell.vue"
 import { api } from "../api"
-import { useSettings } from "../composables/useSettings"
-import { formatWhen } from "../composables/formatDate"
+import { useWhen } from "../composables/useWhen"
 
 export default {
   components: { AppShell },
@@ -57,11 +56,7 @@ export default {
     const checkedAt = ref("")
     const error = ref("")
     const busy = ref(false)
-    const settings = useSettings()
-
-    function when(value) {
-      return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
-    }
+    const { settings, when } = useWhen()
 
     function statusLabel(status) {
       if (status === "ok") return "Ок"

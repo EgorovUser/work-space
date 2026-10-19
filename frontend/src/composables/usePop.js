@@ -66,7 +66,7 @@ function install() {
   }, true)
 }
 
-export function usePop(root) {
+export function usePop(root, panel) {
   install()
   const id = ++seq
   const open = ref(false)
@@ -89,8 +89,9 @@ export function usePop(root) {
   store.register(id, {
     close,
     contains(target) {
-      const node = root.value
-      return !!(node && target && node.contains(target))
+      if (!target) return false
+      const nodes = [root && root.value, panel && panel.value]
+      return nodes.some((node) => node && node.contains(target))
     },
   })
   onBeforeUnmount(() => store.unregister(id))

@@ -1,9 +1,7 @@
 <template>
-  <div v-if="message" class="modal-back">
-    <div class="modal" role="alertdialog">
-      <p>{{ message }}</p>
-      <button class="btn" type="button" @click="close">Понятно</button>
-    </div>
+  <div v-if="message" class="toast" role="status">
+    <p>{{ message }}</p>
+    <button class="text-btn" type="button" @click="close">Закрыть</button>
   </div>
 </template>
 
