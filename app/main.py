@@ -54,7 +54,7 @@ def create_app() -> FastAPI:
         session_cookie="session",
         max_age=get_int("core", "auth.session_max_age_hours") * 3600,
         same_site="lax",
-        https_only=cfg.cookie_secure,
+        https_only=False,
     )
     app.include_router(auth.router)
     app.include_router(settings_router)

@@ -14,7 +14,7 @@
         <div class="task-list" :data-status="status.id">
           <article v-for="task in tasksOf(status.id)" :key="task.id" class="task-card" :data-id="task.id">
             <div class="task-card-top">
-              <button class="drag-handle" type="button" title="Перетащить">⋮⋮</button>
+              <span class="drag-handle" title="Перетащить">⋮⋮</span>
               <router-link class="task-title" :to="'/projects/' + project.id + '/tasks/' + task.id">{{ task.title }}</router-link>
               <ActionMenu :actions="cardActions" @choose="onCard($event, task)" />
             </div>
@@ -139,14 +139,19 @@ export default {
           onEnd: () => moveColumns(),
         })
       )
-      for (const column of root.value.querySelectorAll(".kanban-col")) {
+      for (const list of root.value.querySelectorAll(".task-list")) {
         sortables.push(
-          Sortable.create(column, {
+          Sortable.create(list, {
             group: "tasks",
             animation: 0,
             draggable: ".task-card",
-            handle: ".task-card .drag-handle",
-            emptyInsertThreshold: 280,
+            handle: ".task-card",
+            filter: "a, button, input, textarea, select",
+            preventOnFilter: true,
+            forceFallback: true,
+            fallbackOnBody: true,
+            fallbackTolerance: 4,
+            emptyInsertThreshold: 160,
             onEnd: (evt) => dropped(evt),
           })
         )
@@ -155,11 +160,27 @@ export default {
 
     function restore(evt) {
       const item = evt.item
-      const list = evt.from && evt.from.querySelector(".task-list")
+      const list = evt.from
       if (!item || !list) return
       item.remove()
-      const cards = [...list.querySelectorAll(".task-card")]
+      const cards = [...list.querySelectorAll(":scope > .task-card")]
       list.insertBefore(item, cards[evt.oldIndex] || null)
+    }
+
+    function pointer(evt) {
+      const source = evt.originalEvent || {}
+      const touch = (source.changedTouches && source.changedTouches[0]) || (source.touches && source.touches[0])
+      const point = touch || source
+      return { x: point.clientX, y: point.clientY }
+    }
+
+    function listAt(x) {
+      if (!root.value || typeof x !== "number") return null
+      for (const column of root.value.querySelectorAll(".kanban-col")) {
+        const rect = column.getBoundingClientRect()
+        if (x >= rect.left && x <= rect.right) return column.querySelector(".task-list")
+      }
+      return null
     }
 
     async function moveColumns() {
@@ -180,12 +201,30 @@ export default {
     }
 
     async function dropped(evt) {
-      const orders = [evt.from, evt.to]
-        .filter((list, index, all) => list && all.indexOf(list) === index)
-        .map((list) => ({
-          status_id: Number(list.dataset.status),
-          ids: [...list.querySelectorAll("[data-id]")].map((node) => Number(node.dataset.id)),
-        }))
+      const movedId = Number(evt.item && evt.item.dataset.id)
+      const point = pointer(evt)
+      const aimed = listAt(point.x) || evt.to
+      const lists = [evt.from, evt.to, aimed].filter((list, index, all) => list && all.indexOf(list) === index)
+      const orders = lists.map((list) => {
+        const ids = [...list.querySelectorAll(":scope > .task-card")]
+          .map((node) => Number(node.dataset.id))
+          .filter((id) => id && id !== movedId)
+        if (list === aimed && movedId) {
+          const cards = [...list.querySelectorAll(":scope > .task-card")].filter((node) => Number(node.dataset.id) !== movedId)
+          let index = ids.length
+          if (typeof point.y === "number") {
+            for (let i = 0; i < cards.length; i += 1) {
+              const rect = cards[i].getBoundingClientRect()
+              if (point.y < rect.top + rect.height / 2) {
+                index = i
+                break
+              }
+            }
+          }
+          ids.splice(index, 0, movedId)
+        }
+        return { status_id: Number(list.dataset.status), ids }
+      })
       const snapshot = tasks.value.map((task) => ({ ...task }))
       restore(evt)
       tasks.value = applyTaskOrders(tasks.value, orders)

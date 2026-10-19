@@ -533,6 +533,7 @@ label.tight textarea { min-height: 56px; }
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px 10px;
+  cursor: grab;
 }
 
 .task-card-top { display: flex; gap: 6px; align-items: flex-start; }
