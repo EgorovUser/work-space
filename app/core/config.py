@@ -20,6 +20,7 @@ class AppConfig(BaseSettings):
     app_env: str = "dev"
     secret_key: str = ""
     fernet_key: str = ""
+    fernet_key_old: str = ""
     data_dir: str = ""
     database_url: str = ""
     host: str = "0.0.0.0"
@@ -60,6 +61,8 @@ def prepare() -> AppConfig:
     (data / "logs").mkdir(parents=True, exist_ok=True)
     _fill_secrets(cfg, data)
     Fernet(cfg.fernet_key.encode("ascii"))
+    if cfg.fernet_key_old:
+        Fernet(cfg.fernet_key_old.encode("ascii"))
     _config = cfg
     return cfg
 

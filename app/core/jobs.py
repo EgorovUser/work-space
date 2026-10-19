@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 from app.core.config import get as get_config
 from app.core.logging import logger
@@ -13,13 +14,22 @@ def cleanup_logs() -> None:
     log_dir = get_config().data_path() / "logs"
     if not log_dir.exists():
         return
+    active = _active_logs(log_dir)
     for path in log_dir.iterdir():
         if not path.is_file():
+            continue
+        if path.name in active:
             continue
         if path.stat().st_mtime >= cutoff:
             continue
         path.unlink()
         logger.info("log removed file={}", path.name)
+
+
+def _active_logs(log_dir: Path) -> set[str]:
+    """Файлы, которые сейчас могут быть открыты процессом."""
+    names = {"app.log", "errors.log", "uvicorn.log"}
+    return names
 
 
 def register_core_jobs() -> None:
