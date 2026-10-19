@@ -38,6 +38,9 @@ class ExamplePatch(BaseModel):
     pinned: bool | None = None
     archived: bool | None = None
     tags: list[str] | None = None
+    # Оптимистичная блокировка: если пример успели изменить в другой вкладке,
+    # сервер ответит 409 вместо тихой перезаписи.
+    updated_at: str | None = None
 
 
 @router.get("/api/projects/{project_id}/examples")

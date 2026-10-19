@@ -36,9 +36,10 @@
             Комментарий версии
             <input v-model="versionNote" type="text" />
           </label>
+          <div v-if="versionProgress > 0" class="progress"><span :style="{ width: versionProgress + '%' }" /></div>
           <p v-if="versionError" class="error">{{ versionError }}</p>
           <div class="row-actions">
-            <button class="btn" type="submit" :disabled="busy">Загрузить версию</button>
+            <button class="btn" type="submit" :disabled="busy">{{ busy ? "Загружаем…" : "Загрузить версию" }}</button>
           </div>
         </form>
       </section>
@@ -81,7 +82,7 @@
 <script>
 import { computed, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { api } from "../api"
+import { api, uploadApi } from "../api"
 import Tabs from "../components/Tabs.vue"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
@@ -112,6 +113,7 @@ export default {
     const fileInput = ref(null)
     const fullText = ref("")
     const fullLoaded = ref(false)
+    const versionProgress = ref(0)
     const { settings, when } = useWhen()
     const notice = useNotice()
 
@@ -153,10 +155,17 @@ export default {
       try {
         apply(await api("/api/projects/" + props.project.id + "/documents/" + route.params.documentId, {
           method: "PATCH",
-          body: { title: form.value.title, note: form.value.note },
+          body: { title: form.value.title, note: form.value.note, updated_at: doc.value.updated_at },
         }))
+        notice.show("Сохранено", { kind: "success" })
       } catch (err) {
-        formError.value = err.message || "Не сохранилось"
+        if (err.status === 409) {
+          if (window.confirm(err.message + "\n\nЗагрузить свежую версию? Несохранённые правки будут потеряны.")) {
+            await load()
+          }
+        } else {
+          formError.value = err.message || "Не сохранилось"
+        }
       } finally {
         busy.value = false
       }
@@ -198,18 +207,20 @@ export default {
       body.append("file", file.value)
       body.append("note", versionNote.value)
       busy.value = true
+      versionProgress.value = 0
       try {
-        apply(await api("/api/projects/" + props.project.id + "/documents/" + route.params.documentId + "/versions", {
-          method: "POST",
-          body,
+        apply(await uploadApi("/api/projects/" + props.project.id + "/documents/" + route.params.documentId + "/versions", body, (loaded, total) => {
+          versionProgress.value = Math.round((loaded / total) * 100)
         }))
         versionNote.value = ""
         file.value = null
         if (fileInput.value) fileInput.value.value = ""
+        notice.show("Версия загружена", { kind: "success" })
       } catch (err) {
         versionError.value = err.message || "Версия не загрузилась"
       } finally {
         busy.value = false
+        versionProgress.value = 0
       }
     }
 
@@ -249,7 +260,7 @@ export default {
     }, { immediate: true })
 
     return {
-      doc, error, formError, versionError, busy, form, versionNote, fileInput, fullLoaded, tab, pageTabs,
+      doc, error, formError, versionError, busy, form, versionNote, fileInput, fullLoaded, versionProgress, tab, pageTabs,
       shownText, when, sizeLabel, onFile, save, toggleArchive, remove, addVersion, removeVersion, loadFull,
     }
   },

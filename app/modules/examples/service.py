@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.db import utcnow
+from app.core.versioning import check_version
 from app.core.files import _read_limited, add_link, save_bytes
 from app.core.events_catalog import EXAMPLE_CREATED, EXAMPLE_DELETED, EXAMPLE_FILE, EXAMPLE_UPDATED
 from app.core.logging import log_scope, logger
@@ -100,6 +101,7 @@ def get_example(session: Session, project_id: int, example_id: int) -> dict:
 
 def update_example(session: Session, project_id: int, user_id: int, example_id: int, fields: dict) -> dict:
     row = _example(session, project_id, example_id)
+    check_version(fields, row.updated_at, "Пример")
     changed = False
     if "title" in fields and fields["title"] is not None:
         title = _clean_title(fields["title"])

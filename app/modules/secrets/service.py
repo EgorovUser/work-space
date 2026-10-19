@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import utcnow
+from app.core.versioning import check_version
 from app.core.events_catalog import SECRET_CREATED, SECRET_DELETED, SECRET_OPENED, SECRET_UPDATED
 from app.core.logging import log_scope, logger
 from app.core.outbox import enqueue
@@ -66,6 +67,7 @@ def get_secret(session: Session, project_id: int, secret_id: int) -> dict:
 
 def update_secret(session: Session, project_id: int, user_id: int, secret_id: int, fields: dict) -> dict:
     row = _row(session, project_id, secret_id)
+    check_version(fields, row.updated_at, "Секрет")
     if "title" in fields and fields["title"] is not None:
         row.title = _clean_title(fields["title"])
     if "kind" in fields and fields["kind"] is not None:

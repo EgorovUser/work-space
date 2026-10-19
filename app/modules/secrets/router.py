@@ -38,6 +38,9 @@ class SecretPatch(BaseModel):
     secret: str | None = None
     kind: str | None = None
     archived: bool | None = None
+    # Оптимистичная блокировка: если секрет успели изменить в другой вкладке,
+    # сервер ответит 409 вместо тихой перезаписи.
+    updated_at: str | None = None
 
 
 @router.get("/api/projects/{project_id}/secrets")

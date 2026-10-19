@@ -149,10 +149,18 @@ export default {
             language: form.value.language,
             pinned: form.value.pinned,
             tags: form.value.tags ? [form.value.tags] : [],
+            updated_at: example.value.updated_at,
           },
         }))
+        notice.show("Сохранено", { kind: "success" })
       } catch (err) {
-        formError.value = err.message || "Не сохранилось"
+        if (err.status === 409) {
+          if (window.confirm(err.message + "\n\nЗагрузить свежую версию? Несохранённые правки будут потеряны.")) {
+            await load()
+          }
+        } else {
+          formError.value = err.message || "Не сохранилось"
+        }
       } finally {
         busy.value = false
       }

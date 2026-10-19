@@ -284,6 +284,7 @@ export default {
           },
         })
         fill(saved)
+        notice.show("Сохранено", { kind: "success" })
       } catch (err) {
         formError.value = err.message || "Не сохранилось"
       } finally {

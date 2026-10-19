@@ -41,7 +41,7 @@
       </label>
       <p v-if="record.has_secret && !visible" class="muted">Секрет задан и скрыт.</p>
       <p v-if="formError" class="error">{{ formError }}</p>
-      <p v-if="copied" class="ok-text">Скопировано</p>
+      <p v-if="copied" class="ok-text">Скопировано. Буфер очистится через {{ clipSeconds }} с.</p>
       <div class="row-actions">
         <button class="btn" type="submit" :disabled="busy">Сохранить</button>
         <button class="btn secondary" type="button" :disabled="busy" @click="reveal">
@@ -61,9 +61,12 @@
 </template>
 
 <script>
-import { computed, ref, watch } from "vue"
+import { computed, onBeforeUnmount, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
+import { useNotice } from "../composables/useNotice"
+
+const CLIPBOARD_TTL = 30
 
 export default {
   props: {
@@ -79,7 +82,11 @@ export default {
     const copied = ref(false)
     const visible = ref(false)
     const touched = ref(false)
+    const clipSeconds = ref(CLIPBOARD_TTL)
     const form = ref({ title: "", kind: "", username: "", url: "", note: "", secret: "" })
+    const notice = useNotice()
+    let clipTimer = null
+    let clearTimer = null
 
     const knownKind = computed(() => {
       const list = (record.value && record.value.kinds) || []
@@ -111,6 +118,34 @@ export default {
       }
     }
 
+    function armClipboard() {
+      clearInterval(clipTimer)
+      clearTimeout(clearTimer)
+      copied.value = true
+      clipSeconds.value = CLIPBOARD_TTL
+      // Обратный отсчёт в подсказке + очистка буфера: пароль не остаётся
+      // в системе на неопределённый срок после копирования.
+      clipTimer = setInterval(() => {
+        clipSeconds.value -= 1
+        if (clipSeconds.value <= 0) clearInterval(clipTimer)
+      }, 1000)
+      clearTimer = setTimeout(async () => {
+        copied.value = false
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText("")
+          }
+        } catch {
+          // Буфер мог быть перезаписан другой вкладкой — это нормальный исход.
+        }
+      }, CLIPBOARD_TTL * 1000)
+    }
+
+    onBeforeUnmount(() => {
+      clearInterval(clipTimer)
+      clearTimeout(clearTimer)
+    })
+
     async function save() {
       formError.value = ""
       busy.value = true
@@ -120,6 +155,7 @@ export default {
         username: form.value.username,
         url: form.value.url,
         note: form.value.note,
+        updated_at: record.value.updated_at,
       }
       if (touched.value) body.secret = form.value.secret
       try {
@@ -127,8 +163,15 @@ export default {
           method: "PATCH",
           body,
         }))
+        notice.show("Сохранено", { kind: "success" })
       } catch (err) {
-        formError.value = err.message || "Не сохранилось"
+        if (err.status === 409) {
+          if (window.confirm(err.message + "\n\nЗагрузить свежую версию? Несохранённые правки будут потеряны.")) {
+            await load()
+          }
+        } else {
+          formError.value = err.message || "Не сохранилось"
+        }
       } finally {
         busy.value = false
       }
@@ -166,7 +209,7 @@ export default {
             method: "POST",
           })).secret || ""
         await writeClipboard(value)
-        copied.value = true
+        armClipboard()
       } catch (err) {
         formError.value = err.message || "Не удалось скопировать"
       } finally {
@@ -238,7 +281,7 @@ export default {
     watch(() => [props.project && props.project.id, route.params.secretId], load, { immediate: true })
 
     return {
-      record, error, formError, busy, copied, visible, touched, form, knownKind,
+      record, error, formError, busy, copied, visible, touched, form, knownKind, clipSeconds,
       save, reveal, copySecret, generate, clearSecret, toggleArchive, remove,
     }
   },

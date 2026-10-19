@@ -8,6 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.db import session_scope, utcnow
+from app.core.versioning import check_version
 from app.core.events_catalog import DOC_ARCHIVED, DOC_DELETED, DOC_UPDATED, DOC_UPLOADED, DOC_VERSION, DOC_VERSION_DELETED
 from app.core.files import _read_limited, add_link, path_for, save_bytes
 from app.core.logging import log_scope, logger
@@ -73,6 +74,7 @@ def get_document(session: Session, project_id: int, document_id: int) -> dict:
 
 def update_document(session: Session, project_id: int, user_id: int, document_id: int, fields: dict) -> dict:
     document = _document(session, project_id, document_id)
+    check_version(fields, document.updated_at, "Документ")
     changed = False
     archived = None
     if "title" in fields and fields["title"] is not None:

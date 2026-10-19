@@ -30,7 +30,13 @@
         События:
         <span v-for="item in message.events" :key="item.id"> {{ item.summary }} · {{ when(item.starts_at) }}</span>
       </p>
-      <iframe v-if="message.html" class="mail-frame" sandbox="" referrerpolicy="no-referrer" :srcdoc="frameHtml"></iframe>
+      <div v-if="message.html && hasImages" class="row-actions">
+        <button class="btn secondary" type="button" @click="showImages = !showImages">
+          {{ showImages ? "Скрыть картинки" : "Показать картинки" }}
+        </button>
+        <span class="muted">По умолчанию внешние картинки не грузятся: так письмо не сообщает отправителю, что вы его открыли.</span>
+      </div>
+      <iframe v-if="message.html" class="mail-frame" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" :srcdoc="frameHtml"></iframe>
       <pre v-else class="text-block">{{ message.body || "Текста нет" }}</pre>
       <ul v-if="message.attachments && message.attachments.length" class="plain-list">
         <li v-for="item in message.attachments" :key="item.section || item.filename">
@@ -85,6 +91,7 @@ export default {
     const error = ref("")
     const formError = ref("")
     const busy = ref(false)
+    const showImages = ref(false)
     const { settings, when } = useWhen()
     const notice = useNotice()
 
@@ -95,10 +102,23 @@ export default {
       return item.from_addr || item.from_name || ""
     })
 
+    // Внешние картинки в письме — источник трекинг-пикселей: пока кнопка не
+    // нажата, src вырезается и заменяется нейтральным заполнителем. Ссылки
+    // открываются в новой вкладке (<base target="_blank"> + allow-popups),
+    // иначе они заменяли письмо внутри рамки без пути назад.
+    const hasImages = computed(() => {
+      const html = message.value && message.value.html
+      return Boolean(html && /<img\b/i.test(html))
+    })
+
     const frameHtml = computed(() => {
       const html = message.value && message.value.html
       if (!html) return ""
-      return "<!doctype html><html><head><meta charset=\"utf-8\"></head><body>" + html + "</body></html>"
+      const style =
+        "<style>img[data-blocked-src]{display:inline-block;min-width:28px;min-height:28px;background:#eef1f4;border:1px dashed #b7c0c8;border-radius:4px;vertical-align:middle}</style>"
+      const head = '<!doctype html><html><head><meta charset="utf-8"><base target="_blank" rel="noopener noreferrer">' + style + "</head><body>"
+      const body = showImages.value ? html : html.replace(/(<img\b[^>]*?)\ssrc\s*=\s*(["'])(https?:\/\/[^"']*)\2/gi, "$1 data-blocked-src=$2$3$2")
+      return head + body + "</body></html>"
     })
 
     function fromLineOf(item) {
@@ -176,8 +196,14 @@ export default {
       patch({ read: !message.value.read })
     }
 
-    function toggleArchive() {
-      patch({ archived: !message.value.archived })
+    async function toggleArchive() {
+      const before = message.value.archived
+      await patch({ archived: !before })
+      if (message.value.archived === before) return
+      notice.show(before ? "Письмо возвращено из архива" : "Письмо в архиве", {
+        kind: "success",
+        action: { label: "Отменить", run: () => patch({ archived: before }) },
+      })
     }
 
     async function toggleTag(tag, on) {
@@ -222,9 +248,12 @@ export default {
       }
     }
 
-    watch(() => [props.project && props.project.id, route.params.messageId], load, { immediate: true })
+    watch(() => [props.project && props.project.id, route.params.messageId], () => {
+      showImages.value = false
+      load()
+    }, { immediate: true })
 
-    return { message, projects, folderProject, error, formError, busy, fromLine, fromLineOf, frameHtml, tagStyle, threadLink, when, formatSize, toggleRead, toggleArchive, toggleTag, remove, pullFile, place }
+    return { message, projects, folderProject, error, formError, busy, showImages, hasImages, fromLine, fromLineOf, frameHtml, tagStyle, threadLink, when, formatSize, toggleRead, toggleArchive, toggleTag, remove, pullFile, place }
   },
 }
 </script>

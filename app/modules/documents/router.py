@@ -24,6 +24,9 @@ class DocumentPatch(BaseModel):
     title: str | None = None
     note: str | None = None
     archived: bool | None = None
+    # Оптимистичная блокировка: если запись успели изменить в другой вкладке,
+    # сервер ответит 409 вместо тихой перезаписи.
+    updated_at: str | None = None
 
 
 @router.get("/api/projects/{project_id}/documents")

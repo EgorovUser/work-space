@@ -31,12 +31,22 @@
     </section>
 
     <section v-show="tab === 'report'" class="card">
-      <p v-if="report">
-        Сегодня {{ minutesLabel(report.today_minutes) }}, неделя {{ minutesLabel(report.week_minutes) }}
-      </p>
+      <div class="row-actions">
+        <label class="tight">
+          Период
+          <select v-model="days" @change="load">
+            <option value="7">Неделя</option>
+            <option value="14">Две недели</option>
+            <option value="30">Месяц</option>
+            <option value="90">Квартал</option>
+          </select>
+        </label>
+        <p class="muted">Сегодня {{ report ? minutesLabel(report.today_minutes) : "—" }}, неделя {{ report ? minutesLabel(report.week_minutes) : "—" }}</p>
+      </div>
       <div v-if="report && report.chart" class="chart-box">
         <TimeChart :chart="report.chart" />
       </div>
+      <p v-if="report && isEmptyPeriod" class="muted">За выбранный период записей нет. Запустите таймер на вкладке «Таймер» или добавьте запись вручную на вкладке «Записи».</p>
       <ul v-if="report && report.by_task.length" class="plain-list">
         <li v-for="item in report.by_task" :key="item.task_id || 'none'">
           {{ item.title }} — {{ minutesLabel(item.minutes) }}
@@ -120,7 +130,7 @@
 </template>
 
 <script>
-import { onBeforeUnmount, ref, watch } from "vue"
+import { computed, onBeforeUnmount, ref, watch } from "vue"
 import TimeChart from "../components/TimeChart.vue"
 import Tabs from "../components/Tabs.vue"
 import { api } from "../api"
@@ -151,6 +161,7 @@ export default {
     const edit = ref(null)
     const notice = useNotice()
     const tab = ref("timer")
+    const days = ref(14)
     const pageTabs = [
       { id: "timer", label: "Таймер" },
       { id: "report", label: "Отчёт" },
@@ -158,6 +169,13 @@ export default {
     ]
     let clock = null
     let refreshTimer = null
+
+    const isEmptyPeriod = computed(() => {
+      const rep = report.value
+      if (!rep) return false
+      const hasHours = rep.chart && Array.isArray(rep.chart.hours) && rep.chart.hours.some((value) => Number(value) > 0)
+      return !hasHours && !(rep.by_task && rep.by_task.length)
+    })
 
     function minutesLabel(value) {
       const total = Math.max(0, Number(value) || 0)
@@ -195,7 +213,7 @@ export default {
     async function load() {
       error.value = ""
       try {
-        const data = await api("/api/projects/" + props.project.id + "/time")
+        const data = await api("/api/projects/" + props.project.id + "/time?days=" + days.value)
         running.value = data.running
         elsewhere.value = data.running_elsewhere
         entries.value = data.entries || []
@@ -343,7 +361,7 @@ export default {
 
     return {
       running, elsewhere, entries, report, tasks, error, timerError, formError, editError,
-      loading, busy, draft, manual, edit, tab, pageTabs,
+      loading, busy, draft, manual, edit, tab, days, pageTabs, isEmptyPeriod,
       when, minutesLabel, elapsed, start, stop, addManual, beginEdit, saveEdit, remove,
     }
   },

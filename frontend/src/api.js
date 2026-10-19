@@ -17,6 +17,45 @@ export function downloadFile(fileId) {
   window.location.assign("/api/files/" + fileId)
 }
 
+// Загрузка с прогрессом: fetch не отдаёт прогресс отправки, поэтому XHR.
+export function uploadApi(path, body, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", path)
+    xhr.withCredentials = true
+    xhr.upload.onprogress = (event) => {
+      if (onProgress && event.lengthComputable && event.total > 0) {
+        onProgress(event.loaded, event.total)
+      }
+    }
+    xhr.onload = () => {
+      let data = null
+      if (xhr.responseText) {
+        try {
+          data = JSON.parse(xhr.responseText)
+        } catch {
+          data = { detail: xhr.responseText }
+        }
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data)
+        return
+      }
+      const detail = data && data.detail
+      let message
+      if (typeof detail === "string" && detail.trim()) message = detail
+      else if (xhr.status === 429) message = "Слишком много попыток. Подождите немного и попробуйте снова."
+      else if (xhr.status === 422) message = "Проверьте заполнение полей."
+      else message = "Запрос не выполнен"
+      reject(new ApiError(message, xhr.status, data && data.module))
+    }
+    xhr.onerror = () => {
+      reject(new ApiError("Нет связи с сервером. Проверьте сеть и попробуйте снова.", 0))
+    }
+    xhr.send(body)
+  })
+}
+
 export async function api(path, options = {}) {
   const headers = { ...(options.headers || {}) }
   let body = options.body
