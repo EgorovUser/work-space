@@ -145,7 +145,9 @@ def _decode(payload: bytes, charset: str | None, encodings: list) -> str:
 def _sanitize(value: str) -> str:
     text = re.sub(r"(?is)<(script|iframe|object|embed|form|link|base|meta)\b[^>]*>.*?</\1>", " ", value or "")
     text = re.sub(r"(?is)<(script|iframe|object|embed|form|link|base|meta)\b[^>]*?/?>", " ", text)
-    text = re.sub(r"(?i)\s+on[a-z]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", " ", text)
+    # \s перед on недостаточно: <svg/onload=...> проходит. Разрешаем
+    # разделители, валидные внутри тега: пробел, слэш, кавычки.
+    text = re.sub(r"(?i)(?:^|[\s\"'/])(on[a-z]+)\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", " ", text)
     text = re.sub(r"(?i)(href|src)\s*=\s*([\"'])\s*javascript:[^\"']*\2", " ", text)
     text = re.sub(r"(?i)(href|src)\s*=\s*javascript:[^\s>]+", " ", text)
     return text.strip()
