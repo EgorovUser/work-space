@@ -1,0 +1,3 @@
+# Зависимости для тестов и разработки (не попадают в прод-образ).
+# httpx нужен starlette.testclient.TestClient для tests/test_http.py.
+httpx>=0.27
