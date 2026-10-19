@@ -3,6 +3,7 @@
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="!example" class="muted">Загрузка…</p>
     <template v-else>
+      <p class="crumbs"><router-link :to="'/projects/' + project.id + '/examples'">← Примеры</router-link> / {{ example.title }}</p>
       <h1>{{ example.title }}</h1>
       <Tabs v-model="tab" :tabs="pageTabs" />
       <form v-show="tab === 'text'" class="card stack" @submit.prevent="save">
@@ -55,7 +56,7 @@
         <div v-for="item in example.files" :key="item.id" class="status-row">
           <span>{{ item.original_name }} · {{ sizeLabel(item.size) }}</span>
           <div class="row-actions">
-            <a :href="'/api/files/' + item.file_id">Скачать</a>
+            <a :href="'/api/files/' + item.file_id" download>Скачать</a>
             <button class="btn secondary" type="button" :disabled="busy" @click="removeFile(item)">Удалить</button>
           </div>
         </div>

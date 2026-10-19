@@ -125,10 +125,11 @@ def mailbox(
     include_archived: bool = False,
     q: str = "",
     tag: int = 0,
+    offset: int = 0,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ) -> dict:
-    return service.mailbox(db, unread, include_archived, q, tag)
+    return service.mailbox(db, unread, include_archived, q, tag, offset)
 
 
 @router.get("/api/mail/tags")
@@ -296,10 +297,11 @@ def project_mail(
     unread: bool = False,
     include_archived: bool = False,
     q: str = "",
+    offset: int = 0,
     project: Project = Depends(require_project),
     db: Session = Depends(get_db),
 ) -> dict:
-    return service.project_mail(db, project.id, unread, include_archived, q)
+    return service.project_mail(db, project.id, unread, include_archived, q, offset)
 
 
 @router.post("/api/projects/{project_id}/mail/accounts", status_code=201)

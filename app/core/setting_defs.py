@@ -154,9 +154,9 @@ CORE_DEFS: tuple[SettingDef, ...] = (
     _s(
         key="ui.timezone",
         value_type="str",
-        default="",
+        default="Europe/Moscow",
         label="Часовой пояс",
-        description="Пусто — зона сервера. Например Europe/Moscow.",
+        description="Зона, в которой показываются даты и считаются правила писем «в этот день». Например Europe/Moscow. Пусто — UTC.",
         allowed_scopes=("global", "user"),
         ui_hint="text",
     ),

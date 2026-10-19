@@ -4,7 +4,7 @@
     <Tabs v-model="tab" :tabs="pageTabs" />
     <div v-show="tab === 'letters'">
         <form class="row-actions" @submit.prevent="load">
-          <input v-model="query" type="text" placeholder="Тема или отправитель" />
+          <input v-model="query" type="text" placeholder="Тема, отправитель или текст письма" />
           <button class="btn secondary" type="submit">Показать</button>
         </form>
         <label class="check"><input v-model="unreadOnly" type="checkbox" @change="load" /><span>Только непрочитанные</span></label>
@@ -22,6 +22,10 @@
               <div v-if="item.preview" class="snippet">{{ item.preview }}</div>
             </div>
           </div>
+        </div>
+        <div v-if="messages.length" class="status-row">
+          <p class="muted">Показано {{ messages.length }}</p>
+          <button v-if="hasMore" class="btn secondary" type="button" :disabled="moreBusy" @click="loadMore">{{ moreBusy ? "Загружаем…" : "Показать ещё" }}</button>
         </div>
       </div>
       <div v-show="tab === 'rules'">
@@ -66,7 +70,8 @@
 </template>
 
 <script>
-import { ref, watch } from "vue"
+import { reactive, ref, watch } from "vue"
+import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
 import Tabs from "../components/Tabs.vue"
 import { useWhen } from "../composables/useWhen"
@@ -75,6 +80,8 @@ export default {
   components: { Tabs },
   props: { project: { type: Object, required: true } },
   setup(props) {
+    const route = useRoute()
+    const router = useRouter()
     const accounts = ref([])
     const rules = ref([])
     const messages = ref([])
@@ -88,10 +95,14 @@ export default {
     const importNote = ref("")
     const loading = ref(true)
     const busy = ref(false)
-    const query = ref("")
-    const unreadOnly = ref(false)
-    const includeArchived = ref(false)
-    const tab = ref("letters")
+    // Поиск и фильтры — в URL: возврат из письма не сбрасывает их.
+    const query = ref(typeof route.query.q === "string" ? route.query.q : "")
+    const unreadOnly = ref(route.query.unread === "true")
+    const includeArchived = ref(route.query.archived === "true")
+    const tab = ref(route.query.tab === "rules" ? "rules" : "letters")
+    const moreBusy = ref(false)
+    const hasMore = ref(false)
+    const page = reactive({ offset: 0, limit: 100 })
     const pageTabs = [
       { id: "letters", label: "Письма" },
       { id: "rules", label: "Фильтры" },
@@ -115,7 +126,17 @@ export default {
       if (!actions.value.some((item) => item.id === rule.value.action) && actions.value.length) rule.value.action = actions.value[0].id
     }
 
-    async function load() {
+    function syncUrl() {
+      const next = {}
+      if (tab.value !== "letters") next.tab = tab.value
+      if (query.value.trim()) next.q = query.value.trim()
+      if (unreadOnly.value) next.unread = "true"
+      if (includeArchived.value) next.archived = "true"
+      router.replace({ query: next }).catch(() => {})
+    }
+
+    async function load(append) {
+      append = append === true
       loading.value = true
       error.value = ""
       try {
@@ -123,10 +144,21 @@ export default {
         if (unreadOnly.value) params.set("unread", "true")
         if (includeArchived.value) params.set("include_archived", "true")
         if (query.value) params.set("q", query.value)
+        if (append) params.set("offset", String(page.offset))
         const data = await api("/api/projects/" + props.project.id + "/mail?" + params.toString())
         accounts.value = data.accounts || []
         rules.value = data.rules || []
-        messages.value = data.messages || []
+        if (append) {
+          const seen = new Set(messages.value.map((item) => item.id))
+          messages.value = messages.value.concat((data.messages || []).filter((item) => !seen.has(item.id)))
+        } else {
+          messages.value = data.messages || []
+        }
+        if (data.page) {
+          page.offset = Number(data.page.offset) || 0
+          page.limit = Number(data.page.limit) || page.limit
+        }
+        hasMore.value = (data.messages || []).length >= page.limit
         applyChoices(data)
       } catch (err) {
         error.value = err.message || "Почта недоступна"
@@ -134,6 +166,19 @@ export default {
         loading.value = false
       }
     }
+
+    async function loadMore() {
+      if (moreBusy.value) return
+      page.offset += page.limit
+      moreBusy.value = true
+      try {
+        await load(true)
+      } finally {
+        moreBusy.value = false
+      }
+    }
+
+    watch(tab, syncUrl)
 
     async function createAccount() {
       accountError.value = ""
@@ -248,8 +293,8 @@ export default {
 
     return {
       accounts, rules, messages, fields, ops, actions, error, accountError, ruleError, importError, importNote,
-      loading, busy, query, unreadOnly, includeArchived, account, rule, tab, pageTabs,
-      when, fromLine, load, createAccount, check, fetchMail, removeAccount, createRule, removeRule, onFile, importFile,
+      loading, busy, query, unreadOnly, includeArchived, account, rule, tab, pageTabs, moreBusy, hasMore,
+      when, fromLine, load, loadMore, createAccount, check, fetchMail, removeAccount, createRule, removeRule, onFile, importFile,
     }
   },
 }

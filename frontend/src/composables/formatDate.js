@@ -27,3 +27,20 @@ export function formatWhen(value, pattern, timeZone) {
     .replaceAll("HH", map.hour || "")
     .replaceAll("mm", map.minute || "")
 }
+
+// Даты младше 48 часов показываются как «Сегодня, 14:05» / «Вчера, 09:30».
+// Сравнение идёт по календарным дням в timeZone (или зоне браузера, если не задана) —
+// так «вчера вечером» не превращается в «сегодня» на границе суток UTC.
+export function formatSmart(value, pattern, timeZone) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  const dayOf = (when) => formatWhen(when, "YYYY-MM-DD", timeZone)
+  const day = dayOf(date)
+  const now = new Date()
+  const today = dayOf(now)
+  const yesterday = dayOf(new Date(now.getTime() - 24 * 60 * 60 * 1000))
+  if (day === today) return "Сегодня, " + formatWhen(date, "HH:mm", timeZone)
+  if (day === yesterday) return "Вчера, " + formatWhen(date, "HH:mm", timeZone)
+  return formatWhen(date, pattern, timeZone)
+}

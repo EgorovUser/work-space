@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, defer
 
 from app.core.events_catalog import MAIL_ARCHIVED, MAIL_DELETED
@@ -38,23 +38,26 @@ from app.modules.mail.service.ingest import _ingest
 from app.modules.mail.service.notify import notify_state
 
 
-def mailbox(session: Session, unread_only: bool, include_archived: bool, query: str, tag_id: int = 0) -> dict:
-    messages = _message_list(session, None, unread_only, include_archived, query)
-    if tag_id:
-        messages = [item for item in messages if any(tag["id"] == tag_id for tag in item.get("tags") or [])]
+def mailbox(session: Session, unread_only: bool, include_archived: bool, query: str, tag_id: int = 0, offset: int = 0) -> dict:
+    unread_total = session.scalar(
+        select(func.count()).select_from(MailMessage).where(MailMessage.read.is_(False), MailMessage.archived.is_(False))
+    )
+    messages = _message_list(session, None, unread_only, include_archived, query, tag_id=tag_id, offset=offset)
     payload = tag_page(session)
     payload["accounts"] = [_account_out(row) for row in _all_accounts(session)]
     payload["messages"] = messages
     payload["sync"] = _sync_info()
     payload["notify"] = notify_state(session)
+    payload["page"] = {"offset": offset, "limit": _page_limit(None)}
+    payload["unread"] = int(unread_total or 0)
     return payload
 
 
-def project_mail(session: Session, project_id: int, unread_only: bool, include_archived: bool, query: str) -> dict:
+def project_mail(session: Session, project_id: int, unread_only: bool, include_archived: bool, query: str, offset: int = 0) -> dict:
     return {
         "accounts": [_account_out(row) for row in _accounts(session, project_id)],
         "rules": [_rule_out(row, project_id) for row in _rules(session, project_id)],
-        "messages": _message_list(session, project_id, unread_only, include_archived, query),
+        "messages": _message_list(session, project_id, unread_only, include_archived, query, offset=offset),
         "fields": _choices(project_id, "rules.fields"),
         "ops": _choices(project_id, "rules.ops"),
         "actions": _choices(project_id, "rules.actions"),
@@ -161,7 +164,11 @@ def download_attachment(session: Session, project_id: int, user_id: int, message
     return {"file_id": stored.id, "filename": stored.original_name}
 
 
-def _message_list(session, project_id, unread_only, include_archived, query) -> list[dict]:
+def _page_limit(project_id: int | None) -> int:
+    return get_int("mail", "list.limit", project_id=project_id or None)
+
+
+def _message_list(session, project_id, unread_only, include_archived, query, tag_id: int = 0, offset: int = 0) -> list[dict]:
     statement = select(MailMessage).options(defer(MailMessage.html_body))
     if not include_archived:
         statement = statement.where(MailMessage.archived.is_(False))
@@ -178,10 +185,15 @@ def _message_list(session, project_id, unread_only, include_archived, query) -> 
     needle = (query or "").strip().casefold()
     if needle:
         rows = [row for row in rows if needle in _search_blob(row).casefold()]
-    limit = get_int("mail", "list.limit", project_id=scope)
     if get_bool("mail", "threads.enabled", project_id=scope):
-        messages = _grouped_messages(session, rows, project_id)[:limit]
+        messages = _grouped_messages(session, rows, project_id)
     else:
-        messages = [_message_out(session, row, full=False) for row in rows[:limit]]
+        messages = [_message_out(session, row, full=False) for row in rows]
     _attach_tags(session, messages)
-    return messages
+    if tag_id:
+        messages = [item for item in messages if any(tag["id"] == tag_id for tag in item.get("tags") or [])]
+    # Постраничная выдача: старые письма доступны по кнопке «Показать ещё»,
+    # а не только правкой глобальной настройки list.limit.
+    offset = max(0, int(offset or 0))
+    limit = _page_limit(scope)
+    return messages[offset : offset + limit]

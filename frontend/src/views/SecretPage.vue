@@ -2,7 +2,10 @@
   <div>
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="!record" class="muted">Загрузка…</p>
-    <form v-else class="card stack" @submit.prevent="save">
+    <template v-else>
+      <p class="crumbs"><router-link :to="'/projects/' + project.id + '/secrets'">← Секреты</router-link> / {{ form.title || "Секрет" }}</p>
+      <h1>{{ form.title || "Секрет" }}</h1>
+      <form class="card stack" @submit.prevent="save">
       <label>
         Название
         <input v-model="form.title" type="text" required autocomplete="off" />
@@ -52,7 +55,8 @@
         </button>
         <button class="btn secondary" type="button" :disabled="busy" @click="remove">Удалить</button>
       </div>
-    </form>
+      </form>
+    </template>
   </div>
 </template>
 

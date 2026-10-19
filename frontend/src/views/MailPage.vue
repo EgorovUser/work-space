@@ -34,11 +34,12 @@
       <pre v-else class="text-block">{{ message.body || "Текста нет" }}</pre>
       <ul v-if="message.attachments && message.attachments.length" class="plain-list">
         <li v-for="item in message.attachments" :key="item.section || item.filename">
-          <a v-if="item.file_id" :href="'/api/files/' + item.file_id">{{ item.filename }}</a>
+          <a v-if="item.file_id" :href="'/api/files/' + item.file_id" download>{{ item.filename }}</a>
           <template v-else>
             <span>{{ item.filename }}</span>
             <button class="btn secondary" type="button" :disabled="busy || !item.section" @click="pullFile(item)">Скачать вложение</button>
           </template>
+          <span v-if="item.size" class="muted"> · {{ formatSize(item.size) }}</span>
         </li>
       </ul>
       <div class="composer">
@@ -71,6 +72,7 @@ import { useRoute, useRouter } from "vue-router"
 import { api, downloadFile } from "../api"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
+import { formatSize } from "../composables/formatBytes"
 
 export default {
   props: { project: { type: Object, default: null } },
@@ -222,7 +224,7 @@ export default {
 
     watch(() => [props.project && props.project.id, route.params.messageId], load, { immediate: true })
 
-    return { message, projects, folderProject, error, formError, busy, fromLine, fromLineOf, frameHtml, tagStyle, threadLink, when, toggleRead, toggleArchive, toggleTag, remove, pullFile, place }
+    return { message, projects, folderProject, error, formError, busy, fromLine, fromLineOf, frameHtml, tagStyle, threadLink, when, formatSize, toggleRead, toggleArchive, toggleTag, remove, pullFile, place }
   },
 }
 </script>

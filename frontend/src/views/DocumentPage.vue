@@ -3,6 +3,7 @@
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="!doc" class="muted">Загрузка…</p>
     <template v-else>
+      <p class="crumbs"><router-link :to="'/projects/' + project.id + '/documents'">← Документы</router-link> / {{ doc.title }}</p>
       <h1>{{ doc.title }}</h1>
       <Tabs v-model="tab" :tabs="pageTabs" />
       <div v-show="tab === 'card'">
@@ -68,7 +69,7 @@
             <div v-if="item.note">{{ item.note }}</div>
           </div>
           <div class="row-actions">
-            <a :href="'/api/files/' + item.file_id">Скачать</a>
+            <a :href="'/api/files/' + item.file_id" download>Скачать</a>
             <button class="btn secondary" type="button" :disabled="busy" @click="removeVersion(item)">Удалить</button>
           </div>
         </div>
@@ -84,6 +85,7 @@ import { api } from "../api"
 import Tabs from "../components/Tabs.vue"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
+import { formatSize } from "../composables/formatBytes"
 
 export default {
   components: { Tabs },
@@ -120,10 +122,7 @@ export default {
     })
 
     function sizeLabel(bytes) {
-      const value = Number(bytes) || 0
-      if (value < 1024) return value + " Б"
-      if (value < 1024 * 1024) return Math.round(value / 1024) + " КБ"
-      return (value / (1024 * 1024)).toFixed(1) + " МБ"
+      return formatSize(bytes)
     }
 
     function apply(data) {

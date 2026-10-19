@@ -820,6 +820,19 @@ textarea.mono { min-height: 220px; }
 }
 .toast p { margin: 0; }
 
+.crumbs {
+  margin: 0 0 10px;
+  font-size: 0.92rem;
+}
+.crumbs a {
+  text-decoration: none;
+}
+
+.mail-toolbar {
+  margin: 0 0 10px;
+}
+.mail-toolbar p { margin: 0; }
+
 .icon-btn {
   position: relative;
   border: 1px solid var(--line);

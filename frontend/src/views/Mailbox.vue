@@ -3,14 +3,18 @@
     <div class="page-head">
       <h1>Почта</h1>
       <p class="muted">
-        <template v-if="sync && sync.automatic">Новые письма забираются сами, каждые {{ sync.every_seconds }} с.</template>
+        <template v-if="sync && sync.automatic">Новые письма забираются сами, {{ everyLabel }}.</template>
         <template v-else>Автозабор выключен. Порцию можно забрать у ящика.</template>
       </p>
     </div>
     <Tabs v-model="tab" :tabs="pageTabs" />
     <div v-show="tab === 'letters'">
-      <form class="row-actions" @submit.prevent="load">
-        <input v-model="query" type="text" placeholder="Тема или отправитель" />
+      <div class="status-row mail-toolbar">
+        <p class="muted">Непрочитанных: {{ unread }}</p>
+        <button class="btn secondary" type="button" :disabled="busy || moreBusy" @click="load()">Обновить</button>
+      </div>
+      <form class="row-actions" @submit.prevent="search">
+        <input v-model="query" type="text" placeholder="Тема, отправитель или текст письма" />
         <button class="btn secondary" type="submit">Показать</button>
       </form>
       <div v-if="tags.length" class="tag-row">
@@ -26,6 +30,7 @@
         >{{ tag.name }}</button>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
+      <p v-else-if="loading" class="muted">Загрузка…</p>
       <p v-else-if="!messages.length" class="muted">{{ activeTag ? "Под этот хештег ничего не попало" : "Писем нет" }}</p>
       <div v-else class="list">
         <article v-for="item in messages" :key="item.id" class="list-row">
@@ -36,6 +41,10 @@
             <span v-for="tag in item.tags" :key="tag.id" class="mail-tag on" :style="tagStyle(tag, true)">{{ tag.name }}</span>
           </div>
         </article>
+      </div>
+      <div v-if="messages.length" class="status-row">
+        <p class="muted">Показано {{ messages.length }}</p>
+        <button v-if="hasMore" class="btn secondary" type="button" :disabled="moreBusy" @click="loadMore">{{ moreBusy ? "Загружаем…" : "Показать ещё" }}</button>
       </div>
     </div>
     <div v-show="tab === 'tags'">
@@ -149,30 +158,43 @@
           <button class="text-btn" type="button" :disabled="busy" @click="removeAccount(item)">Удалить</button>
         </div>
         <p v-if="notes[item.id]" class="ok-text">{{ notes[item.id] }}</p>
+        <p v-if="itemErrors[item.id]" class="error">{{ itemErrors[item.id] }}</p>
       </article>
     </div>
   </AppShell>
 </template>
 
 <script>
-import { reactive, ref, onMounted } from "vue"
+import { computed, reactive, ref, onMounted, watch } from "vue"
+import { useRoute, useRouter } from "vue-router"
 import AppShell from "../components/AppShell.vue"
 import Tabs from "../components/Tabs.vue"
 import { api } from "../api"
 import { useWhen } from "../composables/useWhen"
 
+const TAB_IDS = new Set(["letters", "tags", "notify", "accounts"])
+
 export default {
   components: { AppShell, Tabs },
   setup() {
+    const route = useRoute()
+    const router = useRouter()
     const accounts = ref([])
     const messages = ref([])
     const error = ref("")
     const accountError = ref("")
     const sync = ref(null)
     const busy = ref(false)
-    const query = ref("")
-    const tab = ref("accounts")
-    const activeTag = ref(0)
+    const loading = ref(true)
+    const unread = ref(0)
+    const moreBusy = ref(false)
+    const hasMore = ref(false)
+    const page = reactive({ offset: 0, limit: 100 })
+    // Вкладка/поиск/хештег живут в URL: возврат из письма, F5 и прямые ссылки
+    // не сбрасывают то, что пользователь уже настроил.
+    const query = ref(typeof route.query.q === "string" ? route.query.q : "")
+    const tab = ref(TAB_IDS.has(String(route.query.tab)) ? String(route.query.tab) : "letters")
+    const activeTag = ref(Number(route.query.tag) || 0)
     const tags = ref([])
     const tagFields = ref([])
     const tagOps = ref([])
@@ -189,6 +211,7 @@ export default {
     const notifyForm = reactive({ field: "from", op: "contains", value: "" })
     const passwords = reactive({})
     const notes = reactive({})
+    const itemErrors = reactive({})
     const account = ref({ name: "", host: "", port: 993, use_ssl: true, username: "", password: "", folder: "INBOX" })
     const pageTabs = [
       { id: "letters", label: "Письма" },
@@ -197,7 +220,22 @@ export default {
       { id: "accounts", label: "Ящик" },
     ]
     const { settings, when } = useWhen()
-    let opened = false
+    let firstLoad = true
+
+    const everyLabel = computed(() => {
+      const value = Number(sync.value && sync.value.every_seconds) || 0
+      if (!value) return ""
+      if (value % 60 === 0) return "каждые " + value / 60 + " мин."
+      return "каждые " + value + " с."
+    })
+
+    function syncUrl() {
+      const next = {}
+      if (tab.value !== "letters") next.tab = tab.value
+      if (query.value.trim()) next.q = query.value.trim()
+      if (activeTag.value) next.tag = String(activeTag.value)
+      router.replace({ query: next }).catch(() => {})
+    }
 
     function fromLine(item) {
       if (item.from_name && item.from_addr) return item.from_name + " <" + item.from_addr + ">"
@@ -254,27 +292,55 @@ export default {
       if (!notifyForm.field && notifyFields.value.length) notifyForm.field = notifyFields.value[0].id
     }
 
-    async function load() {
+    async function load(append = false) {
+      if (firstLoad) loading.value = true
       error.value = ""
       const params = new URLSearchParams()
       if (query.value.trim()) params.set("q", query.value.trim())
       if (activeTag.value) params.set("tag", String(activeTag.value))
-      const data = await api("/api/mail?" + params.toString())
-      accounts.value = data.accounts || []
-      messages.value = data.messages || []
-      sync.value = data.sync || null
-      applyMeta(data)
-      if (!opened) {
-        opened = true
-        if (accounts.value.length) tab.value = "letters"
+      if (append) params.set("offset", String(page.offset))
+      try {
+        const data = await api("/api/mail?" + params.toString())
+        accounts.value = data.accounts || []
+        if (append) {
+          const seen = new Set(messages.value.map((item) => item.id))
+          messages.value = messages.value.concat((data.messages || []).filter((item) => !seen.has(item.id)))
+        } else {
+          messages.value = data.messages || []
+        }
+        sync.value = data.sync || null
+        applyMeta(data)
+        unread.value = data.unread || 0
+        if (data.page) {
+          page.offset = Number(data.page.offset) || 0
+          page.limit = Number(data.page.limit) || page.limit
+        }
+        hasMore.value = (data.messages || []).length >= page.limit
+        // Первый заход без ящиков — сразу на вкладку настройки.
+        if (firstLoad && !accounts.value.length && !route.query.tab) tab.value = "accounts"
+      } catch (err) {
+        error.value = err.message || "Почта недоступна"
+      } finally {
+        firstLoad = false
+        loading.value = false
+      }
+    }
+
+    async function loadMore() {
+      if (moreBusy.value) return
+      page.offset += page.limit
+      moreBusy.value = true
+      try {
+        await load(true)
+      } finally {
+        moreBusy.value = false
       }
     }
 
     function setTag(id) {
       activeTag.value = id
-      load().catch((err) => {
-        error.value = err.message || "Почта недоступна"
-      })
+      syncUrl()
+      load().catch(() => {})
     }
 
     function notifyOpsFor(field) {
@@ -415,21 +481,20 @@ export default {
 
     async function savePassword(item) {
       notes[item.id] = ""
+      itemErrors[item.id] = ""
       const password = passwords[item.id] || ""
       if (!password) {
-        notes[item.id] = ""
-        error.value = "Введите новый пароль"
+        itemErrors[item.id] = "Введите новый пароль"
         return
       }
       busy.value = true
-      error.value = ""
       try {
         await api("/api/mail/accounts/" + item.id, { method: "PATCH", body: { password } })
         passwords[item.id] = ""
         notes[item.id] = "Пароль сохранён, забрана первая порция."
         await load()
       } catch (err) {
-        error.value = err.message || "Пароль не сохранился"
+        itemErrors[item.id] = err.message || "Пароль не сохранился"
       } finally {
         busy.value = false
       }
@@ -437,15 +502,15 @@ export default {
 
     async function test(item) {
       notes[item.id] = ""
+      itemErrors[item.id] = ""
       busy.value = true
-      error.value = ""
       try {
         const data = await api("/api/mail/accounts/" + item.id + "/test", { method: "POST" })
         notes[item.id] = data.ok ? "Проверка прошла. " + (data.subject || "") : ""
-        if (!data.ok) error.value = data.error || "Пароль не подошёл"
+        if (!data.ok) itemErrors[item.id] = data.error || "Пароль не подошёл"
         await load()
       } catch (err) {
-        error.value = err.message || "Проверка не удалась"
+        itemErrors[item.id] = err.message || "Проверка не удалась"
       } finally {
         busy.value = false
       }
@@ -453,15 +518,15 @@ export default {
 
     async function fetchMail(item) {
       notes[item.id] = ""
+      itemErrors[item.id] = ""
       busy.value = true
-      error.value = ""
       try {
         const data = await api("/api/mail/accounts/" + item.id + "/fetch", { method: "POST" })
-        if (data.blocked) error.value = data.error || "Пароль не подошёл"
+        if (data.blocked) itemErrors[item.id] = data.error || "Пароль не подошёл"
         else notes[item.id] = "Забрали " + (data.fetched || 0) + ". " + (data.backfill === "done" ? "Старые письма уже все здесь." : "Следующая порция придёт сама или по кнопке.")
         await load()
       } catch (err) {
-        error.value = err.message || "Порция не забралась"
+        itemErrors[item.id] = err.message || "Порция не забралась"
       } finally {
         busy.value = false
       }
@@ -470,28 +535,35 @@ export default {
     async function removeAccount(item) {
       if (!window.confirm("Удалить ящик «" + item.name + "»? Настройки (сервер, логин, пароль) будут потеряны; сохранённые письма останутся.")) return
       busy.value = true
+      itemErrors[item.id] = ""
       try {
         await api("/api/mail/accounts/" + item.id, { method: "DELETE" })
         await load()
       } catch (err) {
-        error.value = err.message || "Ящик не удалён"
+        itemErrors[item.id] = err.message || "Ящик не удалён"
       } finally {
         busy.value = false
       }
     }
 
+    async function search() {
+      syncUrl()
+      await load()
+    }
+
+    watch(tab, syncUrl)
+
     onMounted(() => {
       settings.load().catch(() => {})
-      load().catch((err) => {
-        error.value = err.message || "Почта недоступна"
-      })
+      load()
     })
 
     return {
-      accounts, messages, sync, error, accountError, busy, query, tab, passwords, notes, account, pageTabs,
+      accounts, messages, sync, error, accountError, busy, loading, unread, moreBusy, hasMore, page, everyLabel,
+      query, tab, passwords, notes, itemErrors, account, pageTabs,
       tags, tagFields, tagOps, conditions, tagError, tagForm, activeTag,
       notify, notifyModes, notifyMatches, notifyFields, notifyForm, notifyRules, notifyError,
-      when, fromLine, load, createAccount, savePassword, test, fetchMail, removeAccount,
+      when, fromLine, load, loadMore, search, createAccount, savePassword, test, fetchMail, removeAccount,
       tagStyle, opsFor, blankCondition, syncOp, ruleText, setTag, createTag, removeTag,
       notifyOpsFor, syncNotifyOp, saveNotify, addNotifyRule, removeNotifyRule,
     }

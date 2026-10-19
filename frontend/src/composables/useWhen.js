@@ -1,11 +1,11 @@
 import { useSettings } from "./useSettings"
-import { formatWhen } from "./formatDate"
+import { formatSmart } from "./formatDate"
 
 export function useWhen() {
   const settings = useSettings()
 
   function when(value) {
-    return formatWhen(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
+    return formatSmart(value, settings.get("core", "ui.date_format"), settings.get("core", "ui.timezone") || undefined)
   }
 
   function localDay() {
