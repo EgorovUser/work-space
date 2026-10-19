@@ -123,7 +123,12 @@ def start() -> None:
 def stop() -> None:
     _stop.set()
     if _thread and _thread.is_alive():
-        _thread.join(timeout=2)
+        _thread.join(timeout=30)
+
+
+def should_stop() -> bool:
+    """Джобы могут проверять это между шагами и завершаться раньше."""
+    return _stop.is_set()
 
 
 def _loop() -> None:
@@ -131,6 +136,8 @@ def _loop() -> None:
         with _lock:
             jobs = list(_jobs.values())
         for job in jobs:
+            if _stop.is_set():
+                break
             interval = _interval_seconds(job)
             now = time.monotonic()
             due = _next.get(job.name, 0)
