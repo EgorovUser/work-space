@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import time
+from collections import defaultdict
+
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
@@ -10,9 +13,13 @@ from app.core.context import user_id_var
 from app.core.db import get_db, session_scope
 from app.core.logging import log_scope, logger
 from app.core.models import User
+from app.core.settings_store import get_int
 
 router = APIRouter()
 _dummy_hash: str | None = None
+
+# key: (username, ip) -> list of failed attempt timestamps
+_failed_attempts: dict[tuple[str, str], list[float]] = defaultdict(list)
 
 
 class LoginIn(BaseModel):
@@ -57,6 +64,33 @@ def _dummy() -> str:
     return _dummy_hash
 
 
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _is_rate_limited(username: str, ip: str) -> bool:
+    max_attempts = get_int("core", "auth.login_max_attempts")
+    window_minutes = get_int("core", "auth.login_window_minutes")
+    window = window_minutes * 60
+    now = time.time()
+    key = (username, ip)
+    attempts = _failed_attempts[key]
+    # чистим старые
+    _failed_attempts[key] = [ts for ts in attempts if now - ts < window]
+    return len(_failed_attempts[key]) >= max_attempts
+
+
+def _record_failure(username: str, ip: str) -> None:
+    _failed_attempts[(username, ip)].append(time.time())
+
+
+def _clear_failures(username: str, ip: str) -> None:
+    _failed_attempts.pop((username, ip), None)
+
+
 def require_user(request: Request, db: Session = Depends(get_db)) -> User:
     user_id = request.session.get("user_id")
     session_version = request.session.get("session_version")
@@ -77,13 +111,21 @@ def require_user(request: Request, db: Session = Depends(get_db)) -> User:
 
 @router.post("/api/auth/login", response_model=UserOut)
 def login(body: LoginIn, request: Request, db: Session = Depends(get_db)) -> User:
+    ip = _client_ip(request)
     with log_scope("auth", "login"):
+        if _is_rate_limited(body.username, ip):
+            logger.warning("login rate limited username={} ip={}", body.username, ip)
+            raise HTTPException(status_code=429, detail="Слишком много неудачных попыток. Попробуйте позже.")
+
         user = db.scalars(select(User).where(User.username == body.username)).one_or_none()
         password_hash = user.password_hash if user is not None else _dummy()
         valid = verify_password(body.password, password_hash)
         if user is None or not user.is_active or not valid:
-            logger.warning("login failed username={}", body.username)
+            _record_failure(body.username, ip)
+            logger.warning("login failed username={} ip={}", body.username, ip)
             raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+
+        _clear_failures(body.username, ip)
         request.session["user_id"] = user.id
         request.session["session_version"] = user.session_version
         user_id_var.set(str(user.id))
