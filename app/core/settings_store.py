@@ -4,7 +4,7 @@ import copy
 import json
 import threading
 
-from app.core.crypto import fernet
+from app.core.crypto import multi
 from sqlalchemy import delete, select
 
 from app.core.db import session_scope, utcnow
@@ -155,7 +155,7 @@ def set_value(
                     "Это не токен бота. Скопируйте его из BotFather целиком: число, двоеточие и длинный ключ, без пробелов."
                 )
             value = cleaned
-        stored = json.dumps(fernet().encrypt(value.encode("utf-8")).decode("ascii"))
+        stored = json.dumps(multi().encrypt(value.encode("utf-8")).decode("ascii"))
         shown = "***"
     else:
         coerced = _coerce(item, value)
@@ -299,7 +299,7 @@ def _decode(item: SettingDef, raw: str):
         if item.secret:
             if not isinstance(value, str) or value == "":
                 return _INVALID
-            return fernet().decrypt(value.encode("ascii")).decode("utf-8")
+            return multi().decrypt(value.encode("ascii")).decode("utf-8")
         return _coerce(item, value)
     except Exception:
         with log_scope("settings", "read"):
