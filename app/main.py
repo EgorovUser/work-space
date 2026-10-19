@@ -48,6 +48,8 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title=get_str("core", "ui.app_title"), lifespan=lifespan)
     app.add_middleware(RequestContextMiddleware)
+    # https_only=False зашито: приложение рассчитано на работу по обычному HTTP
+    # без домена и сертификата. Secure-cookie не нужны.
     app.add_middleware(
         SessionMiddleware,
         secret_key=cfg.secret_key,

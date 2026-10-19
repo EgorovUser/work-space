@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import sqlalchemy as sa
 from sqlalchemy import Boolean, ForeignKey, Index, Integer, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,6 +54,15 @@ class MailMessage(Base):
     __table_args__ = (
         Index("ix_mail_messages_project", "project_id", "archived", "read"),
         Index("ix_mail_messages_uid", "account_id", "folder", "uid"),
+        Index("ix_mail_messages_received_at", "received_at"),
+        Index(
+            "uq_mail_messages_account_folder_uid",
+            "account_id",
+            "folder",
+            "uid",
+            unique=True,
+            sqlite_where=sa.text("account_id IS NOT NULL AND uid IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

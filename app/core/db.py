@@ -5,10 +5,12 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import DateTime, TypeDecorator, create_engine, event, text
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import DateTime, TypeDecorator, create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from app.core.config import get as get_config
+from app.core.config import ROOT, get as get_config
 
 _engine = None
 SessionLocal: sessionmaker[Session] | None = None
@@ -65,7 +67,19 @@ def init_db() -> None:
     from app.modules import import_models
 
     import_models()
-    Base.metadata.create_all(_engine)
+
+    inspector = inspect(_engine)
+    tables = set(inspector.get_table_names())
+    alembic_cfg = Config(str(ROOT / "alembic.ini"))
+
+    if not tables or "alembic_version" not in tables:
+        # Свежая база или старая без alembic_version
+        Base.metadata.create_all(_engine)
+        if "alembic_version" not in inspect(_engine).get_table_names():
+            command.stamp(alembic_cfg, "head")
+    else:
+        # База уже под управлением Alembic
+        command.upgrade(alembic_cfg, "head")
 
 
 def session_factory() -> Session:

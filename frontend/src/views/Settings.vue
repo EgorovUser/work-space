@@ -6,6 +6,22 @@
     <p v-else-if="loading" class="muted">Загрузка…</p>
     <template v-else>
       <Tabs v-model="tab" :tabs="pageTabs" />
+      <div v-if="tab === 'core'" class="card stack">
+        <h2>Смена пароля</h2>
+        <form class="stack" @submit.prevent="changePassword">
+          <label class="tight">
+            Текущий пароль
+            <input v-model="password.old" type="password" autocomplete="current-password" required />
+          </label>
+          <label class="tight">
+            Новый пароль
+            <input v-model="password.new" type="password" autocomplete="new-password" required minlength="8" />
+          </label>
+          <p v-if="passwordError" class="error">{{ passwordError }}</p>
+          <p v-if="passwordOk" class="muted">Пароль изменён. Войдите заново.</p>
+          <button class="btn" type="submit" :disabled="passwordBusy">Сменить пароль</button>
+        </form>
+      </div>
       <div v-if="current" class="settings-grid">
         <section v-for="card in cards" :key="card.name" class="card">
           <h2>{{ card.label }}</h2>
@@ -25,13 +41,15 @@
 </template>
 
 <script>
-import { computed, onMounted, ref } from "vue"
+import { computed, onMounted, reactive, ref } from "vue"
+import { useRouter } from "vue-router"
 import AppShell from "../components/AppShell.vue"
 import SettingsForm from "../components/SettingsForm.vue"
 import DbTools from "../components/DbTools.vue"
 import Tabs from "../components/Tabs.vue"
 import { api } from "../api"
 import { useSettings } from "../composables/useSettings"
+import { useAuth } from "../composables/useAuth"
 
 const NAMES = {
   core: "Общие",
@@ -133,6 +151,12 @@ export default {
     const loading = ref(true)
     const tab = ref("core")
     const settings = useSettings()
+    const auth = useAuth()
+    const router = useRouter()
+    const password = reactive({ old: "", new: "" })
+    const passwordError = ref("")
+    const passwordOk = ref(false)
+    const passwordBusy = ref(false)
 
     const groups = computed(() => {
       const map = new Map()
@@ -185,8 +209,43 @@ export default {
       }
     }
 
+    async function changePassword() {
+      passwordError.value = ""
+      passwordOk.value = false
+      passwordBusy.value = true
+      try {
+        await api("/api/auth/password", {
+          method: "POST",
+          body: { old_password: password.old, new_password: password.new },
+        })
+        password.old = ""
+        password.new = ""
+        passwordOk.value = true
+        await auth.logout()
+        router.push("/login")
+      } catch (err) {
+        passwordError.value = err.message || "Не удалось сменить пароль"
+      } finally {
+        passwordBusy.value = false
+      }
+    }
+
     onMounted(load)
-    return { error, loading, tab, pageTabs, current, cards, hasScope, load }
+    return {
+      error,
+      loading,
+      tab,
+      pageTabs,
+      current,
+      cards,
+      hasScope,
+      load,
+      password,
+      passwordError,
+      passwordOk,
+      passwordBusy,
+      changePassword,
+    }
   },
 }
 </script>

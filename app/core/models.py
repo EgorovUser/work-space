@@ -25,6 +25,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(200))
     display_name: Mapped[str] = mapped_column(String(200))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    session_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)
 
 
