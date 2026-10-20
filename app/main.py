@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -21,6 +22,10 @@ from app.core.settings_api import router as settings_router
 from app.core.settings_store import get_int, get_str, register_defs, sync_definitions
 from app.modules import setup_modules
 from app.seed import seed
+
+# PWA-манифест — нестандартное расширение: без регистрации отдавался бы
+# как application/octet-stream, и браузер не принял бы его.
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
 @asynccontextmanager
@@ -191,7 +196,18 @@ def _mount_frontend(app: FastAPI) -> None:
         if not str(candidate).startswith(str(root)):
             raise HTTPException(status_code=404, detail="Не найдено")
         if full_path and candidate.is_file():
+            # Сервис-воркер и манифест — служебные файлы PWA: честные файлы
+            # с правильным типом, без SPA-заглушки. no-cache на sw.js — чтобы
+            # обновления воркера доезжали сразу, а не через кеш браузера.
+            if full_path == "sw.js":
+                return FileResponse(candidate, media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+            if full_path == "manifest.webmanifest":
+                return FileResponse(candidate, media_type="application/manifest+json; charset=utf-8")
             return FileResponse(candidate)
+        if full_path in ("sw.js", "manifest.webmanifest"):
+            # Нет файла — не подсовываем index.html с text/javascript:
+            # браузер отверг бы такого воркера с криптичной ошибкой MIME.
+            raise HTTPException(status_code=404, detail="Не найдено")
         return FileResponse(index)
 
 

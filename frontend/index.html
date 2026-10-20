@@ -2,8 +2,17 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Рабочее пространство: проекты, задачи, почта, документы и учёт времени" />
     <title>Рабочее пространство</title>
+    <!-- PWA: тема браузера под светлое/тёмное оформление страницы -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f4f6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#10161a" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Work Space" />
     <script>
       // Анти-FOUC: тема применяется до загрузки стилей, чтобы не было
       // белой вспышки на тёмной системе. Выбор хранится в ws-theme.
@@ -26,5 +35,20 @@
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
+    <script>
+      // PWA: сервис-воркер регистрируется после отрисовки страницы.
+      // Только безопасный контекст: https или localhost; file:// и внешний
+      // http регистрация отвергнет — предупреждаем и не шумим.
+      (function () {
+        if (!("serviceWorker" in navigator)) return
+        var local = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+        if (location.protocol !== "https:" && !local) return
+        window.addEventListener("load", function () {
+          navigator.serviceWorker.register("/sw.js").catch(function (err) {
+            console.warn("[pwa] сервис-воркер не зарегистрирован:", err)
+          })
+        })
+      })()
+    </script>
   </body>
 </html>

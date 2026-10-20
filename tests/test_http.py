@@ -35,9 +35,14 @@ except RuntimeError:
 
 from starlette.testclient import TestClient  # noqa: E402
 
+from app.core.config import ROOT  # noqa: E402
 from app.main import app  # noqa: E402  (импорт поднимает init_db + seed)
 
 client = TestClient(app)
+
+# PWA-файлы живут в собранном frontend/dist; в CI бэкенда сборки нет —
+# тогда роут раздачи не монтируется и тесты пропускаются.
+DIST_READY = (ROOT / "frontend" / "dist" / "sw.js").is_file()
 
 PASSWORD = "tester-pass"
 
@@ -202,6 +207,37 @@ class PasswordChangeTest(unittest.TestCase):
         again = _login(password=self.NEW_PASSWORD)
         self.assertEqual(again.status_code, 200)
         self.assertIsNotNone(_me_user())
+
+
+@unittest.skipUnless(DIST_READY, "нужен собранный frontend/dist")
+class PwaFilesTest(unittest.TestCase):
+    """Раздача PWA-файлов: манифест, сервис-воркер, иконки.
+
+    Тип содержимого и no-cache — часть контракта: SPA-заглушка с text/html
+    вместо sw.js ломает установку PWA с криптичной ошибкой MIME.
+    """
+
+    def test_manifest_served_with_type(self):
+        response = client.get("/manifest.webmanifest")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/manifest+json", response.headers["content-type"])
+        body = response.json()
+        self.assertIn("icons", body)
+        self.assertGreaterEqual(len(body["icons"]), 3)
+        for icon in body["icons"]:
+            self.assertIn("src", icon)
+
+    def test_service_worker_no_cache(self):
+        response = client.get("/sw.js")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("javascript", response.headers["content-type"])
+        self.assertIn("no-cache", response.headers.get("cache-control", ""))
+
+    def test_icons_served(self):
+        for name in ("icon-192.png", "icon-512.png", "icon-512-maskable.png", "apple-touch-icon.png"):
+            response = client.get("/icons/" + name)
+            self.assertEqual(response.status_code, 200, name)
+            self.assertIn("image/png", response.headers["content-type"], name)
 
 
 if __name__ == "__main__":

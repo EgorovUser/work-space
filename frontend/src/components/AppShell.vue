@@ -38,6 +38,8 @@
         <slot />
       </div>
     </main>
+    <!-- Нижняя навигация для телефонов: CSS прячет её на широких экранах. -->
+    <BottomNav />
   </div>
 </template>
 
@@ -45,6 +47,7 @@
 import { computed, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import Bell from "./Bell.vue"
+import BottomNav from "./BottomNav.vue"
 import ThemeToggle from "./ThemeToggle.vue"
 import GlobalSearch from "./GlobalSearch.vue"
 import { useAuth } from "../composables/useAuth"
@@ -56,7 +59,7 @@ export default {
   props: {
     bare: { type: Boolean, default: false },
   },
-  components: { Bell, ThemeToggle, GlobalSearch },
+  components: { Bell, BottomNav, ThemeToggle, GlobalSearch },
   setup(props) {
     const auth = useAuth()
     const settings = useSettings()

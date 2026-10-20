@@ -30,11 +30,20 @@
   при закрытии создают следующее вхождение — логика в
   `app/modules/tasks/service/recurrence.py`, событие ленты `recur`, уведомление
   `task.recurred`.
+- **PWA** — приложение устанавливается на телефон/десктоп: манифест и иконки
+  в `frontend/public/` (иконки генерирует `scripts/make_pwa_icons.py`,
+  PyMuPDF), сервис-воркер `frontend/public/sw.js` (навигация — сеть с офлайн-
+  фолбэком в кеш, `/assets/*` — cache-first, `/api/*` — всегда мимо кеша).
+  Бэкенд раздаёт `sw.js` с `Cache-Control: no-cache` и манифест с верным
+  MIME (`app/main.py: _mount_frontend`). На узких экранах — нижняя навигация
+  (`components/BottomNav.vue`) и тач-таргеты 44px. Регистрация — инлайном в
+  `frontend/index.html` (только https/localhost).
 - **Миграции** — Alembic (`alembic/versions/`). `0001` — baseline-заглушка
   (схема = `create_all`); дальше — реальные миграции. Новые изменения моделей
   оформлять миграцией, а не правкой `create_all`.
-- **Тесты** — `tests/` (unittest, 62 проверки; запускаются на временной базе)
-  и `frontend/e2e/` (Playwright против настоящего uvicorn, 11 сценариев:
+- **Тесты** — `tests/` (unittest, 65 проверок; запускаются на временной базе;
+  PWA-раздача — только при собранном `frontend/dist`, иначе скип) и
+  `frontend/e2e/` (Playwright против настоящего uvicorn, 14 сценариев:
   `cd frontend && npm run test:e2e`, нужен собранный `dist`). Юнит-тесты
   фронтенда — `cd frontend && npm test` (33 проверки, node --test).
 - **Скрипты** — `scripts/backup.sh` (бэкап SQLite через `.backup` + `data/files`
