@@ -57,31 +57,9 @@
       </div>
       </form>
 
-      <section class="card stack">
-        <h2>История значений</h2>
-        <p class="muted">
-          Снимок создаётся, когда меняются пароль, логин или ссылка. Откат не
-          разрушающий: текущие значения тоже попадают в историю.
-        </p>
-        <p v-if="historyError" class="error">{{ historyError }}</p>
-        <p v-else-if="!history.length" class="muted">Пока пусто — важные поля ещё не менялись.</p>
-        <div v-for="item in history" :key="item.id" class="status-row">
-          <div>
-            <strong>{{ when(item.created_at) }}</strong>
-            <div class="muted">изменялись: {{ changedText(item) }}</div>
-          </div>
-          <div class="rdp-tools">
-            <button
-              class="btn secondary"
-              type="button"
-              :disabled="busy || !item.has_secret"
-              :title="item.has_secret ? '' : 'В этой версии значения нет'"
-              @click="copyRevision(item)"
-            >Скопировать</button>
-            <button class="btn secondary" type="button" :disabled="busy" @click="restoreRevision(item)">Вернуть</button>
-          </div>
-        </div>
-      </section>
+      <!-- История значений (патч O) — компонент secret/SecretRevisions.vue
+           (патч X); откат возвращает карточку сюда событием applied. -->
+      <SecretRevisions ref="revisions" :project="project" @applied="apply" />
     </template>
   </div>
 </template>
@@ -90,15 +68,16 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
+import SecretRevisions from "../components/secret/SecretRevisions.vue"
+import { useClipboard } from "../composables/useClipboard"
 import { useNotice } from "../composables/useNotice"
 import { useWhen } from "../composables/useWhen"
 
-const CLIPBOARD_TTL = 30
-
-// Метки важных полей — язык пользователя: пароль, логин, ссылка.
-const FIELD_LABELS = { secret: "пароль", username: "логин", url: "ссылка" }
-
+// Страница секрета: форма значений, показ/копирование, генерация, архив,
+// удаление. История значений — в secret/SecretRevisions.vue (патч X);
+// буфер обмена с автоочисткой — composable useClipboard.
 export default {
+  components: { SecretRevisions },
   props: {
     project: { type: Object, required: true },
   },
@@ -109,17 +88,14 @@ export default {
     const error = ref("")
     const formError = ref("")
     const busy = ref(false)
-    const copied = ref(false)
     const visible = ref(false)
     const touched = ref(false)
-    const clipSeconds = ref(CLIPBOARD_TTL)
     const form = ref({ title: "", kind: "", username: "", url: "", note: "", secret: "" })
-    const history = ref([])
-    const historyError = ref("")
     const notice = useNotice()
-    const { settings, when } = useWhen()
-    let clipTimer = null
-    let clearTimer = null
+    const clipboard = useClipboard()
+    const { copied, clipSeconds } = clipboard
+    const revisions = ref(null)
+    const { settings } = useWhen()
 
     const knownKind = computed(() => {
       const list = (record.value && record.value.kinds) || []
@@ -145,56 +121,11 @@ export default {
       error.value = ""
       try {
         apply(await api("/api/projects/" + props.project.id + "/secrets/" + route.params.secretId))
-        await loadHistory()
       } catch (err) {
         record.value = null
         error.value = err.message || "Секрет недоступен"
       }
     }
-
-    async function loadHistory() {
-      historyError.value = ""
-      try {
-        const data = await api("/api/projects/" + props.project.id + "/secrets/" + route.params.secretId + "/revisions")
-        history.value = data.items || []
-      } catch (err) {
-        history.value = []
-        historyError.value = err.message || "История недоступна"
-      }
-    }
-
-    function changedText(item) {
-      const labels = (item.changed || []).map((code) => FIELD_LABELS[code] || code)
-      return labels.length ? labels.join(", ") : "—"
-    }
-
-    function armClipboard() {
-      clearInterval(clipTimer)
-      clearTimeout(clearTimer)
-      copied.value = true
-      clipSeconds.value = CLIPBOARD_TTL
-      // Обратный отсчёт в подсказке + очистка буфера: пароль не остаётся
-      // в системе на неопределённый срок после копирования.
-      clipTimer = setInterval(() => {
-        clipSeconds.value -= 1
-        if (clipSeconds.value <= 0) clearInterval(clipTimer)
-      }, 1000)
-      clearTimer = setTimeout(async () => {
-        copied.value = false
-        try {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText("")
-          }
-        } catch {
-          // Буфер мог быть перезаписан другой вкладкой — это нормальный исход.
-        }
-      }, CLIPBOARD_TTL * 1000)
-    }
-
-    onBeforeUnmount(() => {
-      clearInterval(clipTimer)
-      clearTimeout(clearTimer)
-    })
 
     // Какие важные поля уходят в сохранении изменёнными — для текста тоста.
     function changedLabels() {
@@ -224,7 +155,6 @@ export default {
           body,
         })
         apply(data)
-        await loadHistory()
         if (data.revision_id) {
           // Сервер сохранил прежние значения снимком — даём одну кнопку
           // на немедленный откат вместо отдельного похода в историю.
@@ -248,59 +178,10 @@ export default {
       }
     }
 
-    // Откат к снимку без лишних вопросов — вызывается кнопкой «Отменить»
-    // у тоста (намерение уже выражено) и из «Вернуть» после подтверждения.
-    async function undoRevision(revisionId) {
-      formError.value = ""
-      busy.value = true
-      try {
-        const data = await api(
-          "/api/projects/" + props.project.id + "/secrets/" + route.params.secretId + "/revisions/" + revisionId + "/restore",
-          { method: "POST" },
-        )
-        apply(data)
-        await loadHistory()
-        if (data.revision_id) {
-          notice.show("Возвращены прежние значения", {
-            kind: "success",
-            action: { label: "Отменить", run: () => undoRevision(data.revision_id) },
-          })
-        } else {
-          notice.show("Версия совпадает с текущей", { kind: "success" })
-        }
-      } catch (err) {
-        formError.value = err.message || "Не удалось вернуть версию"
-      } finally {
-        busy.value = false
-      }
-    }
-
-    async function restoreRevision(item) {
-      const ok = window.confirm(
-        "Вернуть прежние значения ("
-        + changedText(item)
-        + ")? Текущие тоже сохранятся в истории — откат можно отменить.",
-      )
-      if (!ok) return
-      await undoRevision(item.id)
-    }
-
-    async function copyRevision(item) {
-      copied.value = false
-      formError.value = ""
-      busy.value = true
-      try {
-        const data = await api(
-          "/api/projects/" + props.project.id + "/secrets/" + route.params.secretId + "/revisions/" + item.id + "/reveal",
-          { method: "POST" },
-        )
-        await writeClipboard(data.secret || "")
-        armClipboard()
-      } catch (err) {
-        formError.value = err.message || "Не удалось скопировать"
-      } finally {
-        busy.value = false
-      }
+    // Откат к снимку — руками компонента истории (тот же путь, что и
+    // кнопка «Вернуть» в ней), карточка возвращается сюда событием applied.
+    function undoRevision(revisionId) {
+      if (revisions.value) revisions.value.undoRevision(revisionId)
     }
 
     async function reveal() {
@@ -325,7 +206,6 @@ export default {
     }
 
     async function copySecret() {
-      copied.value = false
       formError.value = ""
       busy.value = true
       try {
@@ -334,26 +214,13 @@ export default {
           : (await api("/api/projects/" + props.project.id + "/secrets/" + route.params.secretId + "/reveal", {
             method: "POST",
           })).secret || ""
-        await writeClipboard(value)
-        armClipboard()
+        await clipboard.write(value)
+        clipboard.arm()
       } catch (err) {
         formError.value = err.message || "Не удалось скопировать"
       } finally {
         busy.value = false
       }
-    }
-
-    async function writeClipboard(text) {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text)
-        return
-      }
-      const area = document.createElement("textarea")
-      area.value = text
-      document.body.appendChild(area)
-      area.select()
-      document.execCommand("copy")
-      area.remove()
     }
 
     async function generate() {
@@ -446,11 +313,11 @@ export default {
 
     watch(() => [props.project && props.project.id, route.params.secretId], load, { immediate: true })
 
+    onBeforeUnmount(() => clipboard.stop())
+
     return {
       record, error, formError, busy, copied, visible, touched, form, knownKind, clipSeconds,
-      history, historyError, when, changedText,
-      save, reveal, copySecret, generate, clearSecret, toggleArchive, remove,
-      copyRevision, restoreRevision,
+      revisions, apply, save, reveal, copySecret, generate, clearSecret, toggleArchive, remove,
     }
   },
 }

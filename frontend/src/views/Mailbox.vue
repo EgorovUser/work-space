@@ -85,118 +85,13 @@
       </div>
     </div>
     <div v-show="tab === 'tags'">
-      <p class="muted">Хештег ставится сам, если подошли все условия сразу. Снять его с конкретного письма можно внутри письма. Дата — день получения в вашем часовом поясе.</p>
-      <form class="card stack" @submit.prevent="createTag">
-        <h2>Хештег</h2>
-        <label>Название <input v-model="tagForm.name" type="text" required /></label>
-        <label class="tight">Цвет <input v-model="tagForm.color" type="color" /></label>
-        <div v-for="(row, index) in conditions" :key="index" class="row-actions">
-          <select v-model="row.field" @change="syncOp(row)">
-            <option v-for="item in tagFields" :key="item.id" :value="item.id">{{ item.label }}</option>
-          </select>
-          <select v-model="row.op">
-            <option v-for="item in opsFor(row.field)" :key="item.id" :value="item.id">{{ item.label }}</option>
-          </select>
-          <input v-if="row.field === 'received'" v-model="row.value" type="date" />
-          <input v-else v-model="row.value" type="text" placeholder="Значение" />
-          <button class="text-btn" type="button" @click="conditions.splice(index, 1)">Убрать</button>
-        </div>
-        <div class="row-actions">
-          <button class="btn secondary" type="button" @click="conditions.push(blankCondition())">Ещё условие</button>
-        </div>
-        <p v-if="!conditions.length" class="muted">Без условия хештег некуда поставить.</p>
-        <p v-if="tagError" class="error">{{ tagError }}</p>
-        <div class="row-actions"><button class="btn" type="submit" :disabled="busy">Добавить хештег</button></div>
-      </form>
-      <article v-for="tag in tags" :key="tag.id" class="card stack">
-        <div class="tag-row">
-          <span class="mail-tag on" :style="tagStyle(tag, true)">{{ tag.name }}</span>
-          <button class="text-btn" type="button" :disabled="busy" @click="removeTag(tag)">Удалить</button>
-        </div>
-        <p v-if="!tag.rules.length" class="muted">Только вручную</p>
-        <p v-for="(rule, index) in tag.rules" :key="index" class="muted">{{ ruleText(rule) }}</p>
-      </article>
+      <MailTags :tags="tags" :fields="tagFields" :ops="tagOps" :default-color="tagDefaultColor" @changed="load" @done="tab = 'letters'" />
     </div>
     <div v-show="tab === 'notify'">
-      <p class="muted">Здесь решается, какое новое письмо вообще поднимает уведомление. Куда его слать — колокольчик, Telegram или почта — на странице «Уведомления». Старая докачка молчит в любом режиме.</p>
-      <form class="card stack" @submit.prevent="saveNotify">
-        <label>
-          О чём писать
-          <select v-model="notify.mode">
-            <option v-for="item in notifyModes" :key="item.id" :value="item.id">{{ item.label }}</option>
-          </select>
-        </label>
-        <label v-if="notify.mode === 'filter'">
-          Как совмещать условия
-          <select v-model="notify.match">
-            <option v-for="item in notifyMatches" :key="item.id" :value="item.id">{{ item.label }}</option>
-          </select>
-        </label>
-        <label class="check">
-          <input v-model="notify.gate_filed" type="checkbox" :disabled="notify.mode !== 'filter'" />
-          <span>Тот же фильтр и для «письмо ушло в проект»</span>
-        </label>
-        <p v-if="notifyError" class="error">{{ notifyError }}</p>
-        <div class="row-actions"><button class="btn" type="submit" :disabled="busy">Сохранить</button></div>
-      </form>
-      <form v-if="notify.mode === 'filter'" class="card stack" @submit.prevent="addNotifyRule">
-        <h2>Условие</h2>
-        <div class="row-actions">
-          <select v-model="notifyForm.field" @change="syncNotifyOp">
-            <option v-for="item in notifyFields" :key="item.id" :value="item.id">{{ item.label }}</option>
-          </select>
-          <select v-model="notifyForm.op">
-            <option v-for="item in notifyOpsFor(notifyForm.field)" :key="item.id" :value="item.id">{{ item.label }}</option>
-          </select>
-          <select v-if="notifyForm.field === 'tag'" v-model="notifyForm.value">
-            <option value="">Хештег</option>
-            <option v-for="tag in tags" :key="tag.id" :value="String(tag.id)">{{ tag.name }}</option>
-          </select>
-          <input v-else v-model="notifyForm.value" type="text" placeholder="Например ivanov или aeroflot" />
-        </div>
-        <p v-if="notifyForm.field === 'tag' && !tags.length" class="muted">Сначала создайте хештег на соседней вкладке.</p>
-        <p v-if="notify.mode === 'filter' && !notifyRules.length" class="muted">Пока условий нет, о новых письмах тихо.</p>
-        <div class="row-actions"><button class="btn" type="submit" :disabled="busy">Добавить условие</button></div>
-      </form>
-      <template v-if="notify.mode === 'filter'">
-        <article v-for="rule in notifyRules" :key="rule.id" class="card">
-          <div class="status-row">
-            <span>{{ rule.text }}</span>
-            <button class="text-btn" type="button" :disabled="busy" @click="removeNotifyRule(rule)">Удалить</button>
-          </div>
-        </article>
-      </template>
+      <MailNotify :tags="tags" :meta="notifyMeta" />
     </div>
     <div v-show="tab === 'accounts'">
-      <form class="card stack" @submit.prevent="createAccount">
-        <h2>Ящик IMAP</h2>
-        <label>Название <input v-model="account.name" type="text" required /></label>
-        <label>Сервер <input v-model="account.host" type="text" required autocomplete="off" /></label>
-        <label>Порт <input v-model.number="account.port" type="number" min="1" /></label>
-        <label class="check"><input v-model="account.use_ssl" type="checkbox" /><span>SSL</span></label>
-        <label>Логин <input v-model="account.username" type="text" autocomplete="off" /></label>
-        <label>Пароль <input v-model="account.password" type="password" autocomplete="new-password" /></label>
-        <label>Папка <input v-model="account.folder" type="text" placeholder="INBOX" /></label>
-        <p v-if="accountError" class="error">{{ accountError }}</p>
-        <div class="row-actions"><button class="btn" type="submit" :disabled="busy">Подключить</button></div>
-      </form>
-      <article v-for="item in accounts" :key="item.id" class="card stack">
-        <strong>{{ item.name }}</strong>
-        <div class="muted">{{ item.username }} · {{ item.host }}:{{ item.port }} · {{ item.folder }}</div>
-        <p v-if="item.auth_blocked" class="error">Пароль не подошёл. Повторных попыток нет, пока не смените пароль.</p>
-        <p v-else-if="item.last_error" class="error">{{ item.last_error }}</p>
-        <p v-if="item.backfill_uid > 0" class="muted">Старые письма ещё докачиваются порциями.</p>
-        <p v-else-if="item.backfill_uid < 0" class="muted">Папка забрана, дальше только новые письма.</p>
-        <label>Новый пароль <input v-model="passwords[item.id]" type="password" autocomplete="new-password" /></label>
-        <div class="row-actions">
-          <button class="btn" type="button" :disabled="busy" @click="savePassword(item)">Сменить пароль</button>
-          <button class="btn secondary" type="button" :disabled="busy" @click="test(item)">Проверить</button>
-          <button class="btn secondary" type="button" :disabled="busy || item.auth_blocked" @click="fetchMail(item)">Забрать порцию</button>
-          <button class="text-btn" type="button" :disabled="busy" @click="removeAccount(item)">Удалить</button>
-        </div>
-        <p v-if="notes[item.id]" class="ok-text">{{ notes[item.id] }}</p>
-        <p v-if="itemErrors[item.id]" class="error">{{ itemErrors[item.id] }}</p>
-      </article>
+      <MailAccounts :accounts="accounts" @changed="load" />
     </div>
   </AppShell>
 </template>
@@ -208,24 +103,28 @@ import AppShell from "../components/AppShell.vue"
 import Tabs from "../components/Tabs.vue"
 import SkeletonList from "../components/SkeletonList.vue"
 import MailReader from "../components/MailReader.vue"
+import MailAccounts from "../components/mail/MailAccounts.vue"
+import MailNotify from "../components/mail/MailNotify.vue"
+import MailTags from "../components/mail/MailTags.vue"
 import { api } from "../api"
 import { useEvents } from "../composables/useEvents"
+import { tagStyle } from "../composables/mailTagStyle"
 import { neighbors } from "../composables/mailNav"
-import { useNotice } from "../composables/useNotice"
 import { useWhen } from "../composables/useWhen"
 
+// Почта: список слева, читалка справа, письмо — в маршруте. Второстепенные
+// вкладки (хештеги, уведомления, ящик) вынесены в компоненты mail/
+// (патч X) — этот файл отвечает за список, читалку и живые события.
 const TAB_IDS = new Set(["letters", "tags", "notify", "accounts"])
 
 export default {
-  components: { AppShell, Tabs, SkeletonList, MailReader },
+  components: { AppShell, Tabs, SkeletonList, MailReader, MailAccounts, MailNotify, MailTags },
   setup() {
     const route = useRoute()
     const router = useRouter()
-    const notice = useNotice()
     const accounts = ref([])
     const messages = ref([])
     const error = ref("")
-    const accountError = ref("")
     const sync = ref(null)
     const busy = ref(false)
     const loading = ref(true)
@@ -239,23 +138,12 @@ export default {
     const tab = ref(TAB_IDS.has(String(route.query.tab)) ? String(route.query.tab) : "letters")
     const activeTag = ref(Number(route.query.tag) || 0)
     const tags = ref([])
+    // Каталоги для вкладок хештегов и уведомлений: приходят с общим ответом
+    // /api/mail и раздаются дочерним компонентам пропсами.
     const tagFields = ref([])
     const tagOps = ref([])
-    const conditions = ref([])
-    const tagError = ref("")
-    const tagForm = reactive({ name: "", color: "#3a6ea5" })
-    const notify = reactive({ mode: "all", match: "any", gate_filed: true })
-    const notifyModes = ref([])
-    const notifyMatches = ref([])
-    const notifyFields = ref([])
-    const notifyOps = ref([])
-    const notifyRules = ref([])
-    const notifyError = ref("")
-    const notifyForm = reactive({ field: "from", op: "contains", value: "" })
-    const passwords = reactive({})
-    const notes = reactive({})
-    const itemErrors = reactive({})
-    const account = ref({ name: "", host: "", port: 993, use_ssl: true, username: "", password: "", folder: "INBOX" })
+    const tagDefaultColor = ref("")
+    const notifyMeta = ref(null)
     const pageTabs = [
       { id: "letters", label: "Письма" },
       { id: "tags", label: "Хештеги" },
@@ -293,56 +181,6 @@ export default {
       return item.from_addr || item.from_name || ""
     }
 
-    function tagStyle(tag, active) {
-      return {
-        color: active ? "#fff" : tag.color,
-        borderColor: tag.color,
-        background: active ? tag.color : "transparent",
-      }
-    }
-
-    function opsFor(field) {
-      const dateOps = new Set(["before", "after", "on"])
-      const items = tagOps.value || []
-      if (field === "received") return items.filter((item) => dateOps.has(item.id))
-      return items.filter((item) => !dateOps.has(item.id))
-    }
-
-    function blankCondition() {
-      const field = (tagFields.value[0] && tagFields.value[0].id) || "from"
-      const ops = opsFor(field)
-      return { field, op: (ops[0] && ops[0].id) || "contains", value: "" }
-    }
-
-    function syncOp(row) {
-      const ops = opsFor(row.field)
-      if (!ops.some((item) => item.id === row.op)) row.op = ops[0] ? ops[0].id : ""
-    }
-
-    function ruleText(rule) {
-      const field = tagFields.value.find((item) => item.id === rule.field)
-      const op = tagOps.value.find((item) => item.id === rule.op)
-      return (field ? field.label : rule.field) + " " + (op ? op.label : rule.op) + " «" + rule.value + "»"
-    }
-
-    function applyMeta(data) {
-      tags.value = data.tags || []
-      tagFields.value = data.tag_fields || []
-      tagOps.value = data.tag_ops || []
-      if (data.tag_default_color && tagForm.color === "#3a6ea5") tagForm.color = data.tag_default_color
-      if (!conditions.value.length && tagFields.value.length) conditions.value = [blankCondition()]
-      const note = data.notify || {}
-      notify.mode = note.mode || "all"
-      notify.match = note.match || "any"
-      notify.gate_filed = note.gate_filed !== false
-      notifyModes.value = note.modes || []
-      notifyMatches.value = note.matches || []
-      notifyFields.value = note.fields || []
-      notifyOps.value = note.ops || []
-      notifyRules.value = note.rules || []
-      if (!notifyForm.field && notifyFields.value.length) notifyForm.field = notifyFields.value[0].id
-    }
-
     async function load(append = false) {
       if (firstLoad) loading.value = true
       error.value = ""
@@ -360,7 +198,11 @@ export default {
           messages.value = data.messages || []
         }
         sync.value = data.sync || null
-        applyMeta(data)
+        tags.value = data.tags || []
+        tagFields.value = data.tag_fields || []
+        tagOps.value = data.tag_ops || []
+        tagDefaultColor.value = data.tag_default_color || ""
+        notifyMeta.value = data.notify || null
         unread.value = data.unread || 0
         if (data.page) {
           page.offset = Number(data.page.offset) || 0
@@ -393,214 +235,6 @@ export default {
       activeTag.value = id
       syncUrl()
       load().catch(() => {})
-    }
-
-    function notifyOpsFor(field) {
-      const items = notifyOps.value || []
-      if (field === "tag") return items.filter((item) => item.id === "equals")
-      return items
-    }
-
-    function syncNotifyOp() {
-      const ops = notifyOpsFor(notifyForm.field)
-      if (!ops.some((item) => item.id === notifyForm.op)) notifyForm.op = ops[0] ? ops[0].id : ""
-      notifyForm.value = ""
-    }
-
-    function applyNotify(data) {
-      notify.mode = data.mode || notify.mode
-      notify.match = data.match || notify.match
-      notify.gate_filed = data.gate_filed !== false
-      notifyRules.value = data.rules || []
-      notifyModes.value = data.modes || notifyModes.value
-      notifyMatches.value = data.matches || notifyMatches.value
-      notifyFields.value = data.fields || notifyFields.value
-      notifyOps.value = data.ops || notifyOps.value
-    }
-
-    async function saveNotify() {
-      notifyError.value = ""
-      busy.value = true
-      try {
-        applyNotify(await api("/api/mail/notify", {
-          method: "PUT",
-          body: { mode: notify.mode, match: notify.match, gate_filed: !!notify.gate_filed },
-        }))
-      } catch (err) {
-        notifyError.value = err.message || "Фильтр не сохранился"
-      } finally {
-        busy.value = false
-      }
-    }
-
-    async function addNotifyRule() {
-      notifyError.value = ""
-      if (!(notifyForm.value || "").trim()) {
-        notifyError.value = notifyForm.field === "tag" ? "Выберите хештег" : "Укажите значение"
-        return
-      }
-      busy.value = true
-      try {
-        applyNotify(await api("/api/mail/notify", {
-          method: "PUT",
-          body: { mode: notify.mode, match: notify.match, gate_filed: !!notify.gate_filed },
-        }))
-        applyNotify(await api("/api/mail/notify/rules", {
-          method: "POST",
-          body: { field: notifyForm.field, op: notifyForm.op, value: notifyForm.value },
-        }))
-        notifyForm.value = ""
-      } catch (err) {
-        notifyError.value = err.message || "Условие не добавилось"
-      } finally {
-        busy.value = false
-      }
-    }
-
-    async function removeNotifyRule(rule) {
-      notifyError.value = ""
-      busy.value = true
-      try {
-        applyNotify(await api("/api/mail/notify/rules/" + rule.id, { method: "DELETE" }))
-      } catch (err) {
-        notifyError.value = err.message || "Условие не удалилось"
-      } finally {
-        busy.value = false
-      }
-    }
-
-    async function createTag() {
-      tagError.value = ""
-      for (const row of conditions.value) {
-        if (!(row.value || "").trim()) {
-          tagError.value = "Укажите значение условия или уберите пустую строку"
-          return
-        }
-      }
-      if (!conditions.value.length) {
-        tagError.value = "Нужно хотя бы одно условие"
-        return
-      }
-      busy.value = true
-      try {
-        await api("/api/mail/tags", {
-          method: "POST",
-          body: {
-            name: tagForm.name,
-            color: tagForm.color,
-            rules: conditions.value.map((row) => ({ field: row.field, op: row.op, value: row.value })),
-          },
-        })
-        const name = tagForm.name
-        tagForm.name = ""
-        conditions.value = [blankCondition()]
-        tab.value = "letters"
-        notice.show("Хештег «" + name + "» создан", { kind: "success" })
-        await load()
-      } catch (err) {
-        tagError.value = err.message || "Хештег не сохранился"
-      } finally {
-        busy.value = false
-      }
-    }
-
-    async function removeTag(tag) {
-      if (!window.confirm("Удалить хештег «" + tag.name + "» и его условия? Письма останутся.")) return
-      busy.value = true
-      tagError.value = ""
-      try {
-        await api("/api/mail/tags/" + tag.id, { method: "DELETE" })
-        if (activeTag.value === tag.id) activeTag.value = 0
-        notice.show("Хештег «" + tag.name + "» удалён", { kind: "success" })
-        await load()
-      } catch (err) {
-        tagError.value = err.message || "Хештег не удалён"
-      } finally {
-        busy.value = false
-      }
-    }
-
-    async function createAccount() {
-      accountError.value = ""
-      busy.value = true
-      try {
-        await api("/api/mail/accounts", { method: "POST", body: { ...account.value } })
-        account.value.password = ""
-        notice.show("Ящик «" + (account.value.username || "") + "» подключён", { kind: "success" })
-        await load()
-      } catch (err) {
-        accountError.value = err.message || "Ящик не подключился"
-      } finally {
-        busy.value = false
-      }
-    }
-
-    async function savePassword(item) {
-      notes[item.id] = ""
-      itemErrors[item.id] = ""
-      const password = passwords[item.id] || ""
-      if (!password) {
-        itemErrors[item.id] = "Введите новый пароль"
-        return
-      }
-      busy.value = true
-      try {
-        await api("/api/mail/accounts/" + item.id, { method: "PATCH", body: { password } })
-        passwords[item.id] = ""
-        notes[item.id] = "Пароль сохранён, забрана первая порция."
-        await load()
-      } catch (err) {
-        itemErrors[item.id] = err.message || "Пароль не сохранился"
-      } finally {
-        busy.value = false
-      }
-    }
-
-    async function test(item) {
-      notes[item.id] = ""
-      itemErrors[item.id] = ""
-      busy.value = true
-      try {
-        const data = await api("/api/mail/accounts/" + item.id + "/test", { method: "POST" })
-        notes[item.id] = data.ok ? "Проверка прошла. " + (data.subject || "") : ""
-        if (!data.ok) itemErrors[item.id] = data.error || "Пароль не подошёл"
-        await load()
-      } catch (err) {
-        itemErrors[item.id] = err.message || "Проверка не удалась"
-      } finally {
-        busy.value = false
-      }
-    }
-
-    async function fetchMail(item) {
-      notes[item.id] = ""
-      itemErrors[item.id] = ""
-      busy.value = true
-      try {
-        const data = await api("/api/mail/accounts/" + item.id + "/fetch", { method: "POST" })
-        if (data.blocked) itemErrors[item.id] = data.error || "Пароль не подошёл"
-        else notes[item.id] = "Забрали " + (data.fetched || 0) + ". " + (data.backfill === "done" ? "Старые письма уже все здесь." : "Следующая порция придёт сама или по кнопке.")
-        await load()
-      } catch (err) {
-        itemErrors[item.id] = err.message || "Порция не забралась"
-      } finally {
-        busy.value = false
-      }
-    }
-
-    async function removeAccount(item) {
-      if (!window.confirm("Удалить ящик «" + item.name + "»? Настройки (сервер, логин, пароль) будут потеряны; сохранённые письма останутся.")) return
-      busy.value = true
-      itemErrors[item.id] = ""
-      try {
-        await api("/api/mail/accounts/" + item.id, { method: "DELETE" })
-        notice.show("Ящик «" + item.name + "» удалён", { kind: "success" })
-        await load()
-      } catch (err) {
-        itemErrors[item.id] = err.message || "Ящик не удалён"
-      } finally {
-        busy.value = false
-      }
     }
 
     async function search() {
@@ -701,13 +335,10 @@ export default {
     })
 
     return {
-      accounts, messages, sync, error, accountError, busy, loading, unread, moreBusy, hasMore, page, everyLabel,
-      query, tab, passwords, notes, itemErrors, account, pageTabs,
-      tags, tagFields, tagOps, conditions, tagError, tagForm, activeTag,
-      notify, notifyModes, notifyMatches, notifyFields, notifyForm, notifyRules, notifyError,
-      when, fromLine, load, loadMore, search, createAccount, savePassword, test, fetchMail, removeAccount,
-      tagStyle, opsFor, blankCondition, syncOp, ruleText, setTag, createTag, removeTag,
-      notifyOpsFor, syncNotifyOp, saveNotify, addNotifyRule, removeNotifyRule,
+      accounts, messages, sync, error, busy, loading, unread, moreBusy, hasMore, everyLabel,
+      query, tab, pageTabs,
+      tags, tagFields, tagOps, tagDefaultColor, notifyMeta, activeTag,
+      when, fromLine, tagStyle, load, loadMore, search, setTag,
       selectedId, rowNeighbors, openMessage, openById, closeDetail, applyReaderChange, removeSelectedRow,
     }
   },
