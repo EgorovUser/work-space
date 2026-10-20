@@ -34,6 +34,7 @@
 import { onMounted, ref } from "vue"
 import { api } from "../api"
 import SkeletonList from "../components/SkeletonList.vue"
+import { useNotice } from "../composables/useNotice"
 import { useWhen } from "../composables/useWhen"
 
 export default {
@@ -48,6 +49,7 @@ export default {
     const loading = ref(true)
     const busy = ref(false)
     const { settings, when } = useWhen()
+    const notice = useNotice()
 
     async function load() {
       loading.value = true
@@ -70,6 +72,7 @@ export default {
       try {
         await api("/api/projects/" + props.project.id + "/notes", { method: "POST", body: { body } })
         draft.value = ""
+        notice.show("Заметка добавлена", { kind: "success" })
         await load()
       } catch (err) {
         error.value = err.message || "Не сохранилось"
@@ -92,6 +95,7 @@ export default {
           body: { body: editBody.value },
         })
         editId.value = 0
+        notice.show("Заметка сохранена", { kind: "success" })
         await load()
       } catch (err) {
         error.value = err.message || "Не сохранилось"
@@ -106,6 +110,7 @@ export default {
       error.value = ""
       try {
         await api("/api/projects/" + props.project.id + "/notes/" + item.id, { method: "DELETE" })
+        notice.show("Заметка удалена", { kind: "success" })
         await load()
       } catch (err) {
         error.value = err.message || "Не удалилось"

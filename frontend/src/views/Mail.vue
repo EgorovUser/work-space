@@ -81,6 +81,7 @@ import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
 import Tabs from "../components/Tabs.vue"
 import SkeletonList from "../components/SkeletonList.vue"
+import { useNotice } from "../composables/useNotice"
 import { useWhen } from "../composables/useWhen"
 
 export default {
@@ -89,6 +90,7 @@ export default {
   setup(props) {
     const route = useRoute()
     const router = useRouter()
+    const notice = useNotice()
     const accounts = ref([])
     const rules = ref([])
     const messages = ref([])
@@ -194,6 +196,7 @@ export default {
         await api("/api/projects/" + props.project.id + "/mail/accounts", { method: "POST", body: { ...account.value } })
         account.value.password = ""
         account.value.name = ""
+        notice.show("Ящик добавлен", { kind: "success" })
         await load()
       } catch (err) {
         accountError.value = err.message || "Не удалось добавить"
@@ -207,6 +210,7 @@ export default {
       busy.value = true
       try {
         await api("/api/projects/" + props.project.id + "/mail/accounts/" + item.id + "/check", { method: "POST" })
+        notice.show("Ящик «" + (item.name || item.username) + "» доступен", { kind: "success" })
         await load()
       } catch (err) {
         error.value = err.message || "Проверка не удалась"
@@ -219,7 +223,11 @@ export default {
       error.value = ""
       busy.value = true
       try {
-        await api("/api/projects/" + props.project.id + "/mail/accounts/" + item.id + "/fetch", { method: "POST" })
+        const data = await api("/api/projects/" + props.project.id + "/mail/accounts/" + item.id + "/fetch", { method: "POST" })
+        notice.show(
+          "Письма забраны" + (data && Number.isFinite(Number(data.fetched)) ? ": " + data.fetched : ""),
+          { kind: "success" },
+        )
         await load()
       } catch (err) {
         error.value = err.message || "Не удалось забрать"
@@ -233,6 +241,7 @@ export default {
       busy.value = true
       try {
         await api("/api/projects/" + props.project.id + "/mail/accounts/" + item.id, { method: "DELETE" })
+        notice.show("Ящик «" + (item.name || item.username) + "» удалён", { kind: "success" })
         await load()
       } catch (err) {
         error.value = err.message || "Не удалось удалить"
@@ -248,6 +257,7 @@ export default {
         await api("/api/projects/" + props.project.id + "/mail/rules", { method: "POST", body: { ...rule.value } })
         rule.value.name = ""
         rule.value.value = ""
+        notice.show("Правило добавлено", { kind: "success" })
         await load()
       } catch (err) {
         ruleError.value = err.message || "Не удалось добавить"
@@ -260,6 +270,7 @@ export default {
       busy.value = true
       try {
         await api("/api/projects/" + props.project.id + "/mail/rules/" + item.id, { method: "DELETE" })
+        notice.show("Правило удалено", { kind: "success" })
         await load()
       } catch (err) {
         error.value = err.message || "Не удалось удалить"

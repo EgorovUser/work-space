@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.models import FileLink, StoredFile
 from app.modules.tasks.models import ChecklistItem, Task, TaskEvent, TaskRef, TaskStatus
-from app.modules.tasks.service._queries import _checks, _events, _tags_by_task
+from app.modules.tasks.service._queries import _checks, _events, _spent_by_task, _tags_by_task
 from app.modules.tasks.service._validators import _progress
 
 
@@ -67,6 +67,10 @@ def _task_brief_from(task: Task, checks: list[ChecklistItem], tags: list[dict]) 
         "position": task.position,
         "checklist_done": sum(1 for item in checks if item.done),
         "checklist_total": len(checks),
+        # Пункты чеклиста прямо в краткой карточке: чекбоксы на доске
+        # отмечаются без открытия задачи (патч R). Список уже загружен
+        # батчем в list_tasks — дополнительных запросов нет.
+        "checklist": [_check_out(row) for row in checks],
         "tags": tags,
         "updated_at": task.updated_at.isoformat(),
     }
@@ -75,7 +79,9 @@ def _task_brief_from(task: Task, checks: list[ChecklistItem], tags: list[dict]) 
 def _task_brief(session: Session, task: Task) -> dict:
     checks = _checks(session, task.id)
     tags = _tags_by_task(session, [task.id]).get(task.id, [])
-    return _task_brief_from(task, checks, tags)
+    data = _task_brief_from(task, checks, tags)
+    data["spent_minutes"] = _spent_by_task(session, task.project_id, [task.id]).get(task.id, 0)
+    return data
 
 
 def _task_full(session: Session, task: Task) -> dict:
@@ -84,7 +90,6 @@ def _task_full(session: Session, task: Task) -> dict:
     data["progress_manual"] = task.progress_manual
     data["created_at"] = task.created_at.isoformat()
     data["closed_at"] = task.closed_at.isoformat() if task.closed_at else None
-    data["checklist"] = [_check_out(row) for row in _checks(session, task.id)]
     data["events"] = [_event_out(row) for row in _events(session, task.id)]
     data["files"] = _files(session, task.id)
     return data

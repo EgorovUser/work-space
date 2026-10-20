@@ -122,11 +122,28 @@ export default {
     }
 
     async function remove(item) {
-      if (!window.confirm("Удалить секрет «" + item.title + "»? Отменить будет нельзя.")) return
+      if (!window.confirm("Удалить секрет «" + item.title + "»?")) return
       const snapshot = items.value.slice()
       items.value = items.value.filter((row) => row.id !== item.id)
       try {
         await api("/api/projects/" + props.project.id + "/secrets/" + item.id, { method: "DELETE" })
+        // Секреты удаляются мягко — «Отменить» достаёт из корзины.
+        notice.show("Секрет «" + item.title + "» удалён в корзину", {
+          kind: "success",
+          timeout: 9000,
+          action: {
+            label: "Отменить",
+            run: async () => {
+              try {
+                await api("/api/trash/secrets/" + item.id + "/restore", { method: "POST" })
+                notice.show("Секрет «" + item.title + "» восстановлен", { kind: "success" })
+                await load()
+              } catch (err) {
+                notice.show("Не удалось восстановить секрет. " + (err.message || "Ошибка"))
+              }
+            },
+          },
+        })
       } catch (err) {
         items.value = snapshot
         notice.show("Не удалось удалить секрет. " + (err.message || "Ошибка"))
@@ -175,9 +192,13 @@ export default {
             secret: form.value.secret,
           },
         })
+        const title = form.value.title
         const keepKind = form.value.kind
         form.value = { title: "", kind: keepKind, username: "", url: "", note: "", secret: "" }
         showSecret.value = false
+        // Прежде форма молча сбрасывалась — было не понять, добавился секрет
+        // или нет. Тост подтверждает, поле готово к следующему секрету.
+        notice.show("Секрет «" + title + "» добавлен", { kind: "success" })
         await load()
       } catch (err) {
         formError.value = err.message || "Не удалось добавить"

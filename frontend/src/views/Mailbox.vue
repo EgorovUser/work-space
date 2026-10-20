@@ -211,6 +211,7 @@ import MailReader from "../components/MailReader.vue"
 import { api } from "../api"
 import { useEvents } from "../composables/useEvents"
 import { neighbors } from "../composables/mailNav"
+import { useNotice } from "../composables/useNotice"
 import { useWhen } from "../composables/useWhen"
 
 const TAB_IDS = new Set(["letters", "tags", "notify", "accounts"])
@@ -220,6 +221,7 @@ export default {
   setup() {
     const route = useRoute()
     const router = useRouter()
+    const notice = useNotice()
     const accounts = ref([])
     const messages = ref([])
     const error = ref("")
@@ -489,9 +491,11 @@ export default {
             rules: conditions.value.map((row) => ({ field: row.field, op: row.op, value: row.value })),
           },
         })
+        const name = tagForm.name
         tagForm.name = ""
         conditions.value = [blankCondition()]
         tab.value = "letters"
+        notice.show("Хештег «" + name + "» создан", { kind: "success" })
         await load()
       } catch (err) {
         tagError.value = err.message || "Хештег не сохранился"
@@ -507,6 +511,7 @@ export default {
       try {
         await api("/api/mail/tags/" + tag.id, { method: "DELETE" })
         if (activeTag.value === tag.id) activeTag.value = 0
+        notice.show("Хештег «" + tag.name + "» удалён", { kind: "success" })
         await load()
       } catch (err) {
         tagError.value = err.message || "Хештег не удалён"
@@ -521,6 +526,7 @@ export default {
       try {
         await api("/api/mail/accounts", { method: "POST", body: { ...account.value } })
         account.value.password = ""
+        notice.show("Ящик «" + (account.value.username || "") + "» подключён", { kind: "success" })
         await load()
       } catch (err) {
         accountError.value = err.message || "Ящик не подключился"
@@ -588,6 +594,7 @@ export default {
       itemErrors[item.id] = ""
       try {
         await api("/api/mail/accounts/" + item.id, { method: "DELETE" })
+        notice.show("Ящик «" + item.name + "» удалён", { kind: "success" })
         await load()
       } catch (err) {
         itemErrors[item.id] = err.message || "Ящик не удалён"

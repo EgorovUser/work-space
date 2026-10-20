@@ -44,6 +44,7 @@ import { useRouter } from "vue-router"
 import AppShell from "../components/AppShell.vue"
 import SkeletonList from "../components/SkeletonList.vue"
 import { api } from "../api"
+import { useNotice } from "../composables/useNotice"
 import { useWhen } from "../composables/useWhen"
 
 // Чистый список проектов. Сводка «что горит» переехала на главную «Сегодня»,
@@ -61,6 +62,7 @@ export default {
     const busy = ref(false)
     const loading = ref(true)
     const { when } = useWhen()
+    const notice = useNotice()
     const router = useRouter()
 
     function stat(value) {
@@ -91,6 +93,7 @@ export default {
           method: "POST",
           body: { name: name.value, description: description.value },
         })
+        notice.show("Проект «" + project.name + "» создан", { kind: "success" })
         router.push("/projects/" + project.id)
       } catch (err) {
         createError.value = err.message || "Не удалось создать"

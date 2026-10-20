@@ -32,6 +32,7 @@ from app.modules.tasks.service._queries import (
     _checks_by_tasks,
     _next_position,
     _pick_status,
+    _spent_by_task,
     _status,
     _tags_by_task,
     _task,
@@ -67,11 +68,16 @@ def list_tasks(session: Session, project_id: int) -> dict:
     task_ids = [row.id for row in rows]
     checks_by_task = _checks_by_tasks(session, task_ids)
     tags_by_task = _tags_by_task(session, task_ids)
+    # Списанное время — одним батч-запросом на всю доску (патч R): бейдж
+    # «⏱ N ч» на карточке и мгновенный пересчёт после быстрого списания часов.
+    spent_by_task = _spent_by_task(session, project_id, task_ids)
     items = []
     for row in rows:
         checks = checks_by_task.get(row.id, [])
         tags = tags_by_task.get(row.id, [])
-        items.append(_task_brief_from(row, checks, tags))
+        item = _task_brief_from(row, checks, tags)
+        item["spent_minutes"] = spent_by_task.get(row.id, 0)
+        items.append(item)
     return {"items": items, "truncated": len(rows) >= limit}
 
 

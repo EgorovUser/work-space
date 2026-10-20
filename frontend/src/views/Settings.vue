@@ -48,6 +48,7 @@ import SettingsForm from "../components/SettingsForm.vue"
 import DbTools from "../components/DbTools.vue"
 import Tabs from "../components/Tabs.vue"
 import { api } from "../api"
+import { useNotice } from "../composables/useNotice"
 import { useSettings } from "../composables/useSettings"
 import { useAuth } from "../composables/useAuth"
 
@@ -152,6 +153,7 @@ export default {
     const tab = ref("core")
     const settings = useSettings()
     const auth = useAuth()
+    const notice = useNotice()
     const router = useRouter()
     const password = reactive({ old: "", new: "" })
     const passwordError = ref("")
@@ -221,6 +223,8 @@ export default {
         password.old = ""
         password.new = ""
         passwordOk.value = true
+        // Тост глобальный — переживёт выход на экран входа.
+        notice.show("Пароль изменён — войдите с новым", { kind: "success" })
         await auth.logout()
         router.push("/login")
       } catch (err) {

@@ -7,6 +7,42 @@
       <input v-model="form.title" class="title-input" type="text" required @change="save" />
       <Tabs v-model="tab" :tabs="pageTabs" />
 
+      <!-- Списание времени — прямо на главной странице задачи (патч R):
+           раньше ради формы приходилось идти на отдельную вкладку.
+           Вводим часы, «Списать» — готово; «Старт таймера» запускает его
+           сразу с этой задачей. -->
+      <section v-show="tab === 'about'" class="card stack tp-time">
+        <div class="row-actions tp-time-head">
+          <h2>Списать время</h2>
+          <span class="muted" title="Все записи по этой задаче">Всего: {{ formatHoursCompact(task.spent_minutes) }}</span>
+        </div>
+        <div class="row-actions">
+          <label class="tight">
+            Часы
+            <input v-model.number="spent.hours" type="number" min="0" step="0.25" inputmode="decimal" required />
+          </label>
+          <label class="tight">
+            Дата
+            <input v-model="spent.day" type="date" />
+          </label>
+          <label class="tight tp-time-note">
+            Заметка
+            <input v-model="spent.note" type="text" />
+          </label>
+        </div>
+        <p v-if="timeError" class="error">{{ timeError }}</p>
+        <div class="row-actions">
+          <button class="btn" type="button" :disabled="busy" @click="logTime">Списать</button>
+          <button class="btn secondary" type="button" :disabled="busy" @click="startOnTask">Старт таймера</button>
+        </div>
+        <p v-if="!timeEntries.length" class="muted">По этой задаче записей пока нет — списанное время появится здесь и в разделе «Учёт времени».</p>
+        <div v-for="item in timeEntries" :key="item.id" class="inbox-row">
+          <div>{{ item.running ? "Идёт" : formatDuration(item.minutes) }}<span v-if="item.note"> · {{ item.note }}</span></div>
+          <span class="when">{{ when(item.started_at) }}</span>
+          <span></span>
+        </div>
+      </section>
+
       <form v-show="tab === 'about'" class="card stack" @submit.prevent="save">
         <label class="tight">
           Описание
@@ -99,35 +135,6 @@
         <p v-if="!(task.checklist && task.checklist.length)" class="muted">Пунктов нет. Пустой чеклист даёт прогресс 0 в автоматическом режиме.</p>
       </section>
 
-      <section v-show="tab === 'time'" class="card stack">
-        <p class="muted">Минуты записываются на эту задачу. Старт запускает таймер сразу с ней.</p>
-        <div class="compact-grid">
-          <label class="tight">
-            Дата
-            <input v-model="spent.day" type="date" />
-          </label>
-          <label class="tight">
-            Минуты
-            <input v-model.number="spent.minutes" type="number" min="1" />
-          </label>
-          <label class="tight">
-            Заметка
-            <input v-model="spent.note" type="text" />
-          </label>
-        </div>
-        <p v-if="timeError" class="error">{{ timeError }}</p>
-        <div class="row-actions">
-          <button class="btn" type="button" :disabled="busy" @click="logTime">Списать</button>
-          <button class="btn secondary" type="button" :disabled="busy" @click="startOnTask">Старт таймера</button>
-        </div>
-        <p v-if="!timeEntries.length" class="muted">По этой задаче записей за окно отчёта нет</p>
-        <div v-for="item in timeEntries" :key="item.id" class="inbox-row">
-          <div>{{ item.running ? "Идёт" : item.minutes + " мин" }}<span v-if="item.note"> · {{ item.note }}</span></div>
-          <span class="when">{{ when(item.started_at) }}</span>
-          <span></span>
-        </div>
-      </section>
-
       <section v-show="tab === 'files'" class="card">
         <p class="muted">Файл создаётся как документ или пример и появляется в их списке. В задаче остаётся только ссылка.</p>
         <form class="composer" @submit.prevent="upload">
@@ -176,6 +183,7 @@ import { api } from "../api"
 import Tabs from "../components/Tabs.vue"
 import { repeatLabel } from "../composables/calendar"
 import { formatWhen } from "../composables/formatDate"
+import { formatDuration, formatHoursCompact, hoursToMinutes } from "../composables/timeFormat"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 
@@ -206,7 +214,6 @@ export default {
       { id: "about", label: "О задаче" },
       { id: "checks", label: "Чеклист" },
       { id: "files", label: "Файлы" },
-      { id: "time", label: "Время" },
       { id: "feed", label: "Лента" },
     ]
     const task = ref(null)
@@ -224,7 +231,8 @@ export default {
     const fileKind = ref("document")
     const timeEntries = ref([])
     const timeError = ref("")
-    const spent = reactive({ day: localDay(), minutes: 30, note: "" })
+    // Ввод в часах (патч R): «1.5» — полтора часа; в API уходят минуты.
+    const spent = reactive({ day: localDay(), hours: 1, note: "" })
     const priorities = ref([])
     const progressMax = ref(100)
     const repeatMax = ref(999)
@@ -333,6 +341,26 @@ export default {
       busy.value = true
       try {
         await api("/api/projects/" + props.project.id + "/tasks/" + route.params.taskId, { method: "DELETE" })
+        const taskId = Number(route.params.taskId)
+        const title = task.value ? task.value.title : "Задача"
+        // Тост глобальный — переживает переход на доску; «Отменить»
+        // возвращает задачу из корзины и открывает её снова.
+        notice.show("Задача «" + title + "» удалена в корзину", {
+          kind: "success",
+          timeout: 9000,
+          action: {
+            label: "Отменить",
+            run: async () => {
+              try {
+                await api("/api/trash/tasks/" + taskId + "/restore", { method: "POST" })
+                notice.show("Задача «" + title + "» восстановлена", { kind: "success" })
+                router.push("/projects/" + props.project.id + "/tasks/" + taskId)
+              } catch (err) {
+                notice.show("Не удалось восстановить задачу. " + (err.message || "Ошибка"))
+              }
+            },
+          },
+        })
         router.push("/projects/" + props.project.id)
       } catch (err) {
         formError.value = err.message || "Не удалилось"
@@ -364,6 +392,7 @@ export default {
         })
         checkTitle.value = ""
         task.value.checklist = (task.value.checklist || []).concat([item])
+        notice.show("Пункт «" + title + "» добавлен", { kind: "success" })
       } catch (err) {
         formError.value = err.message || "Пункт не добавлен"
       } finally {
@@ -394,6 +423,7 @@ export default {
         await api("/api/projects/" + props.project.id + "/tasks/" + route.params.taskId + "/checklist/" + item.id, {
           method: "DELETE",
         })
+        notice.show("Пункт «" + item.title + "» убран", { kind: "success" })
       } catch (err) {
         task.value.checklist = snapshot
         notice.show("Не удалось убрать пункт. " + (err.message || "Ошибка"))
@@ -418,6 +448,7 @@ export default {
         // Сервер возвращает всю задачу; форму не трогаем — там могут быть
         // несохранённые правки.
         refreshTask(saved)
+        notice.show("Комментарий добавлен", { kind: "success" })
       } catch (err) {
         formError.value = err.message || "Комментарий не сохранён"
       } finally {
@@ -439,6 +470,7 @@ export default {
         newTag.value = ""
         tags.value = tags.value.concat(tag)
         form.tag_ids = form.tag_ids.concat(tag.id)
+        notice.show("Метка «" + name + "» создана", { kind: "success" })
       } catch (err) {
         formError.value = err.message || "Метка не создана"
       } finally {
@@ -466,6 +498,7 @@ export default {
         })
         input.value = ""
         task.value.files = (task.value.files || []).concat([ref])
+        notice.show("Файл «" + (ref.original_name || "файл") + "» прикреплён", { kind: "success" })
       } catch (err) {
         formError.value = err.message || "Файл не прикрепился"
       } finally {
@@ -483,6 +516,7 @@ export default {
         await api("/api/projects/" + props.project.id + "/tasks/" + route.params.taskId + "/files/" + file.id + "?kind=" + encodeURIComponent(file.kind || ""), {
           method: "DELETE",
         })
+        notice.show("Ссылка на файл убрана", { kind: "success" })
       } catch (err) {
         task.value.files = snapshot
         formError.value = err.message || "Файл не откреплён"
@@ -503,19 +537,30 @@ export default {
     }
 
     async function logTime() {
+      if (busy.value) return
+      const minutes = hoursToMinutes(spent.hours)
+      if (!minutes) {
+        timeError.value = "Введите часы, например 1.5 — полтора часа"
+        return
+      }
       busy.value = true
       timeError.value = ""
       try {
-        await api("/api/projects/" + props.project.id + "/time/entries", {
+        const entry = await api("/api/projects/" + props.project.id + "/time/entries", {
           method: "POST",
           body: {
             task_id: Number(route.params.taskId),
-            minutes: Number(spent.minutes),
+            minutes,
             day: spent.day,
             note: spent.note,
           },
         })
+        const logged = Number(entry && entry.minutes) || minutes
+        if (task.value) {
+          task.value.spent_minutes = (Number(task.value.spent_minutes) || 0) + logged
+        }
         spent.note = ""
+        notice.show("Списано " + formatHoursCompact(logged) + " · «" + task.value.title + "»", { kind: "success" })
         await loadTime()
       } catch (err) {
         timeError.value = err.message || "Не записалось"
@@ -532,6 +577,7 @@ export default {
           method: "POST",
           body: { task_id: Number(route.params.taskId), note: spent.note },
         })
+        notice.show("Таймер запущен по этой задаче", { kind: "success" })
         await loadTime()
       } catch (err) {
         timeError.value = err.message || "Таймер не запустился"
@@ -546,11 +592,14 @@ export default {
       return "Старый файл"
     }
 
-    watch(() => route.params.taskId, load)
-    watch(tab, (value) => {
-      if (value === "time") loadTime()
+    watch(() => route.params.taskId, () => {
+      load()
+      loadTime()
     })
-    onMounted(load)
+    onMounted(() => {
+      load()
+      loadTime()
+    })
     return {
       task,
       statuses,
@@ -590,6 +639,8 @@ export default {
       kindName,
       logTime,
       startOnTask,
+      formatDuration,
+      formatHoursCompact,
     }
   },
 }

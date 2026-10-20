@@ -13,21 +13,13 @@
           <ActionMenu :actions="columnActions(status)" @choose="onColumn($event, status)" />
         </header>
         <div class="task-list" :data-status="status.id">
-          <article v-for="task in tasksOf(status.id)" :key="task.id" class="task-card" :data-id="task.id">
-            <div class="task-card-top">
-              <span class="drag-handle" title="Перетащить">⋮⋮</span>
-              <router-link class="task-title" :to="'/projects/' + project.id + '/tasks/' + task.id">{{ task.title }}</router-link>
-              <ActionMenu :actions="cardActions" @choose="onCard($event, task)" />
-            </div>
-            <div class="task-meta">
-              <span v-if="task.repeat_kind" class="repeat-mark" :title="repeatLabel(task.repeat_kind, task.repeat_interval)">↻</span>
-              <span v-if="priorityLabel(task)" class="pill">{{ priorityLabel(task) }}</span>
-              <span v-if="task.deadline" :class="{ 'bad-text': late(task) }">{{ when(task.deadline) }}</span>
-              <span v-if="task.checklist_total">{{ task.checklist_done }}/{{ task.checklist_total }}</span>
-              <span v-if="task.tags.length">{{ task.tags.map((tag) => tag.name).join(", ") }}</span>
-            </div>
-            <div class="progress" :title="task.progress + ''"><span :style="{ width: bar(task) }" /></div>
-          </article>
+          <TaskCard
+            v-for="task in tasksOf(status.id)"
+            :key="task.id"
+            :task="task"
+            :project="project"
+            @menu="onCard($event, task)"
+          />
         </div>
         <form class="composer" @submit.prevent="create(status)">
           <input v-model="drafts[status.id]" type="text" :placeholder="composerPlaceholder" :title="composerHint" />
@@ -51,15 +43,15 @@ import Sortable from "sortablejs"
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import ActionMenu from "./ActionMenu.vue"
+import TaskCard from "./TaskCard.vue"
 import { api } from "../api"
-import { repeatLabel } from "../composables/calendar"
 import { defaultDeadlineISO } from "../composables/deadlineDefault"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 import { applyTaskOrders } from "../composables/taskOrder"
 
 export default {
-  components: { ActionMenu },
+  components: { ActionMenu, TaskCard },
   props: { project: { type: Object, required: true } },
   setup(props) {
     const statuses = ref([])
@@ -72,35 +64,16 @@ export default {
     const busy = ref(false)
     const loading = ref(true)
     const root = ref(null)
-    const { settings, when } = useWhen()
+    const { settings } = useWhen()
     const notice = useNotice()
     const router = useRouter()
     const sortables = []
-    const cardActions = [
-      { id: "open", label: "Открыть" },
-      { id: "delete", label: "Удалить", danger: true },
-    ]
 
     function tasksOf(id) {
       return tasks.value
         .filter((task) => task.status_id === id)
         .slice()
         .sort((a, b) => a.position - b.position || a.id - b.id)
-    }
-
-    function priorities() {
-      const raw = settings.get("tasks", "priorities")
-      return Array.isArray(raw) ? raw : []
-    }
-
-    function priorityLabel(task) {
-      const found = priorities().find((item) => item && item.id === task.priority)
-      return found ? found.label : ""
-    }
-
-    function late(task) {
-      if (!task.deadline) return false
-      return new Date(task.deadline).getTime() < Date.now()
     }
 
     // Дефолтный срок новой задачи: сегодня + N дней (tasks.deadlines.default_days,
@@ -116,12 +89,6 @@ export default {
         settings.get("tasks", "deadlines.default_days"),
         settings.get("core", "ui.timezone")
       )
-    }
-
-    function bar(task) {
-      const max = Number(settings.get("tasks", "progress.max")) || 100
-      const width = Math.max(0, Math.min(100, (Number(task.progress) / max) * 100))
-      return width + "%"
     }
 
     function columnActions(status) {
@@ -396,6 +363,7 @@ export default {
           body: { title, status_id: status.id, deadline: newTaskDeadline() },
         })
         drafts[status.id] = ""
+        notice.show("Задача «" + title + "» создана", { kind: "success" })
         await load()
       } catch (err) {
         notice.show("Не удалось создать задачу. " + (err.message || "Ошибка"))
@@ -415,6 +383,7 @@ export default {
         })
         columnName.value = ""
         columnClosed.value = false
+        notice.show("Колонка «" + name + "» добавлена", { kind: "success" })
         await load()
       } catch (err) {
         notice.show("Колонка не создана. " + (err.message || "Ошибка"))
@@ -458,11 +427,29 @@ export default {
     }
 
     async function removeTask(task) {
-      if (!window.confirm("Удалить задачу «" + task.title + "»? Отменить будет нельзя.")) return
+      if (!window.confirm("Удалить задачу «" + task.title + "»?")) return
       const snapshot = tasks.value.map((item) => ({ ...item }))
       tasks.value = tasks.value.filter((item) => item.id !== task.id)
       try {
         await api("/api/projects/" + props.project.id + "/tasks/" + task.id, { method: "DELETE" })
+        // Удаление мягкое — задача лежит в корзине, поэтому тост несёт
+        // «Отменить»: восстановление возвращает карточку на доску.
+        notice.show("Задача «" + task.title + "» удалена в корзину", {
+          kind: "success",
+          timeout: 9000,
+          action: {
+            label: "Отменить",
+            run: async () => {
+              try {
+                await api("/api/trash/tasks/" + task.id + "/restore", { method: "POST" })
+                notice.show("Задача «" + task.title + "» восстановлена", { kind: "success" })
+                await load()
+              } catch (err) {
+                notice.show("Не удалось восстановить задачу. " + (err.message || "Ошибка"))
+              }
+            },
+          },
+        })
       } catch (err) {
         tasks.value = snapshot
         notice.show("Не удалось удалить карточку. " + (err.message || "Ошибка"))
@@ -475,6 +462,7 @@ export default {
       statuses.value = statuses.value.filter((item) => item.id !== status.id)
       try {
         await api("/api/projects/" + props.project.id + "/task-statuses/" + status.id, { method: "DELETE" })
+        notice.show("Колонка «" + status.name + "» удалена", { kind: "success" })
       } catch (err) {
         statuses.value = snapshot
         notice.show("Не удалось удалить колонку. " + (err.message || "Ошибка"))
@@ -511,8 +499,8 @@ export default {
       destroySort()
     })
     return {
-      statuses, drafts, columnName, columnClosed, error, unavailable, busy, loading, root, cardActions,
-      tasksOf, priorityLabel, repeatLabel, when, late, bar, columnActions, create, addColumn, rename, onCard, onColumn,
+      statuses, drafts, columnName, columnClosed, error, unavailable, busy, loading, root,
+      tasksOf, columnActions, create, addColumn, rename, onCard, onColumn,
       composerPlaceholder, composerHint,
     }
   },

@@ -47,6 +47,7 @@
 <script>
 import { computed, reactive, ref, watch } from "vue"
 import { api } from "../api"
+import { useNotice } from "../composables/useNotice"
 
 export default {
   props: {
@@ -59,6 +60,7 @@ export default {
     const drafts = reactive({})
     const errors = reactive({})
     const busy = ref(false)
+    const notice = useNotice()
 
     const visible = computed(() =>
       props.items.filter((item) => item.allowed_scopes.includes(props.scope) && item.values[props.scope])
@@ -131,6 +133,7 @@ export default {
           body: bodyOf(item, value),
         })
         emit("changed")
+        notice.show("Настройка «" + item.label + "» сохранена", { kind: "success" })
       } catch (error) {
         errors[key] = error.message || "Не сохранилось"
       } finally {
@@ -148,6 +151,7 @@ export default {
           body: bodyOf(item),
         })
         emit("changed")
+        notice.show("Настройка «" + item.label + "» сброшена к значению по умолчанию", { kind: "success" })
       } catch (error) {
         errors[key] = error.message || "Не сбросилось"
       } finally {

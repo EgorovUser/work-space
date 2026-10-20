@@ -395,10 +395,12 @@ export default {
       formError.value = ""
       busy.value = true
       try {
+        const previous = record.value.archived
         apply(await api("/api/projects/" + props.project.id + "/secrets/" + route.params.secretId, {
           method: "PATCH",
-          body: { archived: !record.value.archived },
+          body: { archived: !previous },
         }))
+        notice.show(previous ? "Секрет возвращён из архива" : "Секрет в архиве", { kind: "success" })
       } catch (err) {
         formError.value = err.message || "Не получилось"
       } finally {
@@ -411,6 +413,26 @@ export default {
       busy.value = true
       try {
         await api("/api/projects/" + props.project.id + "/secrets/" + route.params.secretId, { method: "DELETE" })
+        const secretId = Number(route.params.secretId)
+        const title = record.value ? record.value.title : "Секрет"
+        // Удаление мягкое: «Отменить» достаёт секрет из корзины и открывает
+        // его страницу снова. История значений сохраняется до purge.
+        notice.show("Секрет «" + title + "» удалён в корзину", {
+          kind: "success",
+          timeout: 9000,
+          action: {
+            label: "Отменить",
+            run: async () => {
+              try {
+                await api("/api/trash/secrets/" + secretId + "/restore", { method: "POST" })
+                notice.show("Секрет «" + title + "» восстановлен", { kind: "success" })
+                router.push("/projects/" + props.project.id + "/secrets/" + secretId)
+              } catch (err) {
+                notice.show("Не удалось восстановить секрет. " + (err.message || "Ошибка"))
+              }
+            },
+          },
+        })
         router.push("/projects/" + props.project.id + "/secrets")
       } catch (err) {
         formError.value = err.message || "Не удалось удалить"

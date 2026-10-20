@@ -122,6 +122,7 @@ export default {
         note.value = ""
         file.value = null
         if (fileInput.value) fileInput.value.value = ""
+        notice.show("Пример загружен", { kind: "success" })
         await load()
       } catch (err) {
         formError.value = err.message || "Не удалось добавить"
@@ -136,6 +137,9 @@ export default {
       items.value = items.value.filter((row) => row.id !== item.id)
       try {
         await api("/api/projects/" + props.project.id + "/examples/" + item.id, { method: "DELETE" })
+        // Примеры удаляются окончательно (в корзину не попадают) — просто
+        // подтверждаем действие, без кнопки отката.
+        notice.show("Пример «" + item.title + "» удалён", { kind: "success" })
       } catch (err) {
         items.value = snapshot
         notice.show("Не удалось удалить пример. " + (err.message || "Ошибка"))

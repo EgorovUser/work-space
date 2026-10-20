@@ -173,6 +173,7 @@ export default {
       items.value.forEach((item) => { item.read = true })
       try {
         await api("/api/notifications/read-all", { method: "POST" })
+        notice.show("Все уведомления отмечены прочитанными", { kind: "success" })
       } catch (err) {
         items.value.forEach((item, index) => { item.read = snapshot[index] })
         notice.show("Не удалось отметить уведомления. " + (err.message || "Ошибка"))

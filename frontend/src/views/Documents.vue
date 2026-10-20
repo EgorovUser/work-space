@@ -197,6 +197,23 @@ export default {
       items.value = items.value.filter((row) => row.id !== item.id)
       try {
         await api("/api/projects/" + props.project.id + "/documents/" + item.id, { method: "DELETE" })
+        // Документы удаляются мягко — «Отменить» достаёт его из корзины.
+        notice.show("Документ «" + item.title + "» удалён в корзину", {
+          kind: "success",
+          timeout: 9000,
+          action: {
+            label: "Отменить",
+            run: async () => {
+              try {
+                await api("/api/trash/documents/" + item.id + "/restore", { method: "POST" })
+                notice.show("Документ «" + item.title + "» восстановлен", { kind: "success" })
+                await load()
+              } catch (err) {
+                notice.show("Не удалось восстановить документ. " + (err.message || "Ошибка"))
+              }
+            },
+          },
+        })
       } catch (err) {
         items.value = snapshot
         notice.show("Не удалось удалить документ. " + (err.message || "Ошибка"))

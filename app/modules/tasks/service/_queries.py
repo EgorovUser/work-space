@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.tasks.models import ChecklistItem, Tag, Task, TaskEvent, TaskStatus, TaskTag
+from app.modules.timetracking.models import TimeEntry
 
 
 def _statuses(session: Session, project_id: int) -> list[TaskStatus]:
@@ -102,6 +103,27 @@ def _tags_by_task(session: Session, task_ids: list[int]) -> dict[int, list[dict]
     ).all()
     for task_id, tag in rows:
         result.setdefault(task_id, []).append(_tag_out(tag))
+    return result
+
+
+def _spent_by_task(session: Session, project_id: int, task_ids: list[int]) -> dict[int, int]:
+    """Списанные минуты по задачам — для бейджа на карточке доски и страницы задачи.
+
+    Считаем все записи проекта, а не только текущего пользователя: список
+    «Учёта времени» показывает записи всех, и бейдж не должен спорить с
+    отчётом. Идущий таймер вклада не вносит (minutes у открытой записи 0).
+    """
+    result: dict[int, int] = {task_id: 0 for task_id in task_ids}
+    if not task_ids:
+        return result
+    rows = session.execute(
+        select(TimeEntry.task_id, func.sum(TimeEntry.minutes)).where(
+            TimeEntry.project_id == project_id,
+            TimeEntry.task_id.in_(task_ids),
+        ).group_by(TimeEntry.task_id)
+    ).all()
+    for task_id, total in rows:
+        result[task_id] = int(total or 0)
     return result
 
 

@@ -179,6 +179,7 @@ export default {
           method: "PATCH",
           body: { archived: !previous },
         }))
+        notice.show(previous ? "Документ возвращён из архива" : "Документ в архиве", { kind: "success" })
       } catch (err) {
         doc.value = { ...doc.value, archived: previous }
         notice.show("Не удалось изменить документ. " + (err.message || "Ошибка"))
@@ -190,6 +191,26 @@ export default {
       busy.value = true
       try {
         await api("/api/projects/" + props.project.id + "/documents/" + route.params.documentId, { method: "DELETE" })
+        const documentId = Number(route.params.documentId)
+        const title = doc.value ? doc.value.title : "Документ"
+        // Тост глобальный — переживает уход со страницы; удаление мягкое,
+        // «Отменить» достаёт документ из корзины и открывает его снова.
+        notice.show("Документ «" + title + "» удалён в корзину", {
+          kind: "success",
+          timeout: 9000,
+          action: {
+            label: "Отменить",
+            run: async () => {
+              try {
+                await api("/api/trash/documents/" + documentId + "/restore", { method: "POST" })
+                notice.show("Документ «" + title + "» восстановлен", { kind: "success" })
+                router.push("/projects/" + props.project.id + "/documents/" + documentId)
+              } catch (err) {
+                notice.show("Не удалось восстановить документ. " + (err.message || "Ошибка"))
+              }
+            },
+          },
+        })
         router.push("/projects/" + props.project.id + "/documents")
       } catch (err) {
         formError.value = err.message || "Не удалось удалить"
@@ -233,6 +254,7 @@ export default {
           "/api/projects/" + props.project.id + "/documents/" + route.params.documentId + "/versions/" + item.id,
           { method: "DELETE" },
         )
+        notice.show("Версия " + item.version_number + " удалена", { kind: "success" })
         await load()
       } catch (err) {
         versionError.value = err.message || "Версия не удалилась"

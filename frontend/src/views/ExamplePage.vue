@@ -174,6 +174,7 @@ export default {
           method: "PATCH",
           body: { archived: !previous },
         }))
+        notice.show(previous ? "Пример возвращён из архива" : "Пример в архиве", { kind: "success" })
       } catch (err) {
         example.value = { ...example.value, archived: previous }
         notice.show("Не удалось изменить пример. " + (err.message || "Ошибка"))
@@ -185,6 +186,9 @@ export default {
       busy.value = true
       try {
         await api("/api/projects/" + props.project.id + "/examples/" + route.params.exampleId, { method: "DELETE" })
+        const title = example.value ? example.value.title : "Пример"
+        // Примеры удаляются окончательно — корзины для них нет.
+        notice.show("Пример «" + title + "» удалён", { kind: "success" })
         router.push("/projects/" + props.project.id + "/examples")
       } catch (err) {
         formError.value = err.message || "Не удалось удалить"
@@ -238,6 +242,7 @@ export default {
         }))
         file.value = null
         if (fileInput.value) fileInput.value.value = ""
+        notice.show("Файл прикреплён к примеру", { kind: "success" })
       } catch (err) {
         fileError.value = err.message || "Файл не прикрепился"
       } finally {
@@ -254,6 +259,7 @@ export default {
           "/api/projects/" + props.project.id + "/examples/" + route.params.exampleId + "/files/" + item.id,
           { method: "DELETE" },
         )
+        notice.show("Файл убран из примера", { kind: "success" })
         await load()
       } catch (err) {
         fileError.value = err.message || "Файл не убрался"

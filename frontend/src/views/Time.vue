@@ -41,7 +41,7 @@
             <option value="90">Квартал</option>
           </select>
         </label>
-        <p class="muted">Сегодня {{ report ? minutesLabel(report.today_minutes) : "—" }}, неделя {{ report ? minutesLabel(report.week_minutes) : "—" }}</p>
+        <p class="muted">Сегодня {{ report ? formatDuration(report.today_minutes) : "—" }}, неделя {{ report ? formatDuration(report.week_minutes) : "—" }}</p>
       </div>
       <div v-if="report && report.chart" class="chart-box">
         <TimeChart :chart="report.chart" />
@@ -49,7 +49,7 @@
       <p v-if="report && isEmptyPeriod" class="muted">За выбранный период записей нет. Запустите таймер на вкладке «Таймер» или добавьте запись вручную на вкладке «Записи».</p>
       <ul v-if="report && report.by_task.length" class="plain-list">
         <li v-for="item in report.by_task" :key="item.task_id || 'none'">
-          {{ item.title }} — {{ minutesLabel(item.minutes) }}
+          {{ item.title }} — {{ formatDuration(item.minutes) }}
         </li>
       </ul>
     </section>
@@ -62,8 +62,8 @@
         <input v-model="manual.day" type="date" required />
       </label>
       <label>
-        Минуты
-        <input v-model.number="manual.minutes" type="number" min="1" required />
+        Часы
+        <input v-model.number="manual.hours" type="number" min="0" step="0.25" inputmode="decimal" required />
       </label>
       <label>
         Задача
@@ -92,7 +92,7 @@
       <article v-for="item in entries" :key="item.id" class="card">
         <div class="status-row">
           <div>
-            <strong>{{ item.running ? "Идёт" : minutesLabel(item.minutes) }}</strong>
+            <strong>{{ item.running ? "Идёт" : formatDuration(item.minutes) }}</strong>
             <div class="muted">
               {{ when(item.started_at) }}<span v-if="item.ended_at"> — {{ when(item.ended_at) }}</span>
             </div>
@@ -106,8 +106,8 @@
         </div>
         <form v-if="edit && edit.id === item.id" class="stack" @submit.prevent="saveEdit">
           <label v-if="!item.running">
-            Минуты
-            <input v-model.number="edit.minutes" type="number" min="0" />
+            Часы
+            <input v-model.number="edit.hours" type="number" min="0" step="0.25" inputmode="decimal" />
           </label>
           <label>
             Заметка
@@ -138,6 +138,7 @@ import TimeChart from "../components/TimeChart.vue"
 import SkeletonList from "../components/SkeletonList.vue"
 import Tabs from "../components/Tabs.vue"
 import { api } from "../api"
+import { formatDuration, hoursToMinutes } from "../composables/timeFormat"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 
@@ -161,7 +162,8 @@ export default {
     const tick = ref(0)
     const { settings, when, localDay } = useWhen()
     const draft = ref({ note: "", task_id: "" })
-    const manual = ref({ day: localDay(), minutes: 30, note: "", task_id: "" })
+    // Ручная запись вводится в часах (патч R): «1.5» превращается в 90 минут.
+    const manual = ref({ day: localDay(), hours: 1, note: "", task_id: "" })
     const edit = ref(null)
     const notice = useNotice()
     const tab = ref("timer")
@@ -180,15 +182,6 @@ export default {
       const hasHours = rep.chart && Array.isArray(rep.chart.hours) && rep.chart.hours.some((value) => Number(value) > 0)
       return !hasHours && !(rep.by_task && rep.by_task.length)
     })
-
-    function minutesLabel(value) {
-      const total = Math.max(0, Number(value) || 0)
-      const hours = Math.floor(total / 60)
-      const mins = total % 60
-      if (!hours) return mins + " мин"
-      if (!mins) return hours + " ч"
-      return hours + " ч " + mins + " мин"
-    }
 
     function elapsed(started) {
       tick.value
@@ -254,6 +247,7 @@ export default {
           method: "POST",
           body: { note, task_id: taskBody(draft.value.task_id) },
         })
+        notice.show("Таймер запущен" + (task ? " · " + task.title : ""), { kind: "success" })
       } catch (err) {
         running.value = previous
         draft.value.note = note
@@ -271,7 +265,8 @@ export default {
       const previous = running.value
       running.value = null
       try {
-        await api("/api/projects/" + props.project.id + "/time/stop", { method: "POST" })
+        const stopped = await api("/api/projects/" + props.project.id + "/time/stop", { method: "POST" })
+        notice.show("Таймер остановлен · " + formatDuration(stopped.minutes), { kind: "success" })
       } catch (err) {
         running.value = previous
         notice.show("Не удалось остановить таймер. " + (err.message || "Ошибка"))
@@ -286,18 +281,25 @@ export default {
 
     async function addManual() {
       formError.value = ""
+      const minutes = hoursToMinutes(manual.value.hours)
+      if (!minutes) {
+        formError.value = "Введите часы, например 1.5 — полтора часа"
+        return
+      }
       busy.value = true
       try {
-        await api("/api/projects/" + props.project.id + "/time/entries", {
+        const entry = await api("/api/projects/" + props.project.id + "/time/entries", {
           method: "POST",
           body: {
             day: manual.value.day,
-            minutes: manual.value.minutes,
+            minutes,
             note: manual.value.note,
             task_id: taskBody(manual.value.task_id),
           },
         })
         manual.value.note = ""
+        const logged = Number(entry && entry.minutes) || minutes
+        notice.show("Запись добавлена · " + formatDuration(logged), { kind: "success" })
         await load()
       } catch (err) {
         formError.value = err.message || "Не записалось"
@@ -310,7 +312,8 @@ export default {
       editError.value = ""
       edit.value = {
         id: item.id,
-        minutes: item.minutes,
+        // Правка тоже в часах: минуты записи возвращаются в поле дробью.
+        hours: Math.round((Number(item.minutes) / 60) * 100) / 100,
         note: item.note,
         task_id: item.task_id ? String(item.task_id) : "",
         running: item.running,
@@ -319,15 +322,23 @@ export default {
 
     async function saveEdit() {
       editError.value = ""
-      busy.value = true
       const body = { note: edit.value.note, task_id: taskBody(edit.value.task_id) }
-      if (!edit.value.running) body.minutes = edit.value.minutes
+      if (!edit.value.running) {
+        const minutes = hoursToMinutes(edit.value.hours)
+        if (!minutes) {
+          editError.value = "Введите часы, например 1.5 — полтора часа"
+          return
+        }
+        body.minutes = minutes
+      }
+      busy.value = true
       try {
         await api("/api/projects/" + props.project.id + "/time/entries/" + edit.value.id, {
           method: "PATCH",
           body,
         })
         edit.value = null
+        notice.show("Запись сохранена", { kind: "success" })
         await load()
       } catch (err) {
         editError.value = err.message || "Не сохранилось"
@@ -342,6 +353,7 @@ export default {
       error.value = ""
       try {
         await api("/api/projects/" + props.project.id + "/time/entries/" + item.id, { method: "DELETE" })
+        notice.show("Запись " + (item.running ? "таймера" : formatDuration(item.minutes)) + " удалена", { kind: "success" })
         await load()
       } catch (err) {
         error.value = err.message || "Не удалось удалить"
@@ -366,7 +378,7 @@ export default {
     return {
       running, elsewhere, entries, report, tasks, error, timerError, formError, editError,
       loading, busy, draft, manual, edit, tab, days, pageTabs, isEmptyPeriod,
-      when, minutesLabel, elapsed, start, stop, addManual, beginEdit, saveEdit, remove,
+      when, formatDuration, elapsed, start, stop, addManual, beginEdit, saveEdit, remove,
     }
   },
 }
