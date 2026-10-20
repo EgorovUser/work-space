@@ -115,12 +115,16 @@ SOURCES = (
 )
 
 
-def _match_expression(query: str) -> str | None:
+def match_expression(query: str) -> str | None:
     """Строит безопасное FTS5-выражение из пользовательского ввода.
 
     Каждое слово оборачивается в кавычки (внутренние удваиваются) и получает
     префиксную звёздочку: «проект» найдёт и «проекты». Кавычки гарантируют,
     что управляющий синтаксис FTS5 (AND/OR/скобки) в запросе не сработает.
+
+    Публичное имя (патч AF): выражение нужно не только общему поиску, но и
+    выбору задачи для помодоро — модуль tasks зовёт тот же конструктор,
+    чтобы правила совпадения не разъехались по двум копиям.
     """
     terms = [t for t in re.split(r"\s+", (query or "").strip()) if t][:8]
     if not terms:
@@ -318,7 +322,7 @@ def search(q: str = "", limit: int = 5, types: str = "", user: User = Depends(re
     types — список источников через запятую (tasks,mail,...): фильтр
     командной палитры. Пустая строка — все источники.
     """
-    match = _match_expression(q)
+    match = match_expression(q)
     wanted = {part.strip() for part in types.split(",") if part.strip()}
     known = {spec["id"] for spec in SOURCES}
     wanted &= known

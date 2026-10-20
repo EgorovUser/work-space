@@ -17,7 +17,8 @@
 - ``tags.py``        — метки задач;
 - ``board.py``       — задачи: батчевый список доски, CRUD, порядок;
 - ``content.py``     — чеклист, комментарии, вложения;
-- ``providers.py``   — карточка/инбокс/дашборд/поиск + джоба дедлайнов.
+- ``providers.py``   — карточка/инбокс/дашборд/поиск + джоба дедлайнов;
+- ``search.py``      — поиск открытых задач для выбора в помодоро.
 """
 
 from app.modules.tasks.service.board import (
@@ -45,6 +46,7 @@ from app.modules.tasks.service.providers import (
     inbox_provider,
     search_provider,
 )
+from app.modules.tasks.service.search import clamp_limit, search_tasks
 from app.modules.tasks.service.statuses import (
     backfill_statuses,
     create_status,
@@ -82,7 +84,9 @@ __all__ = [
     "order_checks",
     "order_statuses",
     "order_tasks",
+    "clamp_limit",
     "search_provider",
+    "search_tasks",
     "seed_project",
     "seed_project_id",
     "update_check",

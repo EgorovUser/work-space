@@ -74,13 +74,18 @@
               <input v-model="autoBreak" type="checkbox" />
               <span>перерыв стартует сам</span>
             </label>
-            <div class="row-actions">
-              <select v-model="pomoTaskId" class="pomo-task">
-                <option value="">Без задачи (просто таймер)</option>
-                <option v-for="item in pomoTasks" :key="item.id" :value="String(item.id)">
-                  {{ item.title }} · {{ item.project_name }}
-                </option>
-              </select>
+            <div class="row-actions pomo-pick">
+              <TaskPicker v-if="!pomoTask" @select="pomoTask = $event" />
+              <span v-else class="pomo-task-chip" :title="pomoTask.title + ' · ' + pomoTask.project_name">
+                <strong>{{ pomoTask.title }}</strong>
+                <span class="muted">{{ pomoTask.project_name }}</span>
+                <button
+                  class="text-btn pomo-task-clear"
+                  type="button"
+                  title="Сбросить: фокус без задачи"
+                  @click="pomoTask = null"
+                >✕</button>
+              </span>
               <button class="btn" type="button" @click="startPomo()">Старт</button>
             </div>
           </template>
@@ -157,6 +162,7 @@
 import { computed, onMounted, ref, watch } from "vue"
 import AppShell from "../components/AppShell.vue"
 import SkeletonList from "../components/SkeletonList.vue"
+import TaskPicker from "../components/TaskPicker.vue"
 import { api } from "../api"
 import { usePomodoro } from "../composables/usePomodoro"
 import { useWhen } from "../composables/useWhen"
@@ -174,7 +180,7 @@ const PRIORITIES = {
 }
 
 export default {
-  components: { AppShell, SkeletonList },
+  components: { AppShell, SkeletonList, TaskPicker },
   setup() {
     const projects = ref([])
     const tasks = ref([])
@@ -193,9 +199,10 @@ export default {
     const overdue = computed(() => tasks.value.filter((item) => item.overdue))
     const upcoming = computed(() => tasks.value.filter((item) => !item.overdue))
 
-    // Задачи для помодоро: всё со сроком, что уже показано на экране.
-    const pomoTasks = computed(() => tasks.value.slice(0, 30))
-    const pomoTaskId = ref("")
+    // Патч AF: задача для помодоро выбирается живым поиском по всем открытым
+    // задачам (TaskPicker + /api/tasks/search) — раньше список ограничивался
+    // тридцатью задачами со сроками со сводки дня.
+    const pomoTask = ref(null)
     const workMinutes = ref(pomo.state.settings.workMinutes)
     const breakMinutes = ref(pomo.state.settings.breakMinutes)
     const autoBreak = ref(pomo.state.settings.autoBreak)
@@ -205,8 +212,7 @@ export default {
     watch(autoBreak, (value) => pomo.updateSettings({ autoBreak: value }))
 
     function startPomo() {
-      const chosen = pomoTasks.value.find((item) => String(item.id) === pomoTaskId.value)
-      pomo.start(chosen || null)
+      pomo.start(pomoTask.value)
     }
 
     function priorityLabel(value) {
@@ -269,7 +275,7 @@ export default {
       projects, overdue, upcoming, letters, events, notifications, sections,
       error, unavailable, loading, when, todayLabel, load,
       moreTasks, moreBusy, loadMoreTasks,
-      pomo, pomoTasks, pomoTaskId, workMinutes, breakMinutes, autoBreak, startPomo,
+      pomo, pomoTask, workMinutes, breakMinutes, autoBreak, startPomo,
       priorityLabel, priorityClass,
     }
   },

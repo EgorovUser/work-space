@@ -112,6 +112,21 @@ class TagIn(BaseModel):
     name: str
 
 
+@router.get("/api/tasks/search")
+def picker_search(
+    q: str = "",
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    """Открытые задачи всех проектов по запросу — выбор задачи для помодоро.
+
+    Живой FTS5-поиск с префиксными словами (регистр не важен): закрытые,
+    удалённые в корзину и задачи архивных проектов в выдачу не попадают.
+    """
+    return {"items": service.search_tasks(db, q, service.clamp_limit(limit))}
+
+
 @router.get("/api/projects/{project_id}/task-statuses")
 def list_statuses(project: Project = Depends(require_project), db: Session = Depends(get_db)) -> dict:
     return {"items": service.list_statuses(db, project.id)}

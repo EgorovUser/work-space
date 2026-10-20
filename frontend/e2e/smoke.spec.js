@@ -157,3 +157,25 @@ test("помодоро на «Сегодня»: старт показывает 
   await page.getByRole("button", { name: "Стоп", exact: true }).click()
   await expect(page.locator(".pomo-chip")).toHaveCount(0)
 })
+
+test("помодоро: задача для фокуса выбирается поиском", async ({ page }) => {
+  const api = await apiLogin()
+  const stamp = Date.now()
+  const project = await (await api.post("/api/projects", { data: { name: "Пикер " + stamp } })).json()
+  await api.post(`/api/projects/${project.id}/tasks`, { data: { title: "Задача уникум" + stamp } })
+
+  await login(page)
+  // Пикер вместо селекта: печатаем — выпадают открытые задачи всех проектов.
+  await page.getByPlaceholder("Задача для фокуса: поиск…").fill("уникум" + stamp)
+  const drop = page.locator(".task-picker-drop")
+  await expect(drop).toBeVisible()
+  const item = drop.locator(".task-picker-item", { hasText: "Задача уникум" + stamp })
+  await expect(item).toBeVisible()
+  await item.click()
+  // Выбранная задача — чипом рядом со «Старт»; время после фокуса уйдёт ей.
+  await expect(page.locator(".pomo-task-chip")).toContainText("Задача уникум" + stamp)
+  await page.getByRole("button", { name: "Старт", exact: true }).click()
+  await expect(page.locator(".pomo-task-chip", { hasText: "Задача уникум" + stamp })).toBeHidden()
+  await expect(page.getByText(/запишется в «Время»/)).toBeVisible()
+  await page.getByRole("button", { name: "Стоп", exact: true }).click()
+})
