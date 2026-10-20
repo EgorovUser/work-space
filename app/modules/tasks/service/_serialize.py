@@ -60,6 +60,9 @@ def _task_brief_from(task: Task, checks: list[ChecklistItem], tags: list[dict]) 
         "priority": task.priority,
         "progress": _progress(task, checks),
         "progress_mode": task.progress_mode,
+        # Ручное значение — в краткой карточке тоже (патч AK): поле ввода
+        # на доске инициализируется им, без захода в задачу.
+        "progress_manual": task.progress_manual,
         "deadline": task.deadline.isoformat() if task.deadline else None,
         "repeat_kind": task.repeat_kind or "",
         "repeat_interval": task.repeat_interval or 1,

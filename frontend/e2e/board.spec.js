@@ -106,6 +106,33 @@ test("часы списываются с карточки и копятся в �
   expect(mine.spent_minutes).toBe(120)
 })
 
+test("ручной прогресс вводится числом прямо на карточке", async ({ page }) => {
+  const api = await apiLogin()
+  const project = await makeProject(api, "Доска-прогресс")
+  const task = await makeTask(api, project.id, "Ручной прогресс с карточки")
+  // Ручной режим включаем через API — тестируем поле, а не форму «О задаче».
+  const switched = await api.patch(`/api/projects/${project.id}/tasks/${task.id}`, {
+    data: { progress_mode: "manual", progress_manual: 10 },
+  })
+  expect(switched.ok()).toBeTruthy()
+
+  await login(page)
+  await page.goto(`/projects/${project.id}`)
+  const card = page.locator(".task-card", { hasText: "Ручной прогресс с карточки" })
+  await expect(card.locator("input.tc-progress")).toBeVisible()
+  await expect(card.locator("input.tc-progress")).toHaveValue("10")
+
+  // 40 + Enter: тост, полоска и значение живые.
+  await card.locator("input.tc-progress").fill("40")
+  await card.locator("input.tc-progress").press("Enter")
+  await expect(page.locator(".toast.success")).toContainText("Прогресс 40")
+
+  // Значение доехало до сервера: после перезагрузки поле то же.
+  await page.reload()
+  const reloaded = page.locator(".task-card", { hasText: "Ручной прогресс с карточки" })
+  await expect(reloaded.locator("input.tc-progress")).toHaveValue("40")
+})
+
 test("списание времени живёт на главной странице задачи", async ({ page }) => {
   const api = await apiLogin()
   const project = await makeProject(api, "Страница-часы")

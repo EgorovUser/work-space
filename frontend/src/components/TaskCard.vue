@@ -14,7 +14,25 @@
       <span v-if="task.checklist_total" class="tc-count">{{ task.checklist_done }}/{{ task.checklist_total }}</span>
     </div>
 
-    <div v-if="task.progress" class="progress" :title="progressTitle"><span :style="{ width: bar }" /></div>
+    <!-- Патч AK: у задач с ручным прогрессом число вводится прямо на
+         карточке — по подобию поля списания часов: компактное поле, Enter
+         сохраняет, полоска оживает сразу. Остальные задачи — как раньше,
+         полоска по чеклисту. -->
+    <form v-if="task.progress_mode === 'manual'" class="tc-progress-row" @submit.prevent="saveProgress">
+      <input
+        v-model.number="progressValue"
+        class="tc-progress"
+        type="number"
+        inputmode="numeric"
+        min="0"
+        :max="progressMax"
+        :disabled="busyProgress"
+        :title="'Прогресс вручную: 0–' + progressMax + ', Enter — сохранить'"
+      />
+      <span class="tc-progress-cap">/ {{ progressMax }}</span>
+      <div class="progress tc-progress-bar" :title="progressTitle"><span :style="{ width: bar }" /></div>
+    </form>
+    <div v-else-if="task.progress" class="progress" :title="progressTitle"><span :style="{ width: bar }" /></div>
 
     <ul v-if="checks.length" class="tc-checks">
       <li v-for="item in visibleChecks" :key="item.id" class="tc-check" :class="{ done: item.done }">
@@ -59,7 +77,7 @@
 </template>
 
 <script>
-import { computed, ref } from "vue"
+import { computed, ref, watch } from "vue"
 import ActionMenu from "./ActionMenu.vue"
 import { api } from "../api"
 import { repeatLabel } from "../composables/calendar"
@@ -134,6 +152,49 @@ export default {
       const width = Math.max(0, Math.min(100, (Number(props.task.progress) / max) * 100))
       return width + "%"
     })
+
+    // Патч AK: потолок ручного прогресса — тот же максимум, что у полоски
+    // (tasks.progress.max, по умолчанию 100).
+    const progressMax = computed(() => Number(settings.get("tasks", "progress.max")) || 100)
+
+    // Поле карточки всегда показывает актуальное значение задачи — в том
+    // числе после чужой правки из другой вкладки.
+    const progressValue = ref(0)
+    const busyProgress = ref(false)
+    watch(
+      () => props.task.progress_manual,
+      (value) => {
+        progressValue.value = Number(value) || 0
+      },
+      { immediate: true }
+    )
+
+    // Ручной прогресс с карточки (патч AK): обычный PATCH задачи с одним
+    // полем — тот же эндпоинт, что и форма «О задаче», вёрстка не тянет
+    // отдельного API. Обновляем переданный объект на месте — полоска и
+    // счётчик чеклиста живут на том же реактивном элементе доски.
+    async function saveProgress() {
+      if (busyProgress.value) return
+      const value = Math.round(Number(progressValue.value))
+      if (progressValue.value === "" || !Number.isFinite(value) || value < 0 || value > progressMax.value) {
+        notice.show("Прогресс — целое число от 0 до " + progressMax.value)
+        return
+      }
+      busyProgress.value = true
+      try {
+        const data = await api("/api/projects/" + props.project.id + "/tasks/" + props.task.id, {
+          method: "PATCH",
+          body: { progress_manual: value },
+        })
+        props.task.progress_manual = value
+        props.task.progress = Number(data && data.progress) || value
+        notice.show("Прогресс " + props.task.progress + " из " + progressMax.value, { kind: "success" })
+      } catch (err) {
+        notice.show("Не сохранился прогресс. " + (err.message || "Ошибка"))
+      } finally {
+        busyProgress.value = false
+      }
+    }
 
     // Пересчёт счётчиков и прогресса по чеклисту — та же формула, что у
     // сервиса (_progress): доля отмеченных от максимума, с отсечением
@@ -213,6 +274,10 @@ export default {
       hasMeta,
       progressTitle,
       bar,
+      progressMax,
+      progressValue,
+      busyProgress,
+      saveProgress,
       when,
       formatDuration,
       formatHoursCompact,

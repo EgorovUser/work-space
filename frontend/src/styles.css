@@ -864,6 +864,33 @@ body.dragging-card .task-card { cursor: grabbing; }
 .progress { height: 4px; background: var(--line); border-radius: 99px; margin-top: 8px; }
 .progress > span { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
 
+/* Ручной прогресс на карточке (патч AK): число вводится как часы списания —
+   компактное поле, Enter сохраняет. Селектор input.tc-progress не слабее
+   базового правила input[type=number] — иначе поле растянется на карточку
+   (урок патча AJ). Полоска в этом ряду без верхнего отступа. */
+.tc-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+input.tc-progress {
+  width: 52px;
+  flex: 0 0 auto;
+  padding: 4px 6px;
+  text-align: right;
+  font-size: 0.85rem;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input.tc-progress::-webkit-outer-spin-button,
+input.tc-progress::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.tc-progress-cap { flex: 0 0 auto; color: var(--muted); font-size: 0.8rem; }
+.tc-progress-bar { flex: 1 1 auto; min-width: 40px; margin-top: 0; }
+
 /* Чеклист подзадач на карточке: отметка прямо с доски. */
 .tc-checks {
   list-style: none;
