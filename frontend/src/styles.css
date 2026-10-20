@@ -888,17 +888,31 @@ body.dragging-card .task-card { cursor: grabbing; }
 .tc-more .text-btn { font-size: 0.8rem; }
 
 /* Быстрое списание часов: поле + кнопка + бейдж списанного.
-   Патч AG: поле компактное (46px — влезает «99.5», не больше) и одной
-   высоты с кнопкой: у обоих одинаковый кегль и вертикальный отступ,
-   а align-items: stretch прижимает пару к высоте самого высокого —
-   на тач-экранах это 44px-кнопка, и поле растягивается под неё. */
+   Патч AJ: селектор поля — input.tc-hours, а не голый класс: базовое
+   правило input[type="number"] специфичнее класса и молча перебивало
+   ширину с отступами — поле растягивалось на всю карточку и выталкивало
+   кнопку за край. Теперь поле 46px («99.5» — предел записи), стрелки
+   счёта скрыты, пара «поле + Списать» одной высоты (stretch). */
 .tc-time {
   display: flex;
   align-items: stretch;
   gap: 6px;
   margin-top: 8px;
 }
-.tc-hours { width: 46px; flex: 0 0 auto; padding: 4px 6px; text-align: right; font-size: 0.85rem; }
+input.tc-hours {
+  width: 46px;
+  flex: 0 0 auto;
+  padding: 4px 6px;
+  text-align: right;
+  font-size: 0.85rem;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input.tc-hours::-webkit-outer-spin-button,
+input.tc-hours::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 .tc-log { padding: 4px 10px; font-size: 0.85rem; flex: 0 0 auto; }
 .tc-spent {
   align-self: center;
@@ -909,9 +923,12 @@ body.dragging-card .task-card { cursor: grabbing; }
   font-variant-numeric: tabular-nums;
 }
 @media (max-width: 800px) {
-  /* На тач-экранах кегль полей 16px (iOS не приближает) — «12.5» влезает
-     с запасом. Высоту выравнивает stretch, отдельный паддинг не нужен. */
-  .tc-hours { width: 56px; }
+  /* Тач: кегль полей 16px (правило .app input — iOS не приближает),
+     поэтому поле чуть шире. Кнопка в карточке не вытягивается до
+     44px-таргета — иначе ряд списания раздувает карточку; селектор
+     .tc-time .tc-log специфичнее тач-правила .btn, место не важно. */
+  input.tc-hours { width: 54px; }
+  .tc-time .tc-log { min-height: 0; }
 }
 
 /* Блок «Списать время» на главной странице задачи (патч R). */

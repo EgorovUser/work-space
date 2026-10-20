@@ -35,15 +35,19 @@
     </ul>
 
     <form class="tc-time" @submit.prevent="logHours">
+      <!-- Патч AJ: предел записи — 99 часов (max и валидация ниже);
+           компактность поля охраняет селектор input.tc-hours в styles.css
+           и e2e в board.spec.js. -->
       <input
         v-model="hours"
         class="tc-hours"
         type="number"
         inputmode="decimal"
         min="0"
+        max="99"
         step="0.25"
         placeholder="ч"
-        title="Сколько часов списать на задачу"
+        title="Сколько часов списать на задачу (до 99)"
         :disabled="busyTime"
       />
       <button class="btn secondary tc-log" type="submit" :disabled="busyTime">Списать</button>
@@ -169,8 +173,10 @@ export default {
         notice.show("Введите часы, например 1.5 — полтора часа")
         return
       }
-      if (minutes > 1440) {
-        notice.show("За одну запись — не больше 24 часов")
+      // Предел одной записи — 99 часов: поле на карточке компактное
+      // («до 99 ввести логично»), большее — явная опечатка.
+      if (minutes > 99 * 60) {
+        notice.show("За одну запись — не больше 99 часов")
         return
       }
       busyTime.value = true

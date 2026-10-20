@@ -78,6 +78,17 @@ test("часы списываются с карточки и копятся в �
   const card = page.locator(".task-card", { hasText: "Списываем с карточки" })
   await expect(card.locator(".tc-time")).toBeVisible()
 
+  // Патч AJ: вёрстка ряда. Поле — компактное (не шире 60px: раньше базовое
+  // правило input[type=number] перебивало класс и растягивало поле на всю
+  // карточку), кнопка «Списать» — внутри карточки, и пара одной высоты.
+  // Поведенческие клики ниже этого не видели — ловим геометрией.
+  const cardBox = await card.boundingBox()
+  const inputBox = await card.locator(".tc-hours").boundingBox()
+  const btnBox = await card.locator(".tc-log").boundingBox()
+  expect(inputBox.width).toBeLessThanOrEqual(60)
+  expect(btnBox.x + btnBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 0.5)
+  expect(Math.abs(inputBox.height - btnBox.height)).toBeLessThanOrEqual(1)
+
   // 1.5 часа → 90 минут: поле ввода в часах, кнопка рядом.
   await card.locator(".tc-hours").fill("1.5")
   await card.locator(".tc-log").click()
