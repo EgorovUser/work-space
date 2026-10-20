@@ -33,6 +33,7 @@ from sqlalchemy import func, select
 
 from app.core import db as db_module
 from app.core.auth import require_user
+from app.core.events_bus import publish as _bus_publish
 from app.core.logging import logger
 from app.core.models import User
 
@@ -57,6 +58,10 @@ def invalidate(project_id: int | None = None) -> None:
     ``project_id=None`` — всё; конкретный проект — его счётчики плюс
     глобальные (корзина и секреты меняются проектными мутациями, поэтому
     пользовательский кэш сбрасывается целиком).
+
+    Заодно — тихий сигнал шины ``counters.changed``: открытые SSE-каналы
+    пересчитают глобальные числа сами (тип наружу не пересылается, он
+    только будит генератор — как heartbeat, но сразу после действия).
     """
     with _lock:
         if project_id is None:
@@ -65,6 +70,7 @@ def invalidate(project_id: int | None = None) -> None:
         else:
             _project_cache.pop(project_id, None)
             _user_cache.clear()
+    _bus_publish("counters.changed")
 
 
 def user_state(user_id: int, force: bool = False) -> dict:

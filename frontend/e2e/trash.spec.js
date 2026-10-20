@@ -70,7 +70,7 @@ test("удалить навсегда вычищает запись без во�
 test("корзина в рельсе доступна с любого экрана", async ({ page }) => {
   await login(page)
   await page.goto("/projects")
-  await page.getByRole("link", { name: "Корзина", exact: true }).click()
+  await page.getByRole("link", { name: /^Корзина/ }).click()
   await expect(page).toHaveURL(/\/trash$/)
   await expect(page.getByRole("heading", { name: "Корзина", exact: true })).toBeVisible()
 })

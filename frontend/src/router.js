@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router"
 import { useAuth } from "./composables/useAuth"
+import { useCounters } from "./composables/useCounters"
 
 const router = createRouter({
   history: createWebHistory(),
@@ -75,6 +76,13 @@ router.onError((err, to) => {
   if (to && to.meta.auth && router.currentRoute.value.path !== "/login") {
     router.push({ path: "/login", query: { redirect: to.fullPath } })
   }
+})
+
+// После каждого перехода сверяем числа бейджей (патч U): пользователь
+// ходит по разделам — числа должны поспевать за ним. Сервер отдаёт из
+// кеша (патч T), так что это дёшево; без входа запрос тихо промахнётся.
+router.afterEach(() => {
+  useCounters().refresh()
 })
 
 export default router

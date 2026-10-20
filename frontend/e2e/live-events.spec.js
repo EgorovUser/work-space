@@ -37,8 +37,11 @@ test("новое письмо само всплывает в открытой в
   await page.getByRole("button", { name: "Войти" }).click()
   await expect(page.locator(".app")).toBeVisible()
 
-  // Бейджа пока нет — непрочитанных нет.
-  await expect(page.locator(".rail-badge")).toHaveCount(0)
+  // Бейджей с числом почты пока нет смысла ждать «1»: непрочитанных нет,
+  // бейдж показывает приглушённый ноль (патч U).
+  const mailBadge = page.locator(".rail-nav a", { hasText: "Почта" }).locator(".rail-badge")
+  await expect(mailBadge).toHaveText("0")
+  await expect(mailBadge).toHaveClass(/zero/)
 
   // Письмо импортируется в проект мимо вкладки (как забор с сервера).
   const api = await apiLogin()
@@ -55,8 +58,8 @@ test("новое письмо само всплывает в открытой в
   expect(imported.status()).toBe(201)
 
   // Живые события дёргают счётчик в шапке — без перезагрузки страницы.
-  await expect(page.locator(".rail-badge")).toBeVisible({ timeout: 15_000 })
-  await expect(page.locator(".rail-badge")).toHaveText("1")
+  await expect(mailBadge).toHaveText("1", { timeout: 15_000 })
+  await expect(mailBadge).not.toHaveClass(/zero/)
 
   // И список писем обновляется сам. Вкладку задаём явно: без ящиков
   // страница сама уводит на настройки «Ящик IMAP».

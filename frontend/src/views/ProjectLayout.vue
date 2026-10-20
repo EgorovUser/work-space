@@ -13,7 +13,11 @@
               :class="{ 'router-link-active': isTabActive(link) }"
               :aria-current="isTabActive(link) ? 'page' : null"
               @click="navigate"
-            >{{ link.label }}</a>
+            >{{ link.label }}<span
+              v-if="link.badge && tabCount(badges[link.badge])"
+              class="tab-badge"
+              :class="{ zero: !badges[link.badge] }"
+            >{{ tabCount(badges[link.badge]) }}</span></a>
           </router-link>
         </template>
       </nav>
@@ -38,7 +42,9 @@ import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue"
 import { useRoute } from "vue-router"
 import AppShell from "../components/AppShell.vue"
 import { api } from "../api"
+import { tabCount } from "../composables/countFormat"
 import { useChrome } from "../composables/useChrome"
+import { useCounters } from "../composables/useCounters"
 
 // Разделы проекта — горизонтальная лента табов под шапкой. Раньше они
 // уезжали вторым блоком в рельсу и смешивались с глобальной навигацией;
@@ -58,16 +64,22 @@ export default {
       const id = projectId.value
       return [
         { to: "/projects/" + id, label: "Доска", exact: true },
-        { to: "/projects/" + id + "/documents", label: "Документы" },
-        { to: "/projects/" + id + "/examples", label: "Примеры" },
-        { to: "/projects/" + id + "/secrets", label: "Секреты" },
-        { to: "/projects/" + id + "/rdp", label: "RDP" },
-        { to: "/projects/" + id + "/mail", label: "Почта" },
+        { to: "/projects/" + id + "/documents", label: "Документы", badge: "documents" },
+        { to: "/projects/" + id + "/examples", label: "Примеры", badge: "examples" },
+        { to: "/projects/" + id + "/secrets", label: "Секреты", badge: "secrets" },
+        { to: "/projects/" + id + "/rdp", label: "RDP", badge: "rdp" },
+        { to: "/projects/" + id + "/mail", label: "Почта", badge: "mail" },
         { to: "/projects/" + id + "/time", label: "Учёт времени" },
-        { to: "/projects/" + id + "/notes", label: "Заметки" },
+        { to: "/projects/" + id + "/notes", label: "Заметки", badge: "notes" },
         { to: "/projects/" + id + "/settings", label: "Настройки" },
       ]
     })
+
+    // Бейджи разделов (патч U): числа активного — документы, примеры,
+    // секреты, RDP, письма по правилам, заметки. Подписаны на хаб
+    // счётчиков: навигация и мутации обновляют, опрос страхует.
+    const counters = useCounters()
+    const badges = computed(() => counters.projectCounts.value || {})
 
     // «Доска» горит только на самой доске — и на страницах её задач
     // (/tasks/:id открываются с доски). Остальные разделы — на своём корне
@@ -95,10 +107,16 @@ export default {
     watch([project, projectId], () => {
       if (project.value) chrome.setProject(project.value.name)
     })
-    watch(projectId, load)
-    onMounted(load)
+    watch(projectId, (id) => {
+      load()
+      counters.bindProject(id)
+    })
+    onMounted(() => {
+      load()
+      counters.bindProject(projectId.value)
+    })
     onBeforeUnmount(() => chrome.clear())
-    return { route, project, error, unavailable, links, load, isBoard, isTabActive }
+    return { route, project, error, unavailable, links, load, isBoard, isTabActive, badges, tabCount }
   },
 }
 </script>

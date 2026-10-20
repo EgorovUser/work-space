@@ -72,7 +72,7 @@ test("рельса ведёт в общий список, группа — в п
   await api.post(`/api/projects/${project.id}/secrets`, { data: { title: "Рельсовый " + mark } })
 
   await login(page)
-  await page.getByRole("link", { name: "Секреты", exact: true }).click()
+  await page.getByRole("link", { name: /^Секреты/ }).click()
   await expect(page).toHaveURL(/\/secrets$/)
 
   const group = page.locator(".card", { hasText: "Рельса " + mark })

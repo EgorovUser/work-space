@@ -1160,6 +1160,33 @@ textarea.mono { min-height: 220px; }
   vertical-align: middle;
 }
 
+/* Ноль — тоже ответ «здесь пусто», а не «мы не знаем»: показываем
+   приглушённым, чтобы не спорил с настоящими числами (патч U). */
+.rail-badge.zero,
+.tab-badge.zero,
+.bottom-badge.zero {
+  background: var(--line);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Бейдж в полоске разделов проекта (патч U): компактнее рельсы —
+   0–9 числом, дальше 9+. */
+.tab-badge {
+  display: inline-block;
+  min-width: 1.1em;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--badge);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  vertical-align: middle;
+}
+
 .matrix-wrap { overflow-x: auto; max-width: 100%; }
 .matrix { width: 100%; border-collapse: collapse; }
 .matrix th, .matrix td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; }

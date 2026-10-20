@@ -5,11 +5,14 @@
       <nav class="rail-nav">
         <router-link to="/">Сегодня</router-link>
         <router-link to="/projects">Проекты</router-link>
-        <router-link to="/mail">Почта<span v-if="mailBadge" class="rail-badge">{{ mailBadge }}</span></router-link>
-        <router-link to="/time">Время</router-link>
-        <router-link to="/secrets">Секреты</router-link>
-        <router-link to="/trash">Корзина</router-link>
-        <router-link to="/notifications">Уведомления</router-link>
+        <router-link v-for="item in railBadges" :key="item.to" :to="item.to"
+          >{{ item.label }}<span
+            v-if="railBadge(item.key)"
+            class="rail-badge"
+            :class="{ zero: railZero(item.key) }"
+            >{{ railBadge(item.key) }}</span
+          ></router-link
+        >
         <router-link to="/settings">Настройки</router-link>
         <router-link to="/system">Состояние</router-link>
       </nav>
@@ -41,7 +44,7 @@
 </template>
 
 <script>
-import { computed, onMounted, ref } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import Bell from "./Bell.vue"
 import BottomNav from "./BottomNav.vue"
@@ -50,6 +53,8 @@ import GlobalSearch from "./GlobalSearch.vue"
 import { api } from "../api"
 import { useAuth } from "../composables/useAuth"
 import { useChrome } from "../composables/useChrome"
+import { railCount } from "../composables/countFormat"
+import { useCounters } from "../composables/useCounters"
 import { useEvents } from "../composables/useEvents"
 import { usePomodoro } from "../composables/usePomodoro"
 import { useSettings } from "../composables/useSettings"
@@ -85,18 +90,35 @@ export default {
     })
 
     const pomo = usePomodoro()
+    const counters = useCounters()
+    const globalCounts = counters.globalCounts
 
-    const mailBadge = computed(() => {
-      const value = events.mailUnread.value
-      if (typeof value !== "number" || value <= 0) return ""
-      return value > 99 ? "99+" : String(value)
-    })
+    // Числа рельсы (патч U): 0–99 числом, дальше 99+. Источник — хаб
+    // счётчиков: SSE применяет живые обновления, навигация и опрос —
+    // запасные пути. Ноль показываем приглушённым.
+    const railBadges = [
+      { to: "/mail", label: "Почта", key: "mail_unread" },
+      { to: "/time", label: "Время", key: null },
+      { to: "/secrets", label: "Секреты", key: "secrets_total" },
+      { to: "/trash", label: "Корзина", key: "trash_total" },
+      { to: "/notifications", label: "Уведомления", key: "notifications_unread" },
+    ]
+
+    function railBadge(key) {
+      return railCount(globalCounts.value ? globalCounts.value[key] : null)
+    }
+
+    function railZero(key) {
+      return !globalCounts.value || !globalCounts.value[key]
+    }
 
     const build = ref("")
 
     onMounted(() => {
       settings.load().catch(() => {})
       events.start()
+      counters.start()
+      counters.refresh()
       // Сборка приходит от работающего бэкенда, а не зашита в бандл: если
       // надписи нет — оболочка устарела; если есть — ровно эта версия и
       // крутится (сверяется с curl /healthz).
@@ -107,8 +129,11 @@ export default {
         .catch(() => {})
     })
 
+    onBeforeUnmount(() => counters.stop())
+
     async function onLogout() {
       events.stop()
+      counters.reset()
       await auth.logout()
       router.push("/login")
     }
@@ -120,7 +145,9 @@ export default {
       bare: computed(() => props.bare),
       caption: chrome.caption,
       heading,
-      mailBadge,
+      railBadges,
+      railBadge,
+      railZero,
       pomo,
       route,
       onLogout,
