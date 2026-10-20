@@ -20,6 +20,7 @@ from app.core.registry import ModuleDisabled, snapshot, try_register
 from app.core.setting_defs import CORE_DEFS
 from app.core.settings_api import router as settings_router
 from app.core.settings_store import get_int, get_str, register_defs, sync_definitions
+from app.core.version import PATCH_ID
 from app.modules import setup_modules
 from app.seed import seed
 
@@ -111,6 +112,7 @@ def healthz() -> dict:
             logger.exception("outbox stats failed")
     return {
         "status": overall,
+        "build": PATCH_ID,
         "modules": modules,
         "jobs": job_names(),
         "outbox": outbox_stats,

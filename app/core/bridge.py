@@ -10,7 +10,7 @@ CARD_FIELDS = {
     "mail": ("new_mail",),
 }
 
-SEARCH_MODULES = ("tasks", "documents", "examples", "mail", "secrets")
+SEARCH_MODULES = ("tasks", "documents", "examples", "mail", "secrets", "rdp")
 
 _project_created: list = []
 _card: dict = {}

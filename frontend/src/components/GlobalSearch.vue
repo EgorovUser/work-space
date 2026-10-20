@@ -51,6 +51,7 @@ const LINKS = {
   documents: (item) => `/projects/${item.project_id}/documents/${item.id}`,
   examples: (item) => `/projects/${item.project_id}/examples/${item.id}`,
   secrets: (item) => `/projects/${item.project_id}/secrets/${item.id}`,
+  rdp: (item) => `/projects/${item.project_id}/rdp`,
 }
 
 export default {

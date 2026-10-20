@@ -150,6 +150,15 @@ a { color: var(--accent); }
   white-space: nowrap;
 }
 
+/* Сборка патча — под кнопкой выхода: быстрый ответ на «какая версия крутится». */
+.rail-build {
+  padding: 0 8px;
+  color: var(--rail-muted);
+  font-size: 0.72rem;
+  text-align: center;
+  user-select: none;
+}
+
 .rail .btn.secondary {
   border-color: transparent;
   color: var(--rail-ink);
@@ -1067,6 +1076,9 @@ textarea.mono { min-height: 220px; }
 .matrix th, .matrix td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; }
 .matrix td:not(:first-child), .matrix th:not(:first-child) { text-align: center; width: 7rem; }
 
+/* — RDP-подключения: адрес сервера моноширинно — читается как код — */
+.mono-inline { font-family: var(--mono, monospace); font-size: 0.9rem; }
+
 /* — Общий список секретов: заголовок группы-проекта — */
 .group-head {
   display: flex;
@@ -1173,8 +1185,11 @@ textarea.mono { min-height: 220px; }
 .theme-btn-icon { font-size: 1.05rem; line-height: 1; }
 
 /* — Глобальный поиск в шапке — */
-.topbar-search { position: relative; flex: 1 1 320px; max-width: 460px; min-width: 140px; margin: 0 12px; }
-.topbar-search input { padding: 6px 12px; border-radius: 8px; background: var(--field); }
+.topbar-search { position: relative; flex: 1 1 420px; max-width: 680px; min-width: 180px; margin: 0 12px; transition: max-width 160ms ease; }
+/* Строка поиска забирает свободную ширину шапки и при фокусе (или открытом
+   выпадающем списке) расширяется ещё сильнее — длинные запросы видны целиком. */
+.topbar-search:focus-within { max-width: 920px; }
+.topbar-search input { padding: 8px 14px; border-radius: 8px; background: var(--field); }
 .search-drop {
   position: absolute;
   top: calc(100% + 6px);

@@ -37,6 +37,9 @@ SECRET_CREATED = "secret.created"
 SECRET_UPDATED = "secret.updated"
 SECRET_DELETED = "secret.deleted"
 SECRET_OPENED = "secret.opened"
+RDP_CREATED = "rdp.created"
+RDP_UPDATED = "rdp.updated"
+RDP_DELETED = "rdp.deleted"
 TIME_STARTED = "time.started"
 TIME_STOPPED = "time.stopped"
 TIME_CREATED = "time.created"
@@ -84,6 +87,9 @@ ALL_EVENTS = (
     SECRET_UPDATED,
     SECRET_DELETED,
     SECRET_OPENED,
+    RDP_CREATED,
+    RDP_UPDATED,
+    RDP_DELETED,
     TIME_STARTED,
     TIME_STOPPED,
     TIME_CREATED,

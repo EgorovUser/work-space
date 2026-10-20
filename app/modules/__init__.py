@@ -1,4 +1,4 @@
-"""Бизнес-модули: проекты, задачи, документы, примеры, секреты, время, почта, уведомления."""
+"""Бизнес-модули: проекты, задачи, документы, примеры, секреты, RDP, время, почта, уведомления."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ def import_models() -> None:
         "app.modules.documents.models",
         "app.modules.examples.models",
         "app.modules.secrets.models",
+        "app.modules.rdp.models",
         "app.modules.timetracking.models",
         "app.modules.mail.models",
         "app.modules.notifications.models",
@@ -30,6 +31,7 @@ def setup_modules(app) -> None:
     from app.modules.mail.router import setup as setup_mail
     from app.modules.notifications.router import setup as setup_notifications
     from app.modules.projects.router import setup as setup_projects
+    from app.modules.rdp.router import setup as setup_rdp
     from app.modules.secrets.router import setup as setup_secrets
     from app.modules.tasks.router import setup as setup_tasks
     from app.modules.timetracking.router import setup as setup_timetracking
@@ -40,6 +42,7 @@ def setup_modules(app) -> None:
         ("documents", setup_documents),
         ("examples", setup_examples),
         ("secrets", setup_secrets),
+        ("rdp", setup_rdp),
         ("timetracking", setup_timetracking),
         ("mail", setup_mail),
         ("notifications", setup_notifications),

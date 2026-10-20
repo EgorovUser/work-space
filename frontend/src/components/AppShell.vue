@@ -14,6 +14,7 @@
       <div class="rail-foot">
         <div v-if="user" class="rail-user">{{ user.display_name || user.username }}</div>
         <button class="btn secondary" type="button" @click="onLogout">Выйти</button>
+        <div v-if="build" class="rail-build" :title="'Сборка патча ' + build">сборка {{ build }}</div>
       </div>
     </aside>
     <main class="app-main">
@@ -35,12 +36,13 @@
 </template>
 
 <script>
-import { computed, onMounted } from "vue"
+import { computed, onMounted, ref } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import Bell from "./Bell.vue"
 import BottomNav from "./BottomNav.vue"
 import ThemeToggle from "./ThemeToggle.vue"
 import GlobalSearch from "./GlobalSearch.vue"
+import { api } from "../api"
 import { useAuth } from "../composables/useAuth"
 import { useChrome } from "../composables/useChrome"
 import { useEvents } from "../composables/useEvents"
@@ -80,9 +82,19 @@ export default {
       return value > 99 ? "99+" : String(value)
     })
 
+    const build = ref("")
+
     onMounted(() => {
       settings.load().catch(() => {})
       events.start()
+      // Сборка приходит от работающего бэкенда, а не зашита в бандл: если
+      // надписи нет — оболочка устарела; если есть — ровно эта версия и
+      // крутится (сверяется с curl /healthz).
+      api("/healthz")
+        .then((data) => {
+          build.value = data && data.build ? String(data.build) : ""
+        })
+        .catch(() => {})
     })
 
     async function onLogout() {
@@ -94,6 +106,7 @@ export default {
     return {
       user: auth.user,
       title: settings.title,
+      build,
       bare: computed(() => props.bare),
       caption: chrome.caption,
       heading,

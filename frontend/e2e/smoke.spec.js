@@ -54,8 +54,8 @@ test("разделы проекта переключаются горизонт�
   await page.goto(`/projects/${project.id}`)
   const tabs = page.locator(".project-tabs")
   await expect(tabs).toBeVisible()
-  // Восемь разделов, включая доску.
-  await expect(tabs.locator("a")).toHaveCount(8)
+  // Девять разделов, включая доску и RDP.
+  await expect(tabs.locator("a")).toHaveCount(9)
   await expect(tabs.locator("a", { hasText: "Доска" })).toHaveClass(/router-link-active/)
   // Переход в соседний раздел без участия рельсы.
   await tabs.locator("a", { hasText: "Документы" }).click()

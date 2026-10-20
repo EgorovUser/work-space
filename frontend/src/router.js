@@ -30,6 +30,9 @@ const router = createRouter({
         { path: "examples/:exampleId", component: () => import("./views/ExamplePage.vue") },
         { path: "secrets", component: () => import("./views/Secrets.vue") },
         { path: "secrets/:secretId", component: () => import("./views/SecretPage.vue") },
+        // RDP-подключения: адреса серверов и скачивание .rdp (пароль вводится
+        // при подключении, на сервере не хранится).
+        { path: "rdp", component: () => import("./views/Rdp.vue") },
         { path: "mail", component: () => import("./views/Mail.vue") },
         { path: "mail/:messageId", component: () => import("./views/MailPage.vue") },
         { path: "time", component: () => import("./views/Time.vue") },

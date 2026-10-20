@@ -55,6 +55,7 @@ export default {
         { to: "/projects/" + id + "/documents", label: "Документы" },
         { to: "/projects/" + id + "/examples", label: "Примеры" },
         { to: "/projects/" + id + "/secrets", label: "Секреты" },
+        { to: "/projects/" + id + "/rdp", label: "RDP" },
         { to: "/projects/" + id + "/mail", label: "Почта" },
         { to: "/projects/" + id + "/time", label: "Учёт времени" },
         { to: "/projects/" + id + "/notes", label: "Заметки" },

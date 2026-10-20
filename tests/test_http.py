@@ -71,6 +71,14 @@ class PublicRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("status", response.json())
 
+    def test_healthz_reports_build(self):
+        # Сборка обязана представляться: это способ отличить свежий контейнер
+        # от устаревшего (build поднимается в app/core/version.py каждым патчем).
+        response = client.get("/healthz")
+        self.assertEqual(response.status_code, 200)
+        build = response.json().get("build")
+        self.assertTrue(build and str(build).strip(), "healthz не назвал сборку")
+
     def test_unknown_api_route_404(self):
         self.assertEqual(client.get("/api/no-such-route").status_code, 404)
 
