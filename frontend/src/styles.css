@@ -1151,30 +1151,36 @@ textarea.mono { min-height: 220px; }
   text-align: center;
 }
 
+/* Бейджи-количества (патчи U, AH): обычные счётчики — нейтральный чип,
+   который сообщает число, но не требует внимания. Красный кружок
+   остаётся только у уведомлений (.alert): непрочитанное — единственное,
+   что вправе дёргать взгляд. Ноль — ещё тише: просто приглушённая цифра
+   без чипа («здесь пусто», а не «мы не знаем»). */
 .rail-badge {
   display: inline-block;
   min-width: 1.2em;
   margin-left: 8px;
   padding: 1px 6px;
   border-radius: 99px;
-  background: var(--badge);
-  color: #fff;
+  background: var(--rail-line);
+  color: var(--rail-ink);
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.4;
   text-align: center;
   vertical-align: middle;
 }
-
-/* Ноль — тоже ответ «здесь пусто», а не «мы не знаем»: показываем
-   приглушённым, чтобы не спорил с настоящими числами (патч U). */
-.rail-badge.zero,
-.tab-badge.zero,
-.bottom-badge.zero {
-  background: var(--line);
-  color: var(--muted);
-  font-weight: 600;
+.rail-badge.alert,
+.tab-badge.alert,
+.bottom-badge.alert {
+  background: var(--badge);
+  color: #fff;
+  font-weight: 700;
 }
+
+.rail-badge.zero { background: transparent; color: var(--rail-muted); }
+.tab-badge.zero,
+.bottom-badge.zero { background: transparent; color: var(--muted); }
 
 /* Бейдж в полоске разделов проекта (патч U): компактнее рельсы —
    0–9 числом, дальше 9+. */
@@ -1184,10 +1190,10 @@ textarea.mono { min-height: 220px; }
   margin-left: 6px;
   padding: 0 5px;
   border-radius: 99px;
-  background: var(--badge);
-  color: #fff;
+  background: var(--line);
+  color: var(--ink);
   font-size: 0.7rem;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.5;
   text-align: center;
   vertical-align: middle;
@@ -1657,10 +1663,10 @@ textarea.mono { min-height: 220px; }
     height: 17px;
     padding: 0 4px;
     border-radius: 999px;
-    background: var(--badge);
-    color: #fff;
+    background: var(--line);
+    color: var(--ink);
     font-size: 0.66rem;
-    font-weight: 700;
+    font-weight: 600;
     line-height: 17px;
     text-align: center;
   }

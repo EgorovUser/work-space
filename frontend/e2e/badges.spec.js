@@ -4,6 +4,8 @@ import { expect, request, test } from "@playwright/test"
 // дальше «9+»; в рельсе — 0–99, дальше «99+». Числа приходят из хаба
 // счётчиков (патч T): навигация и мутации их обновляют, SSE оживляет
 // глобальные. Ноль показывается приглушённым — «здесь пусто».
+// Патч AH: обычные счётчики — нейтральный чип (спокойный фон, без
+// класса alert), красный кружок — только у непрочитанных уведомлений.
 
 const CREDS = { username: "e2e", password: "e2e-pass" }
 
@@ -44,6 +46,10 @@ test("рельса показывает количества: ноль приг�
   await api.delete(`/api/projects/${project.id}/secrets/${secret.id}`)
   await expect(trashBadge).toHaveText("1", { timeout: 10_000 })
   await expect(trashBadge).not.toHaveClass(/zero/)
+  // Обычный счётчик — спокойный: без alert и с нейтральным фоном чипа
+  // (rgba-подложка рельсы), а не красный кружок.
+  await expect(trashBadge).not.toHaveClass(/alert/)
+  await expect(trashBadge).toHaveCSS("background-color", "rgba(255, 255, 255, 0.08)")
 })
 
 test("табы проекта показывают количества разделов", async ({ page }) => {
@@ -69,11 +75,31 @@ test("табы проекта показывают количества разд
   await expect(badge("Секреты")).toHaveText("2")
   await expect(badge("Заметки")).toHaveText("1")
   await expect(badge("RDP")).toHaveText("1")
-  // Пустые разделы честно показывают ноль — приглушённым.
+  // Пустые разделы честно показывают ноль — приглушённой цифрой без чипа.
   await expect(badge("Документы")).toHaveText("0")
   await expect(badge("Документы")).toHaveClass(/zero/)
+  await expect(badge("Документы")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+  // Число — спокойный нейтральный чип, не красный кружок.
+  await expect(badge("Секреты")).not.toHaveClass(/alert/)
+  await expect(badge("Секреты")).toHaveCSS("background-color", "rgb(225, 228, 232)")
   // Разделы без счётчика (доска, время, настройки) бейджа не несут.
   await expect(tabs.locator("a", { hasText: "Доска" }).locator(".tab-badge")).toHaveCount(0)
+})
+
+test("красным кружком горят только непрочитанные уведомления", async ({ page }) => {
+  const api = await apiLogin()
+  // Любое действие (создание проекта) через фоновый outbox приносит
+  // непрочитанное уведомление — до 5 секунд, поэтому ждём с запасом.
+  await api.post("/api/projects", { data: { name: "Уведомления " + Date.now() } })
+
+  await login(page)
+  const notifBadge = page.locator(".rail-nav a", { hasText: "Уведомления" }).locator(".rail-badge")
+  await expect(notifBadge).not.toHaveClass(/zero/, { timeout: 15_000 })
+  await expect(notifBadge).toHaveClass(/alert/)
+  await expect(notifBadge).toHaveCSS("background-color", "rgb(196, 71, 58)")
+  // Соседние счётчики остались спокойными, даже если числа не нулевые.
+  const secretsBadge = page.locator(".rail-nav a", { hasText: "Секреты" }).locator(".rail-badge")
+  await expect(secretsBadge).not.toHaveClass(/alert/)
 })
 
 test("табы капятся на 9+, рельса на 99+", async ({ page }) => {

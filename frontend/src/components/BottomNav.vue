@@ -10,7 +10,12 @@
     >
       <span class="bottom-ico" aria-hidden="true" v-html="item.icon" />
       <span class="bottom-label">{{ item.label }}</span>
-      <span v-if="item.key && badge(item.key)" class="bottom-badge" :class="{ zero: zero(item.key) }">{{ badge(item.key) }}</span>
+      <span
+        v-if="item.key && badge(item.key)"
+        class="bottom-badge"
+        :class="{ zero: zero(item.key), alert: Boolean(item.alert) && !zero(item.key) }"
+        >{{ badge(item.key) }}</span
+      >
     </router-link>
   </nav>
 </template>
@@ -25,7 +30,8 @@ import { railCount } from "../composables/countFormat"
 // «Состояние» — редкая диагностика, она осталась в рельсе; палец на
 // телефоне должен тянуться к ежедневному, а не к техническому.
 // Бейджи — тот же хаб счётчиков, что и в рельсе (патч U): почта, секреты,
-// уведомления; двойной источник не заводим.
+// уведомления; двойной источник не заводим. Патч AH: красным остаётся
+// только непрочитанные уведомления, остальные числа — спокойные.
 
 const STROKE = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
 
@@ -60,6 +66,7 @@ const ITEMS = [
     to: "/notifications",
     label: "Уведомления",
     key: "notifications_unread",
+    alert: true,
     icon:
       '<svg viewBox="0 0 24 24" ' + STROKE + '><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
   },

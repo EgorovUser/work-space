@@ -9,7 +9,7 @@
           >{{ item.label }}<span
             v-if="railBadge(item.key)"
             class="rail-badge"
-            :class="{ zero: railZero(item.key) }"
+            :class="badgeClass(item)"
             >{{ railBadge(item.key) }}</span
           ></router-link
         >
@@ -95,13 +95,15 @@ export default {
 
     // Числа рельсы (патч U): 0–99 числом, дальше 99+. Источник — хаб
     // счётчиков: SSE применяет живые обновления, навигация и опрос —
-    // запасные пути. Ноль показываем приглушённым.
+    // запасные пути. Ноль показываем приглушённым. Патч AH: красным
+    // кружком горят только непрочитанные уведомления — остальные счётчики
+    // спокойные, они сообщают, а не требуют внимания.
     const railBadges = [
       { to: "/mail", label: "Почта", key: "mail_unread" },
       { to: "/time", label: "Время", key: null },
       { to: "/secrets", label: "Секреты", key: "secrets_total" },
       { to: "/trash", label: "Корзина", key: "trash_total" },
-      { to: "/notifications", label: "Уведомления", key: "notifications_unread" },
+      { to: "/notifications", label: "Уведомления", key: "notifications_unread", alert: true },
     ]
 
     function railBadge(key) {
@@ -110,6 +112,11 @@ export default {
 
     function railZero(key) {
       return !globalCounts.value || !globalCounts.value[key]
+    }
+
+    function badgeClass(item) {
+      const empty = railZero(item.key)
+      return { zero: empty, alert: Boolean(item.alert) && !empty }
     }
 
     const build = ref("")
@@ -148,6 +155,7 @@ export default {
       railBadges,
       railBadge,
       railZero,
+      badgeClass,
       pomo,
       route,
       onLogout,
