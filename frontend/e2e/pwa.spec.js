@@ -56,9 +56,9 @@ test("на телефоне основная навигация уезжает �
   // Панель прижата к низу экрана (в пределах высоты вьюпорта).
   const box = await nav.boundingBox()
   expect(box.y + box.height).toBeGreaterThan(800)
-  // Пять адресов, у каждого — подпись и иконка.
-  await expect(nav.locator(".bottom-link")).toHaveCount(5)
-  await expect(nav.locator(".bottom-label")).toHaveCount(5)
+  // Шесть адресов, у каждого — подпись и иконка.
+  await expect(nav.locator(".bottom-link")).toHaveCount(6)
+  await expect(nav.locator(".bottom-label")).toHaveCount(6)
   // Первая вкладка — «Сегодня», она и активна на главной.
   await expect(nav.locator(".bottom-label").first()).toHaveText("Сегодня")
   await expect(nav.locator(".bottom-link").first()).toHaveClass(/active/)

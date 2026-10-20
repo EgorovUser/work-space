@@ -1067,6 +1067,20 @@ textarea.mono { min-height: 220px; }
 .matrix th, .matrix td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; }
 .matrix td:not(:first-child), .matrix th:not(:first-child) { text-align: center; width: 7rem; }
 
+/* — Общий список секретов: заголовок группы-проекта — */
+.group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.group-head a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.group-head a:hover { color: var(--accent); text-decoration: underline; }
+.group-head .pill { flex: none; }
+
 @media (max-width: 800px) {
   .app { grid-template-columns: 1fr; }
   .rail {
@@ -1316,12 +1330,12 @@ textarea.mono { min-height: 220px; }
 .bottom-nav { display: none; }
 
 @media (max-width: 800px) {
-  /* Пять главных адресов — внизу, под большим пальцем. Глобальная навигация
+  /* Шесть главных адресов — внизу, под большим пальцем. Глобальная навигация
      рельса на телефоне спрятана (дублируется этой панелью); сверху остаются
      бренд, табы проекта и выход. */
   .bottom-nav {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     position: fixed;
     left: 0;
     right: 0;

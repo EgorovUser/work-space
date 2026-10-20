@@ -133,6 +133,16 @@ DEFS: tuple[SettingDef, ...] = (
         max_value=50,
     ),
     _s(
+        key="list.global_limit",
+        value_type="int",
+        default=300,
+        label="Секретов в общем списке",
+        description="Потолок раздела «Секреты» (все проекты разом): сверх этого список обрезается, поиск сужает.",
+        ui_hint="number",
+        min_value=1,
+        max_value=20000,
+    ),
+    _s(
         key="search.include_archived",
         value_type="bool",
         default=False,

@@ -162,6 +162,16 @@ DEFS: tuple[SettingDef, ...] = (
         max_value=864000,
     ),
     _s(
+        key="deadlines.default_days",
+        value_type="int",
+        default=7,
+        label="Срок новой задачи по умолчанию, дней",
+        description="Новая задача на доске получает дедлайн через столько дней от сегодня. 0 — не ставить срок.",
+        ui_hint="number",
+        min_value=0,
+        max_value=3650,
+    ),
+    _s(
         key="repeat.interval.max",
         value_type="int",
         default=999,

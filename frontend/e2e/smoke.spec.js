@@ -95,6 +95,25 @@ test("тёмная тема переключается и переживает �
   await expect(html).toHaveAttribute("data-theme", "dark")
 })
 
+test("новая задача на доске получает дедлайн по умолчанию", async ({ page }) => {
+  const api = await apiLogin()
+  const project = await (
+    await api.post("/api/projects", { data: { name: "Дедлайн " + Date.now() } })
+  ).json()
+
+  await login(page)
+  await page.goto(`/projects/${project.id}`)
+  // Подсказка в композере честно предупреждает про будущий срок.
+  const composer = page.locator(".composer input").first()
+  await expect(composer).toHaveAttribute("placeholder", "Новая задача (срок +7 дн.)")
+  await composer.fill("Задача со сроком")
+  await composer.press("Enter")
+  const card = page.locator(".task-card", { hasText: "Задача со сроком" })
+  await expect(card).toBeVisible()
+  // Срок виден прямо на карточке — дата примерно через неделю.
+  await expect(card.locator(".task-meta")).toHaveText(/\d{4}-\d{2}-\d{2}/)
+})
+
 test("неизвестный маршрут не даёт белого экрана", async ({ page }) => {
   await login(page)
   await page.goto("/такого/маршрута/нет")

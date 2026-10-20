@@ -12,6 +12,8 @@ const router = createRouter({
     { path: "/mail", component: () => import("./views/Mailbox.vue"), meta: { auth: true } },
     // Письмо открывается прямо в «Почте»: список слева, читалка справа.
     { path: "/mail/:messageId", component: () => import("./views/Mailbox.vue"), meta: { auth: true } },
+    // Общий список секретов всех проектов — свой раздел рядом с почтой.
+    { path: "/secrets", component: () => import("./views/SecretsGlobal.vue"), meta: { auth: true } },
     { path: "/system", component: () => import("./views/Home.vue"), meta: { auth: true } },
     { path: "/settings", component: () => import("./views/Settings.vue"), meta: { auth: true } },
     { path: "/notifications", component: () => import("./views/Notifications.vue"), meta: { auth: true } },

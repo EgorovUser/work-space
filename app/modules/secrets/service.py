@@ -3,7 +3,7 @@ from __future__ import annotations
 from secrets import choice as random_choice
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.db import utcnow
@@ -12,6 +12,7 @@ from app.core.events_catalog import SECRET_CREATED, SECRET_DELETED, SECRET_OPENE
 from app.core.logging import log_scope, logger
 from app.core.outbox import enqueue
 from app.core.settings_store import get, get_bool, get_int, get_str
+from app.modules.projects.models import Project
 from app.modules.projects.service import touch_project
 from app.modules.secrets import crypto
 from app.modules.secrets.models import Secret
@@ -29,6 +30,57 @@ def list_secrets(session: Session, project_id: int, include_archived: bool, quer
         rows = [row for row in rows if needle in (row.title or "").casefold()]
     rows = rows[:limit]
     return {"items": [_public(row, project_id) for row in rows], "kinds": _kinds(project_id)}
+
+
+def list_all_secrets(session: Session, include_archived: bool, query: str) -> dict:
+    """Общий список секретов всех проектов — для глобального раздела.
+
+    Группы идут по проектам: активные первыми, дальше по алфавиту названий.
+    Внутри проекта — свежие сверху, как и в проектном списке. Общий потолок
+    берётся из secrets.list.global_limit: при переполнении список честно
+    обрезается и об этом говорит флаг truncated.
+    """
+    needle = _query_needle(query, None)
+    cap = get_int("secrets", "list.global_limit")
+    statement = select(Project).order_by(Project.archived.asc(), func.lower(Project.name).asc(), Project.id.asc())
+    if not include_archived:
+        statement = statement.where(Project.archived.is_(False))
+    groups: list[dict] = []
+    total = 0
+    truncated = False
+    for project in session.scalars(statement).all():
+        rows = _project_rows(session, project.id, include_archived, needle)
+        if not rows:
+            continue
+        room = cap - total
+        if room <= 0:
+            truncated = True
+            break
+        if len(rows) > room:
+            rows = rows[:room]
+            truncated = True
+        groups.append(
+            {
+                "project_id": project.id,
+                "project_name": project.name,
+                "project_archived": bool(project.archived),
+                "items": [_public(row, project.id) for row in rows],
+            }
+        )
+        total += len(rows)
+    return {"groups": groups, "total": total, "truncated": truncated}
+
+
+def _project_rows(session: Session, project_id: int, include_archived: bool, needle: str) -> list[Secret]:
+    scan = get_int("secrets", "list.scan_limit", project_id=project_id)
+    limit = get_int("secrets", "list.limit", project_id=project_id)
+    statement = select(Secret).where(Secret.project_id == project_id)
+    if not include_archived:
+        statement = statement.where(Secret.archived.is_(False))
+    rows = list(session.scalars(statement.order_by(Secret.updated_at.desc(), Secret.id.desc()).limit(scan)).all())
+    if needle:
+        rows = [row for row in rows if needle in (row.title or "").casefold()]
+    return rows[:limit]
 
 
 def create_secret(session: Session, project_id: int, user_id: int, fields: dict) -> dict:

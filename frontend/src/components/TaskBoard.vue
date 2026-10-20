@@ -30,7 +30,7 @@
           </article>
         </div>
         <form class="composer" @submit.prevent="create(status)">
-          <input v-model="drafts[status.id]" type="text" placeholder="Новая задача" />
+          <input v-model="drafts[status.id]" type="text" :placeholder="composerPlaceholder" :title="composerHint" />
         </form>
       </section>
       </div>
@@ -48,11 +48,12 @@
 
 <script>
 import Sortable from "sortablejs"
-import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import ActionMenu from "./ActionMenu.vue"
 import { api } from "../api"
 import { repeatLabel } from "../composables/calendar"
+import { defaultDeadlineISO } from "../composables/deadlineDefault"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 import { applyTaskOrders } from "../composables/taskOrder"
@@ -100,6 +101,21 @@ export default {
     function late(task) {
       if (!task.deadline) return false
       return new Date(task.deadline).getTime() < Date.now()
+    }
+
+    // Дефолтный срок новой задачи: сегодня + N дней (tasks.deadlines.default_days,
+    // по умолчанию 7). Значение видно в подсказке поля и на карточке после
+    // создания; 0 в настройках выключает предзаполнение.
+    function deadlineDays() {
+      const days = Number(settings.get("tasks", "deadlines.default_days"))
+      return Number.isFinite(days) && days > 0 ? days : 0
+    }
+
+    function newTaskDeadline() {
+      return defaultDeadlineISO(
+        settings.get("tasks", "deadlines.default_days"),
+        settings.get("core", "ui.timezone")
+      )
     }
 
     function bar(task) {
@@ -377,7 +393,7 @@ export default {
       try {
         await api("/api/projects/" + props.project.id + "/tasks", {
           method: "POST",
-          body: { title, status_id: status.id },
+          body: { title, status_id: status.id, deadline: newTaskDeadline() },
         })
         drafts[status.id] = ""
         await load()
@@ -475,6 +491,16 @@ export default {
       if (action === "delete") removeColumn(status)
     }
 
+    const composerPlaceholder = computed(() => {
+      const days = deadlineDays()
+      return days ? "Новая задача (срок +" + days + " дн.)" : "Новая задача"
+    })
+
+    const composerHint = computed(() => {
+      const days = deadlineDays()
+      return days ? "Дедлайн через " + days + " дн. — меняется в настройках или на карточке" : ""
+    })
+
     watch(() => props.project.id, load)
     onMounted(() => {
       window.addEventListener("pointerdown", onPointerDown)
@@ -487,6 +513,7 @@ export default {
     return {
       statuses, drafts, columnName, columnClosed, error, unavailable, busy, loading, root, cardActions,
       tasksOf, priorityLabel, repeatLabel, when, late, bar, columnActions, create, addColumn, rename, onCard, onColumn,
+      composerPlaceholder, composerHint,
     }
   },
 }

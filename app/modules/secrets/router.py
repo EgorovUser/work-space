@@ -53,6 +53,19 @@ def list_secrets(
     return service.list_secrets(db, project.id, include_archived, q)
 
 
+@router.get("/api/secrets")
+def list_all_secrets(
+    include_archived: bool = False,
+    q: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    # Общий список секретов всех проектов — глобальный раздел «Секреты».
+    # Значения не расшифровываются: только маскированные признаки, как и в
+    # проектном списке; копирование идёт через существующие эндпоинты.
+    return service.list_all_secrets(db, include_archived, q)
+
+
 @router.post("/api/projects/{project_id}/secrets/generate")
 def generate_secret(project: Project = Depends(require_project)) -> dict:
     return service.generate_secret(project.id)

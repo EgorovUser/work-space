@@ -20,7 +20,7 @@ import { computed } from "vue"
 import { useRoute } from "vue-router"
 import { useEvents } from "../composables/useEvents"
 
-// Нижняя навигация видна только на узких экранах (CSS): пять главных
+// Нижняя навигация видна только на узких экранах (CSS): шесть главных
 // адресов приложения с иконками и площадью касания не меньше 44px.
 // «Состояние» — редкая диагностика, она осталась в рельсе; палец на
 // телефоне должен тянуться к ежедневному, а не к техническому.
@@ -47,6 +47,12 @@ const ITEMS = [
     label: "Почта",
     icon:
       '<svg viewBox="0 0 24 24" ' + STROKE + '><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+  },
+  {
+    to: "/secrets",
+    label: "Секреты",
+    icon:
+      '<svg viewBox="0 0 24 24" ' + STROKE + '><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.8 12.2 8.7-8.7"/><path d="m16.2 4.3 3.5 3.5"/><path d="m13.5 7 3.5 3.5"/></svg>',
   },
   {
     to: "/notifications",
