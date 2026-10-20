@@ -83,8 +83,11 @@
     </form>
 
     <p v-if="error" class="error">{{ error }}</p>
-    <p v-else-if="loading" class="muted">Загрузка…</p>
-    <p v-else-if="!entries.length" class="muted">Записей нет</p>
+    <SkeletonList v-else-if="loading" :rows="4" />
+    <div v-else-if="!entries.length" class="empty">
+      <strong>Записей за период нет</strong>
+      <span>Измените период выше или добавьте первую запись формой.</span>
+    </div>
     <div v-else class="stack">
       <article v-for="item in entries" :key="item.id" class="card">
         <div class="status-row">
@@ -132,13 +135,14 @@
 <script>
 import { computed, onBeforeUnmount, ref, watch } from "vue"
 import TimeChart from "../components/TimeChart.vue"
+import SkeletonList from "../components/SkeletonList.vue"
 import Tabs from "../components/Tabs.vue"
 import { api } from "../api"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 
 export default {
-  components: { Tabs, TimeChart },
+  components: { Tabs, TimeChart, SkeletonList },
   props: {
     project: { type: Object, required: true },
   },

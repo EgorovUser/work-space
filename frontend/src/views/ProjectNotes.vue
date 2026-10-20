@@ -5,8 +5,11 @@
       <button class="btn" type="submit" :disabled="busy">Добавить</button>
     </form>
     <p v-if="error" class="error">{{ error }}</p>
-    <p v-else-if="loading" class="muted">Загрузка…</p>
-    <p v-else-if="!items.length" class="muted">Заметок нет</p>
+    <SkeletonList v-else-if="loading" :rows="3" />
+    <div v-else-if="!items.length" class="empty">
+      <strong>Заметок пока нет</strong>
+      <span>Заметка — быстрый черновик внутри проекта: ссылка, пароль на неделю, идея.</span>
+    </div>
     <div v-else class="inbox-list">
       <article v-for="item in items" :key="item.id" class="inbox-row">
         <form v-if="editId === item.id" class="composer" @submit.prevent="save(item)">
@@ -30,9 +33,11 @@
 <script>
 import { onMounted, ref } from "vue"
 import { api } from "../api"
+import SkeletonList from "../components/SkeletonList.vue"
 import { useWhen } from "../composables/useWhen"
 
 export default {
+  components: { SkeletonList },
   props: { project: { type: Object, required: true } },
   setup(props) {
     const items = ref([])

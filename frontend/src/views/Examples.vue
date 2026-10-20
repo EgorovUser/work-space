@@ -19,8 +19,11 @@
       <button class="btn secondary" type="submit">Найти</button>
     </form>
     <p v-if="error" class="error">{{ error }}</p>
-    <p v-else-if="loading" class="muted">Загрузка…</p>
-    <p v-else-if="!items.length" class="muted">Файлов нет</p>
+    <SkeletonList v-else-if="loading" :rows="4" />
+    <div v-else-if="!items.length" class="empty">
+      <strong>Файлов пока нет</strong>
+      <span>Загрузите файл от заказчика формой выше — pdf, таблицу, картинку.</span>
+    </div>
     <div v-else class="list">
       <article v-for="item in items" :key="item.id" class="list-row">
         <div class="status-row">
@@ -45,12 +48,13 @@
 import { ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import ActionMenu from "../components/ActionMenu.vue"
+import SkeletonList from "../components/SkeletonList.vue"
 import { api, downloadFile } from "../api"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 
 export default {
-  components: { ActionMenu },
+  components: { ActionMenu, SkeletonList },
   props: { project: { type: Object, required: true } },
   setup(props) {
     const items = ref([])

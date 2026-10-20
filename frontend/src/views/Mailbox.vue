@@ -30,8 +30,11 @@
         >{{ tag.name }}</button>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
-      <p v-else-if="loading" class="muted">Загрузка…</p>
-      <p v-else-if="!messages.length" class="muted">{{ activeTag ? "Под этот хештег ничего не попало" : "Писем нет" }}</p>
+      <SkeletonList v-else-if="loading" :rows="5" />
+      <div v-else-if="!messages.length" class="empty">
+        <strong>{{ activeTag ? "Под этот хештег ничего не попало" : "Писем пока нет" }}</strong>
+        <span v-if="!activeTag">Как только в подключённом ящике появятся письма, они возникнут здесь сами.</span>
+      </div>
       <div v-else class="list">
         <article v-for="item in messages" :key="item.id" class="list-row">
           <router-link :class="{ unread: !item.read }" :to="'/mail/' + item.id">{{ item.title }}</router-link>
@@ -169,13 +172,14 @@ import { computed, reactive, ref, onMounted, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import AppShell from "../components/AppShell.vue"
 import Tabs from "../components/Tabs.vue"
+import SkeletonList from "../components/SkeletonList.vue"
 import { api } from "../api"
 import { useWhen } from "../composables/useWhen"
 
 const TAB_IDS = new Set(["letters", "tags", "notify", "accounts"])
 
 export default {
-  components: { AppShell, Tabs },
+  components: { AppShell, Tabs, SkeletonList },
   setup() {
     const route = useRoute()
     const router = useRouter()

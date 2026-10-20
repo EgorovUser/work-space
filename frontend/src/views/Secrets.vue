@@ -53,8 +53,11 @@
     </label>
 
     <p v-if="error" class="error">{{ error }}</p>
-    <p v-else-if="loading" class="muted">Загрузка…</p>
-    <p v-else-if="!items.length" class="muted">Секретов нет</p>
+    <SkeletonList v-else-if="loading" :rows="4" />
+    <div v-else-if="!items.length" class="empty">
+      <strong>Секретов пока нет</strong>
+      <span>Пароли, ключи и заметки для доступа появятся здесь — добавьте первый формой выше.</span>
+    </div>
     <div v-else class="card">
       <div v-for="item in items" :key="item.id" class="status-row">
         <div>
@@ -79,12 +82,13 @@ import { ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import { api } from "../api"
 import ActionMenu from "../components/ActionMenu.vue"
+import SkeletonList from "../components/SkeletonList.vue"
 import Tabs from "../components/Tabs.vue"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 
 export default {
-  components: { ActionMenu, Tabs },
+  components: { ActionMenu, Tabs, SkeletonList },
   props: {
     project: { type: Object, required: true },
   },

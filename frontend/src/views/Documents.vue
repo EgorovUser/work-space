@@ -41,8 +41,11 @@
     </label>
 
     <p v-if="error" class="error">{{ error }}</p>
-    <p v-else-if="loading" class="muted">Загрузка…</p>
-    <p v-else-if="!items.length" class="muted">Документов нет</p>
+    <SkeletonList v-else-if="loading" :rows="4" />
+    <div v-else-if="!items.length" class="empty">
+      <strong>Документов пока нет</strong>
+      <span>Перетащите файл в область загрузки выше или выберите его кнопкой.</span>
+    </div>
     <div v-else class="list">
       <article v-for="item in items" :key="item.id" class="list-row">
         <div class="status-row">
@@ -68,12 +71,13 @@ import { useRouter } from "vue-router"
 import { api, downloadFile, uploadApi } from "../api"
 import Tabs from "../components/Tabs.vue"
 import ActionMenu from "../components/ActionMenu.vue"
+import SkeletonList from "../components/SkeletonList.vue"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 import { formatSize } from "../composables/formatBytes"
 
 export default {
-  components: { ActionMenu, Tabs },
+  components: { ActionMenu, Tabs, SkeletonList },
   props: {
     project: { type: Object, required: true },
   },

@@ -55,8 +55,11 @@
       </form>
       <p v-if="createError" class="error">{{ createError }}</p>
       <p v-if="error" class="error">{{ error }}</p>
-      <p v-else-if="loading" class="muted">Загрузка…</p>
-      <p v-else-if="!items.length" class="muted">Проектов пока нет. Создайте первый формой выше.</p>
+      <SkeletonList v-else-if="loading" :rows="5" />
+      <div v-else-if="!items.length" class="empty">
+        <strong>Проектов пока нет</strong>
+        <span>Создайте первый формой выше — он появится здесь сразу.</span>
+      </div>
       <div v-else class="list">
         <router-link v-for="project in items" :key="project.id" class="list-row" :to="'/projects/' + project.id">
           <strong>{{ project.name }} <span v-if="project.archived" class="muted">· архив</span></strong>
@@ -78,11 +81,12 @@
 import { onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
 import AppShell from "../components/AppShell.vue"
+import SkeletonList from "../components/SkeletonList.vue"
 import { api } from "../api"
 import { useWhen } from "../composables/useWhen"
 
 export default {
-  components: { AppShell },
+  components: { AppShell, SkeletonList },
   setup() {
     const items = ref([])
     const hot = ref([])

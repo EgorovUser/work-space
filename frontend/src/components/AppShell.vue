@@ -28,7 +28,10 @@
     <main class="app-main">
       <header class="topbar">
         <div class="topbar-title">{{ heading }}</div>
-        <Bell />
+        <div class="topbar-tools">
+          <ThemeToggle />
+          <Bell />
+        </div>
       </header>
       <div class="app-body" :class="bare ? 'bare' : 'page'">
         <slot />
@@ -41,6 +44,7 @@
 import { computed, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import Bell from "./Bell.vue"
+import ThemeToggle from "./ThemeToggle.vue"
 import { useAuth } from "../composables/useAuth"
 import { useChrome } from "../composables/useChrome"
 import { useSettings } from "../composables/useSettings"
@@ -49,7 +53,7 @@ export default {
   props: {
     bare: { type: Boolean, default: false },
   },
-  components: { Bell },
+  components: { Bell, ThemeToggle },
   setup(props) {
     const auth = useAuth()
     const settings = useSettings()

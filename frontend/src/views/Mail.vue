@@ -10,9 +10,15 @@
         <label class="check"><input v-model="unreadOnly" type="checkbox" @change="load" /><span>Только непрочитанные</span></label>
         <label class="check"><input v-model="includeArchived" type="checkbox" @change="load" /><span>Показать архив</span></label>
         <p v-if="error" class="error">{{ error }}</p>
-        <p v-else-if="loading" class="muted">Загрузка…</p>
-        <p v-else-if="!rules.length" class="muted">Фильтров нет, поэтому писем здесь не видно. Добавьте фильтр на вкладке «Фильтры» — в список попадут только подходящие.</p>
-        <p v-else-if="!messages.length" class="muted">Под текущие фильтры ничего не попало</p>
+        <SkeletonList v-else-if="loading" :rows="4" />
+        <div v-else-if="!rules.length" class="empty">
+          <strong>Писем по фильтрам пока нет</strong>
+          <span>Фильтров нет, поэтому письма этого проекта не видны. Добавьте фильтр на вкладке «Фильтры» — в список попадут только подходящие.</span>
+        </div>
+        <div v-else-if="!messages.length" class="empty">
+          <strong>Под текущие фильтры ничего не попало</strong>
+          <span>Попробуйте ослабить условия фильтров или снять «Только непрочитанные».</span>
+        </div>
         <div v-else class="card">
           <div v-for="item in messages" :key="item.id" class="status-row">
             <div>
@@ -74,10 +80,11 @@ import { reactive, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
 import Tabs from "../components/Tabs.vue"
+import SkeletonList from "../components/SkeletonList.vue"
 import { useWhen } from "../composables/useWhen"
 
 export default {
-  components: { Tabs },
+  components: { Tabs, SkeletonList },
   props: { project: { type: Object, required: true } },
   setup(props) {
     const route = useRoute()
