@@ -28,6 +28,7 @@
     <main class="app-main">
       <header class="topbar">
         <div class="topbar-title">{{ heading }}</div>
+        <GlobalSearch />
         <div class="topbar-tools">
           <ThemeToggle />
           <Bell />
@@ -45,6 +46,7 @@ import { computed, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import Bell from "./Bell.vue"
 import ThemeToggle from "./ThemeToggle.vue"
+import GlobalSearch from "./GlobalSearch.vue"
 import { useAuth } from "../composables/useAuth"
 import { useChrome } from "../composables/useChrome"
 import { useSettings } from "../composables/useSettings"
@@ -53,7 +55,7 @@ export default {
   props: {
     bare: { type: Boolean, default: false },
   },
-  components: { Bell, ThemeToggle },
+  components: { Bell, ThemeToggle, GlobalSearch },
   setup(props) {
     const auth = useAuth()
     const settings = useSettings()

@@ -88,7 +88,26 @@ def init_db() -> None:
         # База уже под управлением Alembic
         command.upgrade(alembic_cfg, "head")
 
+    _ensure_search_index()
     _warn_schema_drift()
+
+
+def _ensure_search_index() -> None:
+    """Полнотекстовый индекс — FTS5-таблицы вне метаданных SQLAlchemy.
+
+    create_all их не создаёт, а свежая база штампуется в head и миграции
+    не проигрывает. Поэтому индекс поднимаем здесь всегда (идемпотентно);
+    миграция 0005 — обёртка для баз, идущих через upgrade(). Если SQLite без
+    FTS5 — пишем предупреждение и живём без поиска.
+    """
+    from app.core.search import ensure_search_index
+
+    try:
+        with _engine.begin() as conn:
+            ensure_search_index(conn)
+    except Exception:
+        with log_scope("core", "search.init"):
+            logger.exception("Полнотекстовый индекс не создан — поиск недоступен")
 
 
 def _warn_schema_drift() -> None:
