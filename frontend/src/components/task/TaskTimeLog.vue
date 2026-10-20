@@ -38,6 +38,8 @@ import { useRoute } from "vue-router"
 import { api } from "../../api"
 import { formatDuration, formatHoursCompact, hoursToMinutes } from "../../composables/timeFormat"
 import { useNotice } from "../../composables/useNotice"
+import { usePomodoro } from "../../composables/usePomodoro"
+import { useRunningTimer } from "../../composables/useRunningTimer"
 import { useWhen } from "../../composables/useWhen"
 
 // Блок «Списать время» на вкладке «О задаче» (патч R, вынесен из TaskPage
@@ -55,6 +57,10 @@ export default {
     const busy = ref(false)
     const timeEntries = ref([])
     const timeError = ref("")
+    // Один активный фокус (патч AL): таймер по задаче тоже гасит помодоро
+    // и сообщает рельсе о себе сразу.
+    const pomo = usePomodoro()
+    const focus = useRunningTimer()
     // Ввод в часах (патч R): «1.5» — полтора часа; в API уходят минуты.
     const spent = reactive({ day: localDay(), hours: 1, note: "" })
 
@@ -103,12 +109,14 @@ export default {
     async function startOnTask() {
       busy.value = true
       timeError.value = ""
+      pomo.stop()
       try {
         await api("/api/projects/" + props.project.id + "/time/start", {
           method: "POST",
           body: { task_id: Number(route.params.taskId), note: spent.note },
         })
         notice.show("Таймер запущен по этой задаче", { kind: "success" })
+        focus.refresh()
         await loadTime()
       } catch (err) {
         timeError.value = err.message || "Таймер не запустился"

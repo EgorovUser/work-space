@@ -142,6 +142,8 @@ import { formatDuration, hoursToMinutes } from "../composables/timeFormat"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 import { useSoftDelete } from "../composables/useSoftDelete"
+import { usePomodoro } from "../composables/usePomodoro"
+import { useRunningTimer } from "../composables/useRunningTimer"
 
 export default {
   components: { Tabs, TimeChart, SkeletonList },
@@ -168,6 +170,10 @@ export default {
     const edit = ref(null)
     const notice = useNotice()
     const { softRemove } = useSoftDelete()
+    // Один активный фокус (патч AL): старт серверного таймера гасит
+    // помодоро, а рельса узнаёт о новом таймере сразу, не дожидаясь опроса.
+    const pomo = usePomodoro()
+    const focus = useRunningTimer()
     const tab = ref("timer")
     const days = ref(14)
     const pageTabs = [
@@ -238,6 +244,7 @@ export default {
       const previous = running.value
       const note = draft.value.note
       const task = tasks.value.find((item) => String(item.id) === String(draft.value.task_id))
+      pomo.stop()
       running.value = {
         started_at: new Date().toISOString(),
         note,
@@ -256,6 +263,7 @@ export default {
         notice.show("Не удалось запустить таймер. " + (err.message || "Ошибка"))
         return
       }
+      focus.refresh()
       try {
         await load()
       } catch {
@@ -274,6 +282,7 @@ export default {
         notice.show("Не удалось остановить таймер. " + (err.message || "Ошибка"))
         return
       }
+      focus.refresh()
       try {
         await load()
       } catch {

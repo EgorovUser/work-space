@@ -15,7 +15,13 @@
 from app.modules.timetracking.service.entries import create_entry, delete_entry, update_entry
 from app.modules.timetracking.service.overview import overview
 from app.modules.timetracking.service.report import card_provider, dashboard_provider, project_time
-from app.modules.timetracking.service.timer import autostop_open, start_timer, stop_timer
+from app.modules.timetracking.service.timer import (
+    autostop_open,
+    running_for_user,
+    start_timer,
+    stop_timer,
+    stop_timer_anywhere,
+)
 
 __all__ = [
     "autostop_open",
@@ -25,7 +31,9 @@ __all__ = [
     "delete_entry",
     "overview",
     "project_time",
+    "running_for_user",
     "start_timer",
     "stop_timer",
+    "stop_timer_anywhere",
     "update_entry",
 ]

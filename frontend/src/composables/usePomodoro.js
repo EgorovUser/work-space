@@ -1,9 +1,15 @@
 import { reactive } from "vue"
 import { api } from "../api.js"
+import { useRunningTimer } from "./useRunningTimer.js"
 
 // Помодоро (патч N): один таймер на всё приложение. Состояние живёт в
 // модуле, а не в компоненте — переход между экранами не сбрасывает
 // отсчёт. Гонки закрыты флагом running: один интервал на процесс.
+//
+// Патч AL: активным может быть что-то одно — старт помодоро останавливает
+// серверный таймер (лучшим усилием: сеть моргнула — таймер доживёт до
+// ближайшего стопа), а старт таймера останавливает помодоро (это делают
+// страницы «Учёт» и задачи).
 
 const SETTINGS_KEY = "ws.pomodoro.settings"
 
@@ -158,6 +164,13 @@ function start(task) {
   if (state.running) return
   state.task = task || null
   startPhase("work")
+  // Один активный фокус (патч AL): погасить серверный таймер, если идёт.
+  // 404 «не запущен» — нормальный путь; рельса узнает об остановке сама.
+  if (typeof window !== "undefined") {
+    api("/api/time/stop", { method: "POST" })
+      .then(() => useRunningTimer().refresh())
+      .catch(() => {})
+  }
 }
 
 function stop(resetTask = true) {

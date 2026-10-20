@@ -142,6 +142,56 @@ a { color: var(--accent); }
   border-top: 1px solid var(--rail-line);
 }
 
+/* Активный фокус в рельсе (патч AL): строка над именем пользователя —
+   видна только когда что-то идёт. Часы тикают, подпись — задача или
+   заметка, кнопка — стоп. Помодоро — акцентный, перерыв — зелёный,
+   серверный таймер — спокойный контур. */
+.rail-focus {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px 6px 6px 8px;
+  border: 1px solid var(--rail-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  margin-bottom: 4px;
+}
+.rail-focus-link {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  text-decoration: none;
+}
+.rail-focus-clock {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.rail-focus-sub {
+  color: var(--rail-muted);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail-focus-stop {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--rail-muted);
+  border-radius: 6px;
+  padding: 0 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.rail-focus-stop:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.rail-focus.pomo { border-color: rgba(255, 255, 255, 0.22); }
+.rail-focus.break { border-color: var(--ok-line); }
+.rail-focus.break .rail-focus-clock { color: var(--ok); }
+
 .rail-user {
   padding: 0 8px;
   color: var(--rail-muted);
@@ -1367,6 +1417,14 @@ textarea.mono { min-height: 220px; }
   white-space: nowrap;
 }
 .pomo-chip.break { border-color: var(--ok-line); background: var(--ok-bg); color: var(--ok); }
+/* Чип серверного таймера (патч AL): спокойный контур — он сообщает,
+   а не требует внимания; цифры моноширинные, чтобы не прыгали. */
+.pomo-chip.timer {
+  border-color: var(--line-2);
+  background: var(--paper);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
 /* Карточка помодоро на «Сегодня». */
 .today-pomo .pomo-clock {
   font-size: 2rem;

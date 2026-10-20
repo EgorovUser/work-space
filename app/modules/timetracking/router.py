@@ -55,6 +55,24 @@ def time_overview(
     return service.overview(db)
 
 
+# Один активный фокус (патч AL): рельса и помодоро спрашивают таймер
+# глобально — не зная проекта, в котором тот запущен.
+@router.get("/api/time/running")
+def time_running(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    return service.running_for_user(db, user.id)
+
+
+@router.post("/api/time/stop")
+def time_stop_anywhere(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    return service.stop_timer_anywhere(db, user.id)
+
+
 @router.get("/api/projects/{project_id}/time")
 def project_time(
     days: int | None = None,

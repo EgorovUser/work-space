@@ -60,22 +60,46 @@ def start_timer(session: Session, project_id: int, user_id: int, fields: dict) -
     return {"entry": _out(session, row), "stopped_id": stopped}
 
 
-def stop_timer(session: Session, project_id: int, user_id: int) -> dict:
-    row = _open_for_user(session, user_id)
-    if row is None or row.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Таймер не запущен")
+def _stop_row(session: Session, row: TimeEntry, user_id: int) -> dict:
+    """Общий стоп: закрыть запись, события, кеш проекта, уведомление."""
     _close(session, row, utcnow(), clamp=True)
-    touch_project(session, project_id)
+    touch_project(session, row.project_id)
     session.flush()
     with log_scope("timetracking", "stop", user_id=user_id):
         logger.info("timer stop id={} minutes={}", row.id, row.minutes)
     enqueue(
         session,
         TIME_STOPPED,
-        {"title": "Таймер остановлен", "subject": str(row.minutes) + " мин", "project_id": project_id, "link": "/projects/" + str(project_id) + "/time"},
+        {"title": "Таймер остановлен", "subject": str(row.minutes) + " мин", "project_id": row.project_id, "link": "/projects/" + str(row.project_id) + "/time"},
         user_id=user_id,
     )
     return _out(session, row)
+
+
+def stop_timer(session: Session, project_id: int, user_id: int) -> dict:
+    row = _open_for_user(session, user_id)
+    if row is None or row.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Таймер не запущен")
+    return _stop_row(session, row, user_id)
+
+
+# — Один активный фокус (патч AL): пользователь видит свой таймер в рельсе —
+# откуда бы тот ни был запущен. Точечный стоп по проекту остаётся для
+# страницы «Учёт», а эти двое — глобальные, без проекта в URL. —
+
+
+def running_for_user(session: Session, user_id: int) -> dict:
+    """Открытая запись таймера пользователя — где бы он ни шёл."""
+    row = _open_for_user(session, user_id)
+    return {"running": _out(session, row) if row is not None else None}
+
+
+def stop_timer_anywhere(session: Session, user_id: int) -> dict:
+    """Стоп таймера без указания проекта: для рельсы и старта помодоро."""
+    row = _open_for_user(session, user_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Таймер не запущен")
+    return _stop_row(session, row, user_id)
 
 
 def autostop_open() -> None:

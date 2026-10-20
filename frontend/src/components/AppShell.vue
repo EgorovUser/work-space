@@ -16,6 +16,18 @@
         <router-link to="/settings">Настройки</router-link>
         <router-link to="/system">Состояние</router-link>
       </nav>
+      <!-- Патч AL: активный фокус — над именем пользователя, только когда
+           что-то идёт. Помодоро приоритетнее (он клиентский и всегда свежий);
+           иначе — серверный таймер. Ссылка ведёт к источнику, кнопка — стоп. -->
+      <div v-if="focusLine" class="rail-focus" :class="focusLine.kind">
+        <router-link class="rail-focus-link" :to="focusLine.to" :title="focusLine.hint">
+          <strong class="rail-focus-clock">{{ focusLine.clock }}</strong>
+          <span v-if="focusLine.sub" class="rail-focus-sub">{{ focusLine.sub }}</span>
+        </router-link>
+        <button class="rail-focus-stop" type="button" :title="focusLine.stopTitle" @click="focusLine.onStop">
+          ⏹
+        </button>
+      </div>
       <div class="rail-foot">
         <div v-if="user" class="rail-user">{{ user.display_name || user.username }}</div>
         <button class="btn secondary" type="button" @click="onLogout">Выйти</button>
@@ -29,6 +41,14 @@
         <div class="topbar-tools">
           <router-link v-if="pomo.state.running" to="/" class="pomo-chip" :class="{ break: pomo.state.phase === 'break' }" title="Идёт помодоро — вернуться на «Сегодня»">
             {{ pomo.label() }}
+          </router-link>
+          <router-link
+            v-else-if="focusTimer.running"
+            :to="focusTimer.to"
+            class="pomo-chip timer"
+            title="Идёт таймер — открыть учёт времени проекта"
+          >
+            {{ focusTimer.clock }}
           </router-link>
           <ThemeToggle />
           <Bell />
@@ -57,6 +77,7 @@ import { railCount } from "../composables/countFormat"
 import { useCounters } from "../composables/useCounters"
 import { useEvents } from "../composables/useEvents"
 import { usePomodoro } from "../composables/usePomodoro"
+import { useRunningTimer } from "../composables/useRunningTimer"
 import { useSettings } from "../composables/useSettings"
 
 // Рельса несёт только глобальные разделы. Навигация внутри проекта живёт
@@ -92,6 +113,51 @@ export default {
     const pomo = usePomodoro()
     const counters = useCounters()
     const globalCounts = counters.globalCounts
+    const focus = useRunningTimer()
+
+    // Активный фокус в рельсе (патч AL): помодоро или серверный таймер.
+    // Часы тикают сами (state.remaining у помодоро, now у таймера),
+    // вычисляемое свойство пересобирается каждую секунду.
+    const focusLine = computed(() => {
+      if (pomo.state.running) {
+        const rest = pomo.state.phase === "break"
+        return {
+          kind: rest ? "pomo break" : "pomo",
+          clock: pomo.label(),
+          sub: pomo.state.task ? pomo.state.task.title : "",
+          to: "/",
+          hint: "Идёт помодоро — вернуться на «Сегодня»",
+          stopTitle: "Остановить помодоро",
+          onStop: () => pomo.stop(),
+        }
+      }
+      const row = focus.running.value
+      if (row) {
+        return {
+          kind: "timer",
+          clock: focus.elapsed.value || "0:00",
+          sub: focus.sub.value,
+          to: "/projects/" + row.project_id + "/time",
+          hint: "Идёт таймер — открыть учёт времени",
+          stopTitle: "Остановить таймер",
+          onStop: () => {
+            focus.stop().catch(() => {})
+          },
+        }
+      }
+      return null
+    })
+
+    // Чип в шапке — тот же фокус для узких экранов, где рельсы нет.
+    const focusTimer = computed(() => {
+      const row = focus.running.value
+      if (!row) return { running: null }
+      return {
+        running: row,
+        clock: focus.elapsed.value || "0:00",
+        to: "/projects/" + row.project_id + "/time",
+      }
+    })
 
     // Числа рельсы (патч U): 0–99 числом, дальше 99+. Источник — хаб
     // счётчиков: SSE применяет живые обновления, навигация и опрос —
@@ -126,6 +192,7 @@ export default {
       events.start()
       counters.start()
       counters.refresh()
+      focus.start()
       // Сборка приходит от работающего бэкенда, а не зашита в бандл: если
       // надписи нет — оболочка устарела; если есть — ровно эта версия и
       // крутится (сверяется с curl /healthz).
@@ -136,11 +203,16 @@ export default {
         .catch(() => {})
     })
 
-    onBeforeUnmount(() => counters.stop())
+    onBeforeUnmount(() => {
+      counters.stop()
+      focus.stopPolling()
+    })
 
     async function onLogout() {
       events.stop()
       counters.reset()
+      focus.reset()
+      pomo.stop()
       await auth.logout()
       router.push("/login")
     }
@@ -157,6 +229,8 @@ export default {
       railZero,
       badgeClass,
       pomo,
+      focusLine,
+      focusTimer,
       route,
       onLogout,
     }
