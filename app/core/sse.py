@@ -2,9 +2,10 @@
 
 Формат потока (text/event-stream):
 
-- ``event: state`` — снимок счётчиков ``mail_unread`` и ``notifications_unread``;
-  первый уходит сразу при подключении, дальше — когда пришёл сигнал из шины
-  или на heartbeat (он же keepalive и проверка сессии);
+- ``event: state`` — снимок счётчиков (непрочитанные письма и уведомления,
+  корзина, секреты — патч T); первый уходит сразу при подключении, дальше —
+  когда пришёл сигнал из шины или на heartbeat (он же keepalive и проверка
+  сессии);
 - ``event: mail.sync`` — забор почты реально принёс письма (ящик + количество);
 - ``event: mail.changed`` — какое-то письмо изменилось (прочитано, архив,
   удаление, импорт) — в том числе из другой вкладки;
@@ -13,6 +14,11 @@
 Сигналы из шины не несут счётчиков сами: генератор пересчитывает их в своём
 потоке после короткой паузы (запросы успевают доехать до коммита). Пропущенный
 сигнал не страшен — heartbeat пересчитает состояние ещё раз.
+
+Сами числа живут в хабе ``app/core/counters.py`` (патч T): после сигнала шины
+здесь принудительный пересчёт (мимо кеша), на heartbeat — чтение из кеша с
+TTL — сколько бы вкладок ни висело открытыми, к базе ходит один запрос на
+окно, а мутации сбрасывают кеш сами.
 """
 
 from __future__ import annotations
@@ -60,7 +66,7 @@ async def _stream(request: Request, user_id: int, heartbeat: int):
     last_state: dict | None = None
     with events_bus.subscribe(user_id) as q:
         try:
-            state = await run_in_threadpool(_snapshot, user_id)
+            state = await run_in_threadpool(_snapshot, user_id, True)
             last_state = dict(state)
             yield _format("state", state)
             while True:
@@ -70,7 +76,9 @@ async def _stream(request: Request, user_id: int, heartbeat: int):
                 if first is None:
                     if not await run_in_threadpool(_session_alive, request):
                         break
-                    state = await run_in_threadpool(_snapshot, user_id)
+                    # Heartbeat — чтение из кеша счётчиков: мутации кеш сбрасывают,
+                    # поэтому число не зависает, а лишних запросов к базе нет.
+                    state = await run_in_threadpool(_snapshot, user_id, False)
                     if state != last_state:
                         last_state = dict(state)
                         yield _format("state", state)
@@ -93,7 +101,8 @@ async def _stream(request: Request, user_id: int, heartbeat: int):
                         # что письмо прочитано/удалено — без перезагрузки.
                         yield _format("mail.changed", item.payload)
                 await asyncio.sleep(_DEBOUNCE_SECONDS)
-                state = await run_in_threadpool(_snapshot, user_id)
+                # Сигнал был — пересчитываем мимо кеша и обновляем его.
+                state = await run_in_threadpool(_snapshot, user_id, True)
                 if state != last_state:
                     last_state = dict(state)
                     yield _format("state", state)
@@ -124,42 +133,11 @@ def _format(event_type: str, payload: dict) -> str:
     return f"event: {event_type}\ndata: {body}\n\n"
 
 
-def _snapshot(user_id: int) -> dict:
-    """Счётчики для вкладки. Упавший модуль не роняет канал — поля просто нет."""
-    state: dict = {}
-    try:
-        from sqlalchemy import func, select
+def _snapshot(user_id: int, force: bool = False) -> dict:
+    """Счётчики из хаба (патч T). Упавший модуль не роняет канал — поля просто нет."""
+    from app.core import counters
 
-        from app.modules.mail.models import MailMessage
-
-        with db_module.SessionLocal() as session:
-            unread = session.scalar(
-                select(func.count())
-                .select_from(MailMessage)
-                .where(MailMessage.read.is_(False), MailMessage.archived.is_(False))
-            )
-        state["mail_unread"] = int(unread or 0)
-    except Exception:
-        logger.opt(exception=True).warning("sse mail snapshot failed")
-    try:
-        from sqlalchemy import func, select
-
-        from app.modules.notifications.models import Notification
-
-        with db_module.SessionLocal() as session:
-            unread = session.scalar(
-                select(func.count())
-                .select_from(Notification)
-                .where(
-                    Notification.user_id == user_id,
-                    Notification.show_browser.is_(True),
-                    Notification.read.is_(False),
-                )
-            )
-        state["notifications_unread"] = int(unread or 0)
-    except Exception:
-        logger.opt(exception=True).warning("sse notifications snapshot failed")
-    return state
+    return counters.user_state(user_id, force=force)
 
 
 def _session_alive(request: Request) -> bool:

@@ -8,8 +8,9 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
+from app.core import counters
 from app.core.db import session_scope, utcnow
-from app.core.events_bus import publish as publish_event
+from app.core.events_bus import publish as _bus_publish
 from app.core.events_catalog import ALL_EVENTS
 from app.core.logging import log_scope, logger
 from app.core.models import User
@@ -17,6 +18,12 @@ from app.core.outbox import EventMessage
 from app.core.settings_store import get, get_bool, get_int, get_str
 from app.modules.notifications import channels
 from app.modules.notifications.models import Notification, NotificationDelivery
+
+
+def publish_event(event_type, payload=None, user_id=None):
+    """Сигнал шины + сброс кеша счётчиков (патч T): уведомления менялись — числа бейджей тоже."""
+    _bus_publish(event_type, payload, user_id)
+    counters.invalidate()
 
 
 def handle(message: EventMessage) -> None:

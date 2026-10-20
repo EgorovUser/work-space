@@ -169,6 +169,16 @@ CORE_DEFS: tuple[SettingDef, ...] = (
         max_value=300,
     ),
     _s(
+        key="counters.ttl_seconds",
+        value_type="int",
+        default=15,
+        label="Время жизни кеша счётчиков",
+        description="Секунды, в пределах которых бейджи и счётчики отдаются из кеша без похода в базу. Мутации сбрасывают кеш сразу.",
+        ui_hint="number",
+        min_value=1,
+        max_value=300,
+    ),
+    _s(
         key="ui.timezone",
         value_type="str",
         default="Europe/Moscow",

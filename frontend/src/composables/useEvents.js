@@ -12,6 +12,8 @@ import { ref } from "vue"
 const connected = ref(false)
 const mailUnread = ref(null)
 const notificationsUnread = ref(null)
+const trashTotal = ref(null)
+const secretsTotal = ref(null)
 
 let source = null
 let retryTimer = null
@@ -40,6 +42,8 @@ function applyState(data) {
   if (!data || typeof data !== "object") return
   if (typeof data.mail_unread === "number") mailUnread.value = data.mail_unread
   if (typeof data.notifications_unread === "number") notificationsUnread.value = data.notifications_unread
+  if (typeof data.trash_total === "number") trashTotal.value = data.trash_total
+  if (typeof data.secrets_total === "number") secretsTotal.value = data.secrets_total
 }
 
 function handleEvent(name, raw) {
@@ -127,5 +131,5 @@ function on(fn) {
 }
 
 export function useEvents() {
-  return { connected, mailUnread, notificationsUnread, start, stop, on }
+  return { connected, mailUnread, notificationsUnread, trashTotal, secretsTotal, start, stop, on }
 }

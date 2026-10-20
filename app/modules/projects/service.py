@@ -27,6 +27,11 @@ def touch_project(session: Session, project_id: int) -> None:
         return
     project.updated_at = utcnow()
     session.flush()
+    # Почти любая проектная мутация меняет числа бейджей (документы, секреты,
+    # корзина…). Кеш счётчиков сбрасываем здесь, одним местом (патч T).
+    from app.core import counters
+
+    counters.invalidate(project_id)
 
 
 def list_projects(session: Session, user_id: int, include_archived: bool) -> list[dict]:

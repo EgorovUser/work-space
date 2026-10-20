@@ -11,7 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.db import session_scope, utcnow
-from app.core.events_bus import publish as publish_event
+from app.core import counters
+from app.core.events_bus import publish as _bus_publish
 from app.core.events_catalog import MAIL_AUTH_FAILED
 from app.core.logging import log_scope, logger
 from app.core.outbox import enqueue
@@ -37,6 +38,12 @@ from app.modules.mail.service._settings import (
 )
 from app.modules.mail.service.ingest import _ingest
 from app.modules.projects.service import touch_project
+
+
+def publish_event(event_type, payload=None, user_id=None):
+    """Сигнал шины + сброс кеша счётчиков (патч T): забор писем меняет числа бейджей."""
+    _bus_publish(event_type, payload, user_id)
+    counters.invalidate()
 
 
 def create_account(session: Session, project_id: int, user_id: int, fields: dict) -> dict:

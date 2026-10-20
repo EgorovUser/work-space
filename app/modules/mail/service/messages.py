@@ -6,7 +6,8 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, defer
 
-from app.core.events_bus import publish as publish_event
+from app.core import counters
+from app.core.events_bus import publish as _bus_publish
 from app.core.events_catalog import MAIL_ARCHIVED, MAIL_DELETED
 from app.core.files import add_link, save_bytes
 from app.core.models import StoredFile
@@ -40,6 +41,12 @@ from app.modules.mail.service._threads import _grouped_messages, _thread_out
 from app.modules.mail.service.accounts import _run_moves
 from app.modules.mail.service.ingest import _ingest
 from app.modules.mail.service.notify import notify_state
+
+
+def publish_event(event_type, payload=None, user_id=None):
+    """Сигнал шины + сброс кеша счётчиков (патч T): письма менялись — числа бейджей тоже."""
+    _bus_publish(event_type, payload, user_id)
+    counters.invalidate()
 
 
 def mailbox(session: Session, unread_only: bool, include_archived: bool, query: str, tag_id: int = 0, offset: int = 0) -> dict:
