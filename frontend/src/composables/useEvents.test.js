@@ -54,6 +54,10 @@ test("useEvents: state обновляет счётчики, mail.sync доход
   created[0].dispatch("mail.sync", JSON.stringify({ account: "Рабочий", fetched: 3 }))
   assert.deepEqual(seen[1], ["mail.sync", { account: "Рабочий", fetched: 3 }])
 
+  // изменение письма (прочитано/архив/удалено, в т.ч. из другой вкладки)
+  created[0].dispatch("mail.changed", "{}")
+  assert.deepEqual(seen[2], ["mail.changed", {}])
+
   // мусорный JSON не роняет канал
   created[0].dispatch("state", "{не json")
   assert.equal(events.mailUnread.value, 4)

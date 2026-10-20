@@ -30,24 +30,58 @@
         >{{ tag.name }}</button>
       </div>
       <p v-if="error" class="error">{{ error }}</p>
-      <SkeletonList v-else-if="loading" :rows="5" />
-      <div v-else-if="!messages.length" class="empty">
-        <strong>{{ activeTag ? "Под этот хештег ничего не попало" : "Писем пока нет" }}</strong>
-        <span v-if="!activeTag">Как только в подключённом ящике появятся письма, они возникнут здесь сами.</span>
-      </div>
-      <div v-else class="list">
-        <article v-for="item in messages" :key="item.id" class="list-row">
-          <router-link :class="{ unread: !item.read }" :to="'/mail/' + item.id">{{ item.title }}</router-link>
-          <span v-if="item.thread_count > 1" class="muted"> · {{ item.thread_count }} в переписке</span>
-          <div class="muted">{{ fromLine(item) }} · {{ when(item.received_at) }}<span v-if="item.thread_unread"> · непрочитанных {{ item.thread_unread }}</span><span v-if="item.attachment_count"> · вложения {{ item.attachment_count }}</span></div>
-          <div v-if="item.tags && item.tags.length" class="tag-row">
-            <span v-for="tag in item.tags" :key="tag.id" class="mail-tag on" :style="tagStyle(tag, true)">{{ tag.name }}</span>
+      <!-- Список и читалка рядом: письмо открывается без ухода со страницы.
+           Узкий экран — читалка занимает экран целиком, «К списку» возвращает. -->
+      <div v-else class="mailbox-split" :class="{ 'with-detail': selectedId }">
+        <div class="mailbox-list">
+          <SkeletonList v-if="loading" :rows="6" />
+          <div v-else-if="!messages.length" class="empty">
+            <strong>{{ activeTag ? "Под этот хештег ничего не попало" : "Писем пока нет" }}</strong>
+            <span v-if="!activeTag">Как только в подключённом ящике появятся письма, они возникнут здесь сами.</span>
           </div>
-        </article>
-      </div>
-      <div v-if="messages.length" class="status-row">
-        <p class="muted">Показано {{ messages.length }}</p>
-        <button v-if="hasMore" class="btn secondary" type="button" :disabled="moreBusy" @click="loadMore">{{ moreBusy ? "Загружаем…" : "Показать ещё" }}</button>
+          <template v-else>
+            <div class="list">
+              <button
+                v-for="item in messages"
+                :key="item.id"
+                type="button"
+                class="mail-row"
+                :class="{ active: item.id === selectedId }"
+                :aria-current="item.id === selectedId ? 'true' : null"
+                @click="openMessage(item)"
+              >
+                <span class="mail-dot" :class="{ on: !item.read }" aria-hidden="true"></span>
+                <span class="mail-row-body">
+                  <span class="mail-row-title">
+                    <strong :class="{ unread: !item.read }">{{ item.title }}</strong>
+                    <span v-if="item.thread_count > 1" class="muted"> · {{ item.thread_count }} в переписке</span>
+                  </span>
+                  <span class="muted">{{ fromLine(item) }} · {{ when(item.received_at) }}<span v-if="item.thread_unread"> · непрочитанных {{ item.thread_unread }}</span><span v-if="item.attachment_count"> · вложения {{ item.attachment_count }}</span></span>
+                  <span v-if="item.preview" class="mail-row-snippet">{{ item.preview }}</span>
+                  <span v-if="item.tags && item.tags.length" class="tag-row">
+                    <span v-for="tag in item.tags" :key="tag.id" class="mail-tag on" :style="tagStyle(tag, true)">{{ tag.name }}</span>
+                  </span>
+                </span>
+              </button>
+            </div>
+            <div class="status-row">
+              <p class="muted">Показано {{ messages.length }}</p>
+              <button v-if="hasMore" class="btn secondary" type="button" :disabled="moreBusy" @click="loadMore">{{ moreBusy ? "Загружаем…" : "Показать ещё" }}</button>
+            </div>
+          </template>
+        </div>
+        <section v-if="selectedId" class="mailbox-detail" aria-label="Открытое письмо">
+          <MailReader
+            :key="selectedId"
+            :message-id="selectedId"
+            :neighbors="rowNeighbors"
+            closable
+            @select="openById"
+            @close="closeDetail"
+            @changed="applyReaderChange"
+            @removed="removeSelectedRow"
+          />
+        </section>
       </div>
     </div>
     <div v-show="tab === 'tags'">
@@ -173,14 +207,16 @@ import { useRoute, useRouter } from "vue-router"
 import AppShell from "../components/AppShell.vue"
 import Tabs from "../components/Tabs.vue"
 import SkeletonList from "../components/SkeletonList.vue"
+import MailReader from "../components/MailReader.vue"
 import { api } from "../api"
 import { useEvents } from "../composables/useEvents"
+import { neighbors } from "../composables/mailNav"
 import { useWhen } from "../composables/useWhen"
 
 const TAB_IDS = new Set(["letters", "tags", "notify", "accounts"])
 
 export default {
-  components: { AppShell, Tabs, SkeletonList },
+  components: { AppShell, Tabs, SkeletonList, MailReader },
   setup() {
     const route = useRoute()
     const router = useRouter()
@@ -226,6 +262,14 @@ export default {
     ]
     const { settings, when } = useWhen()
     let firstLoad = true
+
+    // Выбранное письмо живёт в маршруте /mail/:id — deep-link, «назад» и
+    // Esc работают, а список слева никуда не девается.
+    const selectedId = computed(() => {
+      const value = Number(route.params.messageId)
+      return value > 0 ? value : null
+    })
+    const rowNeighbors = computed(() => neighbors(messages.value, selectedId.value))
 
     const everyLabel = computed(() => {
       const value = Number(sync.value && sync.value.every_seconds) || 0
@@ -321,8 +365,9 @@ export default {
           page.limit = Number(data.page.limit) || page.limit
         }
         hasMore.value = (data.messages || []).length >= page.limit
-        // Первый заход без ящиков — сразу на вкладку настройки.
-        if (firstLoad && !accounts.value.length && !route.query.tab) tab.value = "accounts"
+        // Первый заход без ящиков — сразу на вкладку настройки. Но если
+        // пришли по глубокой ссылке на письмо — показываем письмо.
+        if (firstLoad && !accounts.value.length && !route.query.tab && !route.params.messageId) tab.value = "accounts"
       } catch (err) {
         error.value = err.message || "Почта недоступна"
       } finally {
@@ -556,35 +601,96 @@ export default {
       await load()
     }
 
+    function openMessage(item) {
+      if (item.id === selectedId.value) return
+      openById(item.id)
+    }
+
+    function openById(id) {
+      router.push("/mail/" + id).catch(() => {})
+    }
+
+    function closeDetail() {
+      if (!route.params.messageId) return
+      // Возврат на тот же фильтрованный список, без новой записи в истории.
+      router.replace({ path: "/mail", query: route.query }).catch(() => {})
+    }
+
+    // Читалка доложила об изменении письма — строка списка обновляется
+    // на месте, мгновенно (SSE-пересчёт подтянет остальное чуть позже).
+    function applyReaderChange(updated) {
+      if (!updated || !updated.id) return
+      const row = messages.value.find((item) => item.id === updated.id)
+      if (!row) return
+      row.read = !!updated.read
+      row.archived = !!updated.archived
+      if (updated.tags) row.tags = updated.tags
+    }
+
+    function removeSelectedRow() {
+      const id = selectedId.value
+      if (id) messages.value = messages.value.filter((item) => item.id !== id)
+      closeDetail()
+    }
+
+    // Esc закрывает письмо — но не отбирает его у поиска и полей ввода.
+    function onKeydown(event) {
+      if (event.key !== "Escape" || !selectedId.value) return
+      const target = event.target
+      if (target && target.closest && target.closest("input, textarea, select, [contenteditable='true'], .topbar-search")) return
+      closeDetail()
+    }
+
     watch(tab, syncUrl)
+
+    // Глубокая ссылка на письмо всегда открывает вкладку писем,
+    // даже если до этого открыли настройки ящика.
+    watch(() => route.params.messageId, (value) => {
+      if (value && tab.value !== "letters") tab.value = "letters"
+    })
 
     // Живые события: счётчик непрочитанных — сразу из состояния канала,
     // а когда серверный забор приносит письма — список обновляется сам,
-    // без F5. Обновляем только видимую вкладку: невидимой всё равно
-    // свежие данные подтянутся при возврате.
+    // без F5. Изменение письма (прочитано, архив, удаление — в том числе
+    // из другой вкладки) приходит событием mail.changed. Обновляем только
+    // видимую вкладку: невидимой всё равно свежие данные подтянутся при
+    // возврате.
     const events = useEvents()
     let syncTimer = null
+    let changedTimer = null
     const offUnread = watch(events.mailUnread, (value) => {
       if (typeof value === "number") unread.value = value
     })
     const offEvents = events.on((type) => {
-      if (type !== "mail.sync") return
+      if (type === "mail.sync") {
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") return
+        if (syncTimer) clearTimeout(syncTimer)
+        syncTimer = setTimeout(() => {
+          syncTimer = null
+          if (tab.value === "letters") load()
+        }, 800)
+        return
+      }
+      if (type !== "mail.changed") return
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return
-      if (syncTimer) clearTimeout(syncTimer)
-      syncTimer = setTimeout(() => {
-        syncTimer = null
+      if (changedTimer) clearTimeout(changedTimer)
+      changedTimer = setTimeout(() => {
+        changedTimer = null
         if (tab.value === "letters") load()
-      }, 800)
+      }, 600)
     })
     onBeforeUnmount(() => {
       offUnread()
       offEvents()
       if (syncTimer) clearTimeout(syncTimer)
+      if (changedTimer) clearTimeout(changedTimer)
+      window.removeEventListener("keydown", onKeydown)
     })
 
     onMounted(() => {
       settings.load().catch(() => {})
       load()
+      window.addEventListener("keydown", onKeydown)
     })
 
     return {
@@ -595,6 +701,7 @@ export default {
       when, fromLine, load, loadMore, search, createAccount, savePassword, test, fetchMail, removeAccount,
       tagStyle, opsFor, blankCondition, syncOp, ruleText, setTag, createTag, removeTag,
       notifyOpsFor, syncNotifyOp, saveNotify, addNotifyRule, removeNotifyRule,
+      selectedId, rowNeighbors, openMessage, openById, closeDetail, applyReaderChange, removeSelectedRow,
     }
   },
 }

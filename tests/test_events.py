@@ -153,6 +153,10 @@ class SseHttpTest(unittest.TestCase):
                 session.flush()
                 self.mail_ids.append(row.id)
             events_bus.publish("mail.changed")
+            # именованное событие об изменении письма, затем пересчёт счётчиков
+            name, payload = read_event()
+            self.assertEqual(name, "mail.changed")
+            self.assertEqual(payload, {})
             name, state = read_event()
             self.assertEqual(name, "state")
             self.assertEqual(state["mail_unread"], base_mail + 1)
@@ -162,6 +166,13 @@ class SseHttpTest(unittest.TestCase):
             name, payload = read_event()
             self.assertEqual(name, "mail.sync")
             self.assertEqual(payload, {"account_id": 1, "account": "Рабочий", "fetched": 3})
+
+            # изменение письма без смены счётчиков — только именованное
+            # событие, пересчёт молчит (вкладке этого достаточно)
+            events_bus.publish("mail.changed")
+            name, payload = read_event()
+            self.assertEqual(name, "mail.changed")
+            self.assertEqual(payload, {})
 
             # новое уведомление — счётчик дёргается адресным сигналом
             with session_scope() as session:

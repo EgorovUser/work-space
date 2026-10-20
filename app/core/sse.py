@@ -6,6 +6,8 @@
   первый уходит сразу при подключении, дальше — когда пришёл сигнал из шины
   или на heartbeat (он же keepalive и проверка сессии);
 - ``event: mail.sync`` — забор почты реально принёс письма (ящик + количество);
+- ``event: mail.changed`` — какое-то письмо изменилось (прочитано, архив,
+  удаление, импорт) — в том числе из другой вкладки;
 - ``: ping`` — heartbeat без изменений, чтобы прокси не рвали соединение.
 
 Сигналы из шины не несут счётчиков сами: генератор пересчитывает их в своём
@@ -86,6 +88,10 @@ async def _stream(request: Request, user_id: int, heartbeat: int):
                 for item in items:
                     if item.type == "mail.sync":
                         yield _format("mail.sync", item.payload)
+                    elif item.type == "mail.changed":
+                        # Открытый список писем в другой вкладке должен увидеть,
+                        # что письмо прочитано/удалено — без перезагрузки.
+                        yield _format("mail.changed", item.payload)
                 await asyncio.sleep(_DEBOUNCE_SECONDS)
                 state = await run_in_threadpool(_snapshot, user_id)
                 if state != last_state:

@@ -848,6 +848,78 @@ textarea.mono { min-height: 220px; }
   background: #fff;
 }
 
+/* — Почта: список и читалка рядом (master-detail) — */
+.mailbox-split {
+  display: grid;
+  grid-template-columns: minmax(280px, 44%) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+/* Читалка прилипает к верху при прокрутке списка и листается сама,
+   если письмо длинное: вложенная прокрутка вместо прыгающей страницы. */
+.mailbox-detail {
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 72px);
+  overflow: auto;
+}
+
+.mail-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
+  align-items: start;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.mail-row:last-child { border-bottom: 0; }
+.mail-row:hover { background: var(--hover); }
+.mail-row.active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+
+.mail-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.mail-dot.on { background: var(--accent); }
+
+.mail-row-body { display: grid; gap: 2px; min-width: 0; }
+.mail-row-title { display: block; }
+
+.mail-row-snippet {
+  color: var(--muted);
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mail-row .tag-row { margin-top: 2px; }
+
+.mail-nav-row { display: flex; justify-content: space-between; gap: 8px; }
+.mail-back-row { display: none; }
+
+@media (max-width: 920px) {
+  .mailbox-split { grid-template-columns: minmax(0, 1fr); }
+  /* Открытое письмо занимает экран целиком; «К списку писем» возвращает. */
+  .mailbox-split.with-detail .mailbox-list { display: none; }
+  .mailbox-detail { position: static; max-height: none; overflow: visible; }
+  .mail-back-row { display: block; }
+}
+
 .today-card { margin-bottom: 12px; }
 
 .snippet {

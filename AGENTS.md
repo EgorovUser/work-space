@@ -17,15 +17,20 @@
   вкладок — `app/core/events_bus.py` (внутрипроцессная шина) и
   `app/core/sse.py` (канал `/api/events`): джобы и обработчики публикуют
   сигналы `mail.changed` / `mail.sync` / `notifications.changed`, канал сам
-  пересчитывает счётчики. Брокеров не заводить — см. «Чего не делать».
+  пересчитывает счётчики и пересылает `mail.sync`/`mail.changed` именованными
+  событиями (открытые вкладки обновляют список без F5). Брокеров не заводить
+  — см. «Чего не делать».
 - **Фронтенд** `frontend/` — Vue 3 + Vite, обычный JavaScript, composables без
-  Pinia, свой CSS. Прокси `/api` и `/healthz` на порт 8000.
+  Pinia, свой CSS. Прокси `/api` и `/healthz` на порт 8000. «Почта» —
+  master-detail: список и читалка рядом (`views/Mailbox.vue` + компонент
+  `components/MailReader.vue`), выбранное письмо живёт в маршруте `/mail/:id`.
 - **Миграции** — Alembic (`alembic/versions/`). `0001` — baseline-заглушка
   (схема = `create_all`); дальше — реальные миграции. Новые изменения моделей
   оформлять миграцией, а не правкой `create_all`.
 - **Тесты** — `tests/` (unittest, 59 проверок; запускаются на временной базе)
-  и `frontend/e2e/` (Playwright против настоящего uvicorn: `cd frontend &&
-  npm run test:e2e`, нужен собранный `dist`).
+  и `frontend/e2e/` (Playwright против настоящего uvicorn, 9 сценариев:
+  `cd frontend && npm run test:e2e`, нужен собранный `dist`). Юнит-тесты
+  фронтенда — `cd frontend && npm test` (27 проверок, node --test).
 - **Скрипты** — `scripts/backup.sh` (бэкап SQLite через `.backup` + `data/files`
   + `.env`; запускается на хосте, не в контейнере).
 

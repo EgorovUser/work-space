@@ -7,7 +7,8 @@ const router = createRouter({
     { path: "/login", component: () => import("./views/Login.vue") },
     { path: "/", component: () => import("./views/ProjectList.vue"), meta: { auth: true } },
     { path: "/mail", component: () => import("./views/Mailbox.vue"), meta: { auth: true } },
-    { path: "/mail/:messageId", component: () => import("./views/MailLetter.vue"), meta: { auth: true } },
+    // Письмо открывается прямо в «Почте»: список слева, читалка справа.
+    { path: "/mail/:messageId", component: () => import("./views/Mailbox.vue"), meta: { auth: true } },
     { path: "/system", component: () => import("./views/Home.vue"), meta: { auth: true } },
     { path: "/settings", component: () => import("./views/Settings.vue"), meta: { auth: true } },
     { path: "/notifications", component: () => import("./views/Notifications.vue"), meta: { auth: true } },
