@@ -887,16 +887,21 @@ body.dragging-card .task-card { cursor: grabbing; }
 .tc-more { min-height: 22px; display: flex; align-items: center; }
 .tc-more .text-btn { font-size: 0.8rem; }
 
-/* Быстрое списание часов: поле + кнопка + бейдж списанного. */
+/* Быстрое списание часов: поле + кнопка + бейдж списанного.
+   Патч AG: поле компактное (46px — влезает «99.5», не больше) и одной
+   высоты с кнопкой: у обоих одинаковый кегль и вертикальный отступ,
+   а align-items: stretch прижимает пару к высоте самого высокого —
+   на тач-экранах это 44px-кнопка, и поле растягивается под неё. */
 .tc-time {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 6px;
   margin-top: 8px;
 }
-.tc-hours { width: 62px; padding: 4px 6px; text-align: right; }
+.tc-hours { width: 46px; flex: 0 0 auto; padding: 4px 6px; text-align: right; font-size: 0.85rem; }
 .tc-log { padding: 4px 10px; font-size: 0.85rem; flex: 0 0 auto; }
 .tc-spent {
+  align-self: center;
   margin-left: auto;
   color: var(--muted);
   font-size: 0.8rem;
@@ -904,8 +909,9 @@ body.dragging-card .task-card { cursor: grabbing; }
   font-variant-numeric: tabular-nums;
 }
 @media (max-width: 800px) {
+  /* На тач-экранах кегль полей 16px (iOS не приближает) — «12.5» влезает
+     с запасом. Высоту выравнивает stretch, отдельный паддинг не нужен. */
   .tc-hours { width: 56px; }
-  .tc-log { padding: 6px 10px; }
 }
 
 /* Блок «Списать время» на главной странице задачи (патч R). */
