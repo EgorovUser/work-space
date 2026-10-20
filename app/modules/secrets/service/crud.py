@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 

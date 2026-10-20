@@ -5,27 +5,16 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from app.core.settings_store import get_bool, get_int
+from app.core.text import clean_limited, clean_name, search_needle
 from app.modules.secrets.service.catalog import _kinds
 
 
 def _clean_title(title: str) -> str:
-    text = (title or "").strip()
-    limit = get_int("secrets", "title.max_length")
-    if not text:
-        raise HTTPException(status_code=400, detail="Укажите название")
-    if len(text) > limit:
-        raise HTTPException(status_code=400, detail="Название длиннее " + str(limit) + " символов")
-    return text
+    return clean_name("secrets", "title.max_length", title)
 
 
 def _clean_limit(value: str, key: str, strip: bool) -> str:
-    text = value or ""
-    if strip:
-        text = text.strip()
-    limit = get_int("secrets", key)
-    if len(text) > limit:
-        raise HTTPException(status_code=400, detail="Текст длиннее " + str(limit) + " символов")
-    return text
+    return clean_limited("secrets", key, value, strip=strip)
 
 
 def _clean_secret(value: str, project_id: int, required: bool) -> str:
@@ -59,8 +48,4 @@ def _clean_kind(value: str | None, project_id: int) -> str:
 
 
 def _query_needle(query: str, project_id: int) -> str:
-    text = (query or "").strip()
-    minimum = get_int("secrets", "list.query.min_length", project_id=project_id)
-    if text and len(text) < minimum:
-        raise HTTPException(status_code=400, detail="Фильтр короче " + str(minimum) + " символов")
-    return text.casefold()
+    return search_needle("secrets", "list.query.min_length", query, project_id)

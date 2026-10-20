@@ -6,10 +6,12 @@ from sqlalchemy.orm import Session
 
 from app.core.bridge import card_summary, dashboard_blocks, home_block, inbox_items, run_project_created, search_groups
 from app.core.db import utcnow
+from app.core.entities import owned_row
 from app.core.events_catalog import PROJECT_ARCHIVED, PROJECT_CREATED, PROJECT_UPDATED
 from app.core.logging import log_scope, logger
 from app.core.outbox import enqueue
 from app.core.settings_store import get_bool, get_int
+from app.core.text import clean_limited, clean_name
 from app.modules.projects.models import Project, ProjectNote
 
 
@@ -247,10 +249,15 @@ def delete_note(session: Session, project_id: int, user_id: int, note_id: int) -
 
 
 def _note(session: Session, project_id: int, note_id: int) -> ProjectNote:
-    row = session.get(ProjectNote, note_id)
-    if row is None or row.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Заметка не найдена")
-    return row
+    # У заметок нет корзины — удаление окончательное.
+    return owned_row(
+        session,
+        ProjectNote,
+        project_id,
+        note_id,
+        label="Заметка",
+        not_found="Заметка не найдена",
+    )
 
 
 def _note_out(row: ProjectNote) -> dict:
@@ -273,18 +280,8 @@ def _clean_note(body: str | None) -> str:
 
 
 def _clean_name(name: str) -> str:
-    text = (name or "").strip()
-    limit = get_int("projects", "name.max_length")
-    if not text:
-        raise HTTPException(status_code=400, detail="Укажите название")
-    if len(text) > limit:
-        raise HTTPException(status_code=400, detail="Название длиннее " + str(limit) + " символов")
-    return text
+    return clean_name("projects", "name.max_length", name)
 
 
 def _clean_description(description: str | None) -> str:
-    text = description or ""
-    limit = get_int("projects", "description.max_length")
-    if len(text) > limit:
-        raise HTTPException(status_code=400, detail="Описание длиннее " + str(limit) + " символов")
-    return text
+    return clean_limited("projects", "description.max_length", description, strip=False, long_prefix="Описание длиннее ")

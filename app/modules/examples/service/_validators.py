@@ -5,17 +5,12 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from app.core.settings_store import get_bool, get_int, get_str
+from app.core.text import clean_limited, clean_name, search_needle
 from app.modules.examples.service.catalog import _languages
 
 
 def _clean_title(title: str) -> str:
-    text = (title or "").strip()
-    limit = get_int("examples", "title.max_length")
-    if not text:
-        raise HTTPException(status_code=400, detail="Укажите название")
-    if len(text) > limit:
-        raise HTTPException(status_code=400, detail="Название длиннее " + str(limit) + " символов")
-    return text
+    return clean_name("examples", "title.max_length", title)
 
 
 def _clean_body(body: str, project_id: int) -> str:
@@ -29,11 +24,7 @@ def _clean_body(body: str, project_id: int) -> str:
 
 
 def _clean_note(note: str) -> str:
-    text = note or ""
-    limit = get_int("examples", "note.max_length")
-    if len(text) > limit:
-        raise HTTPException(status_code=400, detail="Заметка длиннее " + str(limit) + " символов")
-    return text
+    return clean_limited("examples", "note.max_length", note, strip=False, long_prefix="Заметка длиннее ")
 
 
 def _clean_language(value: str | None, project_id: int) -> str:
@@ -80,8 +71,4 @@ def _clean_tag_names(names: list[str], project_id: int) -> list[str]:
 
 
 def _query_needle(query: str, project_id: int) -> str:
-    text = (query or "").strip()
-    minimum = get_int("examples", "list.query.min_length", project_id=project_id)
-    if text and len(text) < minimum:
-        raise HTTPException(status_code=400, detail="Фильтр короче " + str(minimum) + " символов")
-    return text.casefold()
+    return search_needle("examples", "list.query.min_length", query, project_id)

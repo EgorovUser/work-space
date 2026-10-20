@@ -6,19 +6,22 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.core.entities import owned_row
 from app.core.models import FileLink
 from app.modules.documents.models import Document, DocumentVersion
 
 
 def _document(session: Session, project_id: int, document_id: int, in_trash: bool = False) -> Document:
-    row = session.get(Document, document_id)
-    if row is None or row.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Документ не найден")
-    if in_trash and row.deleted_at is None:
-        raise HTTPException(status_code=404, detail="Документ не в корзине")
-    if not in_trash and row.deleted_at is not None:
-        raise HTTPException(status_code=404, detail="Документ удалён в корзину")
-    return row
+    return owned_row(
+        session,
+        Document,
+        project_id,
+        document_id,
+        in_trash=in_trash,
+        label="Документ",
+        not_found="Документ не найден",
+        deleted_to_trash="Документ удалён в корзину",
+    )
 
 
 def _versions(session: Session, document_id: int) -> list[DocumentVersion]:

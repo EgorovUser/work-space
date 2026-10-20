@@ -6,16 +6,23 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.entities import owned_row
 from app.core.models import FileLink, StoredFile
 from app.core.settings_store import get_int
 from app.modules.examples.models import Example, ExampleTag, ExampleTagLink
 
 
 def _example(session: Session, project_id: int, example_id: int) -> Example:
-    row = session.get(Example, example_id)
-    if row is None or row.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Пример не найден")
-    return row
+    # У примеров нет корзины — удаление окончательное, поэтому без проверок
+    # мягкого удаления (см. app/core/entities.py).
+    return owned_row(
+        session,
+        Example,
+        project_id,
+        example_id,
+        label="Пример",
+        not_found="Пример не найден",
+    )
 
 
 def _files(session: Session, example_id: int) -> list[dict]:

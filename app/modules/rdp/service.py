@@ -5,10 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import utcnow
+from app.core.entities import owned_row
 from app.core.events_catalog import RDP_CREATED, RDP_DELETED, RDP_UPDATED
 from app.core.logging import log_scope, logger
 from app.core.outbox import enqueue
 from app.core.settings_store import get_bool, get_int
+from app.core.text import clean_limited, clean_name
 from app.core.versioning import check_version
 from app.modules.projects.service import touch_project
 from app.modules.rdp.models import RdpConnection
@@ -200,14 +202,16 @@ def search_provider(session: Session, project_id: int, user_id: int | None, quer
 
 
 def _row(session: Session, project_id: int, rdp_id: int, in_trash: bool = False) -> RdpConnection:
-    row = session.get(RdpConnection, rdp_id)
-    if row is None or row.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Подключение не найдено")
-    if in_trash and row.deleted_at is None:
-        raise HTTPException(status_code=404, detail="Подключение не в корзине")
-    if not in_trash and row.deleted_at is not None:
-        raise HTTPException(status_code=404, detail="Подключение удалено в корзину")
-    return row
+    return owned_row(
+        session,
+        RdpConnection,
+        project_id,
+        rdp_id,
+        in_trash=in_trash,
+        label="Подключение",
+        not_found="Подключение не найдено",
+        deleted_to_trash="Подключение удалено в корзину",
+    )
 
 
 def _secret_id(session: Session, project_id: int, value) -> int | None:
@@ -270,13 +274,7 @@ def _filename(name: str) -> str:
 
 
 def _clean_name(value: str) -> str:
-    text = (value or "").strip()
-    limit = get_int("rdp", "name.max_length")
-    if not text:
-        raise HTTPException(status_code=400, detail="Укажите название")
-    if len(text) > limit:
-        raise HTTPException(status_code=400, detail="Название длиннее " + str(limit) + " символов")
-    return text
+    return clean_name("rdp", "name.max_length", value)
 
 
 def _clean_host(value: str) -> str:
@@ -301,10 +299,4 @@ def _clean_port(value, project_id: int) -> int:
 
 
 def _clean_text(value: str, key: str, strip: bool) -> str:
-    text = value or ""
-    if strip:
-        text = text.strip()
-    limit = get_int("rdp", key)
-    if len(text) > limit:
-        raise HTTPException(status_code=400, detail="Текст длиннее " + str(limit) + " символов")
-    return text
+    return clean_limited("rdp", key, value, strip=strip)

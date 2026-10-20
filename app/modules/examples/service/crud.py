@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,6 +11,7 @@ from app.core.events_catalog import EXAMPLE_CREATED, EXAMPLE_DELETED, EXAMPLE_UP
 from app.core.logging import log_scope, logger
 from app.core.outbox import enqueue
 from app.core.settings_store import get_bool, get_int, get_str
+from app.core.text import snippet as _snippet
 from app.modules.examples.models import Example
 from app.modules.examples.service._queries import _example, _file_counts, _files, _tags_for
 from app.modules.examples.service._serialize import _brief, _full
@@ -197,19 +197,3 @@ def _snippet_for(row: Example, tags: list[dict], needle: str, limit: int) -> str
     if needle in " ".join(item["name"] for item in tags).casefold():
         return ", ".join(item["name"] for item in tags)
     return ""
-
-
-def _snippet(text: str, needle: str, limit: int) -> str:
-    folded = text.casefold()
-    position = folded.find(needle)
-    if position < 0:
-        chunk = text[:limit]
-    else:
-        start = max(0, position - limit // 3)
-        chunk = text[start : start + limit]
-        if start:
-            chunk = "…" + chunk
-    chunk = " ".join(chunk.split())
-    if len(chunk) > limit:
-        return chunk[:limit] + "…"
-    return chunk

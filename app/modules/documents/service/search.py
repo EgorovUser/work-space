@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.settings_store import get_bool, get_int
+from app.core.text import snippet as _snippet
 from app.modules.documents.models import Document, DocumentVersion
 from app.modules.documents.service._queries import _versions_for
 
@@ -57,19 +58,3 @@ def _match(document: Document, versions: list[DocumentVersion], needle: str, lim
     if note_hit:
         return _snippet(document.note or "", needle, limit)
     return ""
-
-
-def _snippet(text: str, needle: str, limit: int) -> str:
-    folded = text.casefold()
-    position = folded.find(needle)
-    if position < 0:
-        chunk = text[:limit]
-    else:
-        start = max(0, position - limit // 3)
-        chunk = text[start : start + limit]
-        if start:
-            chunk = "…" + chunk
-    chunk = " ".join(chunk.split())
-    if len(chunk) > limit:
-        return chunk[:limit] + "…"
-    return chunk

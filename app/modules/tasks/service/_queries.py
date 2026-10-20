@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.entities import owned_row
 from app.modules.tasks.models import ChecklistItem, Tag, Task, TaskEvent, TaskStatus, TaskTag
 from app.modules.timetracking.models import TimeEntry
 
@@ -32,14 +33,16 @@ def _status(session: Session, project_id: int, status_id: int) -> TaskStatus:
 
 
 def _task(session: Session, project_id: int, task_id: int, in_trash: bool = False) -> Task:
-    row = session.get(Task, task_id)
-    if row is None or row.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Задача не найдена")
-    if in_trash and row.deleted_at is None:
-        raise HTTPException(status_code=404, detail="Задача не в корзине")
-    if not in_trash and row.deleted_at is not None:
-        raise HTTPException(status_code=404, detail="Задача удалена в корзину")
-    return row
+    return owned_row(
+        session,
+        Task,
+        project_id,
+        task_id,
+        in_trash=in_trash,
+        label="Задача",
+        not_found="Задача не найдена",
+        deleted_to_trash="Задача удалена в корзину",
+    )
 
 
 def _pick_status(session: Session, project_id: int, status_id: int | None) -> TaskStatus:

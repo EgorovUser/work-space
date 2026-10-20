@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,7 +14,7 @@ from app.core.logging import log_scope, logger
 from app.core.models import StoredFile
 from app.core.outbox import enqueue
 from app.core.settings_store import get_int
-from app.modules.documents.extract import ERROR, OK, extract_bytes
+from app.modules.documents.extract import ERROR, extract_bytes
 from app.modules.documents.models import Document
 from app.modules.documents.service._queries import _document, _drop_links, _versions
 from app.modules.documents.service._serialize import _brief, _full
