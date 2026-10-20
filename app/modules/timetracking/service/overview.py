@@ -5,14 +5,13 @@
 прошлая. Границы считает ``timetracking.week.starts_on`` (по умолчанию
 0 — понедельник, то есть «с понедельника до воскресенья»).
 
-Отдельный файл, а не часть service.py: проектный сервис уже большой, а
-глобальная сводка не делит с ним логики, кроме собственных хелперов.
+Живёт в пакете сервиса, но не смешивается с проектной логикой: у сводки
+нет ни одной общей строки с таймером, записями и отчётами проекта.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,6 +20,7 @@ from app.core.db import utcnow
 from app.core.settings_store import get_int, get_str
 from app.modules.projects.models import Project
 from app.modules.timetracking.models import TimeEntry
+from app.modules.timetracking.service._shared import _live_minutes, _week_start, _zone
 
 
 def overview(session: Session) -> dict:
@@ -83,7 +83,7 @@ def _week_block(
 
 def _entry_out(session: Session, row: TimeEntry, zone) -> dict:
     running = row.ended_at is None
-    minutes = _live_minutes(row) if running else int(row.minutes or 0)
+    minutes = _live_minutes(row, utcnow()) if running else int(row.minutes or 0)
     title = ""
     if row.task_id:
         try:
@@ -109,29 +109,7 @@ def _minutes_of(rows: list[TimeEntry]) -> int:
     total = 0
     for row in rows:
         if row.ended_at is None:
-            total += _live_minutes(row)
+            total += _live_minutes(row, utcnow())
         else:
             total += int(row.minutes or 0)
     return total
-
-
-def _live_minutes(row: TimeEntry) -> int:
-    seconds = (utcnow() - row.started_at).total_seconds()
-    if seconds <= 0:
-        return 0
-    return int(seconds // 60)
-
-
-def _week_start(today: date) -> date:
-    first = get_int("timetracking", "week.starts_on") % 7
-    return today - timedelta(days=(today.weekday() - first) % 7)
-
-
-def _zone():
-    name = get_str("core", "ui.timezone")
-    if not name:
-        return datetime.now().astimezone().tzinfo
-    try:
-        return ZoneInfo(name)
-    except Exception:
-        return datetime.now().astimezone().tzinfo

@@ -12,7 +12,6 @@ from app.core.models import User
 from app.core.scheduler import register_job
 from app.core.settings_store import register_defs
 from app.modules.projects.models import Project
-from app.modules.timetracking import overview as overview_service
 from app.modules.timetracking import service
 from app.modules.timetracking.settings import DEFS
 
@@ -53,7 +52,7 @@ def time_overview(
     user: User = Depends(require_user),
 ) -> dict:
     """Сводка по всем проектам сразу (патч S): текущая и прошлая недели."""
-    return overview_service.overview(db)
+    return service.overview(db)
 
 
 @router.get("/api/projects/{project_id}/time")
