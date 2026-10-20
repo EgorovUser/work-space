@@ -81,11 +81,6 @@
           </div>
         </div>
         <div class="rdp-tools">
-          <span v-if="pinging[item.id]" class="muted">проверяем…</span>
-          <span v-else-if="pingResult[item.id]" class="pill" :class="pingResult[item.id].ok ? 'ok' : 'warn'">
-            {{ pingResult[item.id].ok ? "доступен · " + pingResult[item.id].latency_ms + " мс" : "недоступен" }}
-          </span>
-          <button class="btn secondary rdp-ping" type="button" :disabled="pinging[item.id]" @click="ping(item)">Пинг</button>
           <ActionMenu :actions="rowActions(item)" @choose="onAction($event, item)" />
         </div>
       </div>
@@ -95,7 +90,7 @@
 </template>
 
 <script>
-import { computed, reactive, ref, watch } from "vue"
+import { computed, ref, watch } from "vue"
 import { api } from "../api"
 import ActionMenu from "../components/ActionMenu.vue"
 import SkeletonList from "../components/SkeletonList.vue"
@@ -105,8 +100,10 @@ import { useWhen } from "../composables/useWhen"
 
 // RDP-подключения проекта: адрес, порт, логин и домен — без пароля. Кнопка
 // «Скачать .rdp» забирает файл с сервера, «Копировать адрес» кладёт
-// host:port в буфер, «Пинг» проверяет доступность TCP-коннектом.
-// Связка с секретом (патч N) подтягивает логин в .rdp из хранилища.
+// host:port в буфер. Связка с секретом (патч N) подтягивает логин в .rdp
+// из хранилища. Правка важных полей (адрес, порт, логин, домен, секрет)
+// подтверждается диалогом «было → станет» (патч O): опечатка в адресе
+// не затирает сохранённое значение молча.
 export default {
   components: { ActionMenu, Tabs, SkeletonList },
   props: {
@@ -130,8 +127,7 @@ export default {
     const editVersion = ref("")
     const portPlaceholder = ref("3389")
     const secrets = ref([])
-    const pinging = reactive({})
-    const pingResult = reactive({})
+    const editOriginal = ref(null)
     const notice = useNotice()
     const { settings, when } = useWhen()
 
@@ -175,8 +171,48 @@ export default {
       }
     }
 
+    function importantChanges() {
+      // Что меняется в важные полях относительно загруженной записи —
+      // из этого собирается диалог «было → станет» перед сохранением.
+      const origin = editOriginal.value
+      if (!origin) return []
+      const lines = []
+      const newPort = form.value.port ? Number(form.value.port) : Number(portPlaceholder.value || 3389)
+      if ((form.value.host || "") !== (origin.host || "")) {
+        lines.push("Адрес сервера: " + origin.host + " → " + form.value.host)
+      }
+      if (newPort !== origin.port) {
+        lines.push("Порт: " + origin.port + " → " + newPort)
+      }
+      if ((form.value.username || "") !== (origin.username || "")) {
+        lines.push("Логин: " + (origin.username || "—") + " → " + (form.value.username || "—"))
+      }
+      if ((form.value.domain || "") !== (origin.domain || "")) {
+        lines.push("Домен: " + (origin.domain || "—") + " → " + (form.value.domain || "—"))
+      }
+      const newSecretId = form.value.secret_id ? Number(form.value.secret_id) : null
+      const oldSecretId = origin.secret_id || null
+      if (newSecretId !== oldSecretId) {
+        lines.push("Секрет: " + secretLabel(oldSecretId) + " → " + secretLabel(newSecretId))
+      }
+      return lines
+    }
+
+    function secretLabel(id) {
+      if (!id) return "не связан"
+      const found = secrets.value.find((item) => item.id === id)
+      return found ? "«" + found.title + "»" : "секрет №" + id
+    }
+
     async function submit() {
       formError.value = ""
+      if (editId.value) {
+        const changes = importantChanges()
+        if (changes.length) {
+          const ok = window.confirm("Изменяются важные поля:\n" + changes.join("\n") + "\n\nСохранить?")
+          if (!ok) return
+        }
+      }
       busy.value = true
       const body = {
         name: form.value.name,
@@ -208,6 +244,7 @@ export default {
     function resetForm() {
       editId.value = null
       editVersion.value = ""
+      editOriginal.value = null
       form.value = emptyForm()
       tab.value = "list"
     }
@@ -215,6 +252,13 @@ export default {
     function startEdit(item) {
       editId.value = item.id
       editVersion.value = item.updated_at
+      editOriginal.value = {
+        host: item.host,
+        port: item.port,
+        username: item.username,
+        domain: item.domain,
+        secret_id: item.secret_id || null,
+      }
       form.value = {
         name: item.name,
         host: item.host,
@@ -225,19 +269,6 @@ export default {
         note: item.note,
       }
       tab.value = "add"
-    }
-
-    async function ping(item) {
-      pinging[item.id] = true
-      delete pingResult[item.id]
-      try {
-        const data = await api("/api/projects/" + props.project.id + "/rdp/" + item.id + "/ping", { method: "POST" })
-        pingResult[item.id] = data
-      } catch (err) {
-        pingResult[item.id] = { ok: false, latency_ms: null, error: err.message || "Ошибка" }
-      } finally {
-        pinging[item.id] = false
-      }
     }
 
     function download(item) {
@@ -310,8 +341,8 @@ export default {
 
     return {
       items, error, formError, loading, busy, query, includeArchived, tab, pageTabs,
-      form, editId, portPlaceholder, secrets, pinging, pingResult, when,
-      rowActions, load, submit, resetForm, onAction, ping,
+      form, editId, portPlaceholder, secrets, when,
+      rowActions, load, submit, resetForm, onAction,
     }
   },
 }

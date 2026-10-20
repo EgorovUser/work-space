@@ -26,3 +26,24 @@ class Secret(Base):
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)
+
+
+class SecretRevision(Base):
+    """Снимок значений секрета до изменения (патч O).
+
+    Записывается, когда обновление меняет пароль, логин или ссылку.
+    Хранит прежнее состояние в том же шифровании, что и сам секрет.
+    Откат (`restore`) не разрушающий: текущие значения перед откатом
+    тоже попадают сюда — «Вернуть» всегда можно нажать и обратно.
+    """
+
+    __tablename__ = "secret_revisions"
+    __table_args__ = (Index("ix_secret_revisions_secret", "secret_id", "id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    secret_id: Mapped[int] = mapped_column(ForeignKey("secrets.id"), nullable=False)
+    username_enc: Mapped[str] = mapped_column(Text, default="")
+    url_enc: Mapped[str] = mapped_column(Text, default="")
+    secret_enc: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)

@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import socket
-import time
-
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -184,28 +181,6 @@ def connection_file(session: Session, project_id: int, user_id: int, rdp_id: int
     return {"filename": _filename(row.name), "content": "\r\n".join(lines) + "\r\n"}
 
 
-def ping_connection(session: Session, project_id: int, user_id: int, rdp_id: int) -> dict:
-    """TCP-проверка доступности: коннект к host:port с таймаутом.
-
-    Возвращает {ok, latency_ms, error}. Самохостинг-контекст: сервер
-    проверяет ровно тот адрес, что уже сохранён в подключении.
-    """
-    row = _row(session, project_id, rdp_id)
-    timeout = get_int("rdp", "ping.timeout_seconds", project_id=project_id)
-    started = time.monotonic()
-    error = ""
-    try:
-        with socket.create_connection((row.host, row.port), timeout=timeout):
-            pass
-    except OSError as exc:
-        error = _ping_error(exc)
-    latency = int((time.monotonic() - started) * 1000)
-    ok = not error
-    with log_scope("rdp", "ping", user_id=user_id):
-        logger.info("rdp ping id={} host={} ok={} latency_ms={}", row.id, row.host, ok, latency if ok else -1)
-    return {"ok": ok, "latency_ms": latency if ok else None, "error": error}
-
-
 def search_provider(session: Session, project_id: int, user_id: int | None, query: str, limit: int) -> list[dict]:
     needle = (query or "").casefold()
     statement = select(RdpConnection).where(
@@ -267,11 +242,6 @@ def _secret_username(session: Session, secret_id: int | None) -> str:
         with log_scope("rdp", "secret.username"):
             logger.warning("не удалось прочитать логин секрета id={}", secret_id)
         return ""
-
-
-def _ping_error(exc: OSError) -> str:
-    text = str(exc) or exc.__class__.__name__
-    return text[:200]
 
 
 def _public(row: RdpConnection, secret_title: str | None = None) -> dict:

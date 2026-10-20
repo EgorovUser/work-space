@@ -1209,7 +1209,6 @@ textarea.mono { min-height: 220px; }
 .today-more { margin-top: 8px; }
 /* RDP: строка с пингом и меню. */
 .rdp-tools { display: flex; align-items: center; gap: 8px; flex: none; }
-.rdp-ping { padding: 4px 10px; font-size: 0.85rem; }
 .theme-btn-icon { font-size: 1.05rem; line-height: 1; }
 
 /* — Глобальный поиск в шапке — */

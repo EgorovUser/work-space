@@ -131,29 +131,6 @@ test("связка с секретом: селектор, метка и логи
   expect(body).not.toContain("para-" + mark)
 })
 
-test("пинг показывает доступность живого порта и закрытого", async ({ page }) => {
-  const mark = "ping" + Date.now()
-  const api = await apiLogin()
-  const project = await (await api.post("/api/projects", { data: { name: "RDP пинг " + mark } })).json()
-  const baseURL = test.info().project.use.baseURL
-  const appPort = Number(new URL(baseURL).port)
-  // Живой порт — сам тестируемый сервер; закрытый — 1-й, соединение
-  // отвергается сразу, ждать таймаута не приходится.
-  await api.post(`/api/projects/${project.id}/rdp`, { data: { name: "Живой " + mark, host: "127.0.0.1", port: appPort } })
-  await api.post(`/api/projects/${project.id}/rdp`, { data: { name: "Мёртвый " + mark, host: "127.0.0.1", port: 1 } })
-
-  await login(page)
-  await page.goto("/projects/" + project.id + "/rdp")
-
-  const alive = page.locator(".status-row", { hasText: "Живой " + mark })
-  await alive.getByRole("button", { name: "Пинг" }).click()
-  await expect(alive.locator(".pill.ok", { hasText: "доступен" })).toBeVisible({ timeout: 10_000 })
-
-  const dead = page.locator(".status-row", { hasText: "Мёртвый " + mark })
-  await dead.getByRole("button", { name: "Пинг" }).click()
-  await expect(dead.locator(".pill.warn", { hasText: "недоступен" })).toBeVisible({ timeout: 10_000 })
-})
-
 test("удаление уводит подключение в корзину и восстанавливается", async ({ page }) => {
   const mark = "del" + Date.now()
   const api = await apiLogin()
@@ -176,4 +153,42 @@ test("удаление уводит подключение в корзину и 
 
   const restored = await (await api.get(`/api/projects/${project.id}/rdp/${row.id}`)).json()
   expect(restored.id).toBe(row.id)
+})
+
+test("правка важных полей подтверждается, отказ ничего не меняет", async ({ page }) => {
+  const mark = "edit" + Date.now()
+  const api = await apiLogin()
+  const project = await (await api.post("/api/projects", { data: { name: "RDP правка " + mark } })).json()
+  await api.post(`/api/projects/${project.id}/rdp`, { data: { name: "Шлюз " + mark, host: "10.0.0.7", username: "admin" } })
+
+  await login(page)
+  await page.goto("/projects/" + project.id + "/rdp")
+  // Пинга больше нет: за корпоративным VPN проверка бессмысленна (патч O).
+  await expect(page.getByRole("button", { name: "Пинг" })).toHaveCount(0)
+
+  const row = page.locator(".status-row", { hasText: "Шлюз " + mark })
+  await row.locator(".menu-btn").click()
+  await page.getByRole("button", { name: "Изменить" }).click()
+
+  await page.getByLabel("Адрес сервера").fill("10.0.0.8")
+  let dialogMessage = ""
+  page.once("dialog", (dialog) => {
+    dialogMessage = dialog.message()
+    dialog.accept()
+  })
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click()
+  expect(dialogMessage).toContain("Адрес сервера: 10.0.0.7 → 10.0.0.8")
+  await expect(page.locator(".toast")).toContainText("Подключение сохранено")
+  await expect(page.locator(".status-row", { hasText: "Шлюз " + mark })).toContainText("10.0.0.8")
+  await page.getByRole("button", { name: "Закрыть" }).click()
+
+  // Отказ в диалоге — сохранения не было: список (скрыт за табом «Правка»)
+  // остаётся со старым адресом, форма молча ждёт дальше.
+  await page.locator(".status-row", { hasText: "Шлюз " + mark }).locator(".menu-btn").click()
+  await page.getByRole("button", { name: "Изменить" }).click()
+  await page.getByLabel("Адрес сервера").fill("10.0.0.9")
+  page.once("dialog", (dialog) => dialog.dismiss())
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click()
+  await expect(page.locator(".status-row", { hasText: "Шлюз " + mark })).toContainText("10.0.0.8")
+  await expect(page.locator(".status-row", { hasText: "Шлюз " + mark })).not.toContainText("10.0.0.9")
 })

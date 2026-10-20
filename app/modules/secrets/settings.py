@@ -229,4 +229,15 @@ DEFS: tuple[SettingDef, ...] = (
         description="Например 0O1lI.",
         allowed_scopes=("global", "project"),
     ),
+    _s(
+        key="history.keep_revisions",
+        value_type="int",
+        default=10,
+        label="Глубина истории секретов",
+        description="Сколько прежних версий пароля, логина и ссылки хранить для отката.",
+        allowed_scopes=("global", "project"),
+        ui_hint="number",
+        min_value=1,
+        max_value=100,
+    ),
 )

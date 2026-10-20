@@ -56,6 +56,32 @@
         <button class="btn secondary" type="button" :disabled="busy" @click="remove">Удалить</button>
       </div>
       </form>
+
+      <section class="card stack">
+        <h2>История значений</h2>
+        <p class="muted">
+          Снимок создаётся, когда меняются пароль, логин или ссылка. Откат не
+          разрушающий: текущие значения тоже попадают в историю.
+        </p>
+        <p v-if="historyError" class="error">{{ historyError }}</p>
+        <p v-else-if="!history.length" class="muted">Пока пусто — важные поля ещё не менялись.</p>
+        <div v-for="item in history" :key="item.id" class="status-row">
+          <div>
+            <strong>{{ when(item.created_at) }}</strong>
+            <div class="muted">изменялись: {{ changedText(item) }}</div>
+          </div>
+          <div class="rdp-tools">
+            <button
+              class="btn secondary"
+              type="button"
+              :disabled="busy || !item.has_secret"
+              :title="item.has_secret ? '' : 'В этой версии значения нет'"
+              @click="copyRevision(item)"
+            >Скопировать</button>
+            <button class="btn secondary" type="button" :disabled="busy" @click="restoreRevision(item)">Вернуть</button>
+          </div>
+        </div>
+      </section>
     </template>
   </div>
 </template>
@@ -65,8 +91,12 @@ import { computed, onBeforeUnmount, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
 import { useNotice } from "../composables/useNotice"
+import { useWhen } from "../composables/useWhen"
 
 const CLIPBOARD_TTL = 30
+
+// Метки важных полей — язык пользователя: пароль, логин, ссылка.
+const FIELD_LABELS = { secret: "пароль", username: "логин", url: "ссылка" }
 
 export default {
   props: {
@@ -84,7 +114,10 @@ export default {
     const touched = ref(false)
     const clipSeconds = ref(CLIPBOARD_TTL)
     const form = ref({ title: "", kind: "", username: "", url: "", note: "", secret: "" })
+    const history = ref([])
+    const historyError = ref("")
     const notice = useNotice()
+    const { settings, when } = useWhen()
     let clipTimer = null
     let clearTimer = null
 
@@ -112,10 +145,27 @@ export default {
       error.value = ""
       try {
         apply(await api("/api/projects/" + props.project.id + "/secrets/" + route.params.secretId))
+        await loadHistory()
       } catch (err) {
         record.value = null
         error.value = err.message || "Секрет недоступен"
       }
+    }
+
+    async function loadHistory() {
+      historyError.value = ""
+      try {
+        const data = await api("/api/projects/" + props.project.id + "/secrets/" + route.params.secretId + "/revisions")
+        history.value = data.items || []
+      } catch (err) {
+        history.value = []
+        historyError.value = err.message || "История недоступна"
+      }
+    }
+
+    function changedText(item) {
+      const labels = (item.changed || []).map((code) => FIELD_LABELS[code] || code)
+      return labels.length ? labels.join(", ") : "—"
     }
 
     function armClipboard() {
@@ -146,8 +196,18 @@ export default {
       clearTimeout(clearTimer)
     })
 
+    // Какие важные поля уходят в сохранении изменёнными — для текста тоста.
+    function changedLabels() {
+      const labels = []
+      if (touched.value && record.value.has_secret) labels.push("пароль")
+      if (record.value.username && form.value.username !== record.value.username) labels.push("логин")
+      if (record.value.url && form.value.url !== record.value.url) labels.push("ссылка")
+      return labels
+    }
+
     async function save() {
       formError.value = ""
+      const labels = changedLabels()
       busy.value = true
       const body = {
         title: form.value.title,
@@ -159,11 +219,22 @@ export default {
       }
       if (touched.value) body.secret = form.value.secret
       try {
-        apply(await api("/api/projects/" + props.project.id + "/secrets/" + route.params.secretId, {
+        const data = await api("/api/projects/" + props.project.id + "/secrets/" + route.params.secretId, {
           method: "PATCH",
           body,
-        }))
-        notice.show("Сохранено", { kind: "success" })
+        })
+        apply(data)
+        await loadHistory()
+        if (data.revision_id) {
+          // Сервер сохранил прежние значения снимком — даём одну кнопку
+          // на немедленный откат вместо отдельного похода в историю.
+          notice.show(
+            labels.length ? "Сохранено: " + labels.join(", ") : "Сохранено",
+            { kind: "success", action: { label: "Отменить", run: () => undoRevision(data.revision_id) } },
+          )
+        } else {
+          notice.show("Сохранено", { kind: "success" })
+        }
       } catch (err) {
         if (err.status === 409) {
           if (window.confirm(err.message + "\n\nЗагрузить свежую версию? Несохранённые правки будут потеряны.")) {
@@ -172,6 +243,61 @@ export default {
         } else {
           formError.value = err.message || "Не сохранилось"
         }
+      } finally {
+        busy.value = false
+      }
+    }
+
+    // Откат к снимку без лишних вопросов — вызывается кнопкой «Отменить»
+    // у тоста (намерение уже выражено) и из «Вернуть» после подтверждения.
+    async function undoRevision(revisionId) {
+      formError.value = ""
+      busy.value = true
+      try {
+        const data = await api(
+          "/api/projects/" + props.project.id + "/secrets/" + route.params.secretId + "/revisions/" + revisionId + "/restore",
+          { method: "POST" },
+        )
+        apply(data)
+        await loadHistory()
+        if (data.revision_id) {
+          notice.show("Возвращены прежние значения", {
+            kind: "success",
+            action: { label: "Отменить", run: () => undoRevision(data.revision_id) },
+          })
+        } else {
+          notice.show("Версия совпадает с текущей", { kind: "success" })
+        }
+      } catch (err) {
+        formError.value = err.message || "Не удалось вернуть версию"
+      } finally {
+        busy.value = false
+      }
+    }
+
+    async function restoreRevision(item) {
+      const ok = window.confirm(
+        "Вернуть прежние значения ("
+        + changedText(item)
+        + ")? Текущие тоже сохранятся в истории — откат можно отменить.",
+      )
+      if (!ok) return
+      await undoRevision(item.id)
+    }
+
+    async function copyRevision(item) {
+      copied.value = false
+      formError.value = ""
+      busy.value = true
+      try {
+        const data = await api(
+          "/api/projects/" + props.project.id + "/secrets/" + route.params.secretId + "/revisions/" + item.id + "/reveal",
+          { method: "POST" },
+        )
+        await writeClipboard(data.secret || "")
+        armClipboard()
+      } catch (err) {
+        formError.value = err.message || "Не удалось скопировать"
       } finally {
         busy.value = false
       }
@@ -231,6 +357,14 @@ export default {
     }
 
     async function generate() {
+      // Слепая перезапись: поле может держать текущий (или ещё не
+      // сохранённый) пароль — спрашиваем, прежде чем затирать.
+      if ((form.value.secret || "") !== "" || record.value.has_secret) {
+        const ok = window.confirm(
+          "Заменить текущий секрет? Прежнее значение останется в истории после сохранения.",
+        )
+        if (!ok) return
+      }
       formError.value = ""
       busy.value = true
       try {
@@ -246,6 +380,12 @@ export default {
     }
 
     function clearSecret() {
+      if ((form.value.secret || "") !== "" || record.value.has_secret) {
+        const ok = window.confirm(
+          "Убрать значение секрета? Прежнее можно будет вернуть из истории после сохранения.",
+        )
+        if (!ok) return
+      }
       form.value.secret = ""
       touched.value = true
       visible.value = true
@@ -278,11 +418,17 @@ export default {
       }
     }
 
+    watch(() => props.project && props.project.id, () => {
+      settings.load(props.project.id).catch(() => {})
+    }, { immediate: true })
+
     watch(() => [props.project && props.project.id, route.params.secretId], load, { immediate: true })
 
     return {
       record, error, formError, busy, copied, visible, touched, form, knownKind, clipSeconds,
+      history, historyError, when, changedText,
       save, reveal, copySecret, generate, clearSecret, toggleArchive, remove,
+      copyRevision, restoreRevision,
     }
   },
 }

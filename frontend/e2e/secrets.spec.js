@@ -89,3 +89,107 @@ test("пустой общий список объясняет, куда доба
   await expect(page.locator(".empty")).toBeVisible()
   await expect(page.getByText("Здесь собираются секреты всех проектов")).toBeVisible()
 })
+
+test("генерация поверх заданного секрета подтверждается и откатывается одной кнопкой", async ({ page }) => {
+  const mark = "gen" + Date.now()
+  const api = await apiLogin()
+  const project = await (await api.post("/api/projects", { data: { name: "Генерация " + mark } })).json()
+  const secret = await (
+    await api.post(`/api/projects/${project.id}/secrets`, {
+      data: { title: "Учётка " + mark, username: "user-" + mark, secret: "old-secret-value" },
+    })
+  ).json()
+
+  await login(page)
+  await page.goto(`/projects/${project.id}/secrets/${secret.id}`)
+  const secretInput = page.locator('input[autocomplete="new-password"]')
+
+  // Кнопка «Сгенерировать» больше не затирает пароль молча: сначала вопрос.
+  let dialogMessage = ""
+  page.once("dialog", (dialog) => {
+    dialogMessage = dialog.message()
+    dialog.accept()
+  })
+  await page.getByRole("button", { name: "Сгенерировать", exact: true }).click()
+  expect(dialogMessage).toContain("Заменить текущий секрет")
+  await expect(secretInput).not.toHaveValue("")
+
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click()
+  await expect(page.locator(".toast.success")).toContainText("Сохранено: пароль")
+
+  // Прежний пароль не потерян: откат прямо из тоста, без похода в историю.
+  await page.getByRole("button", { name: "Отменить" }).click()
+  await expect(page.locator(".toast.success")).toContainText("Возвращены прежние значения")
+
+  await page.getByRole("button", { name: "Показать", exact: true }).click()
+  await expect(secretInput).toHaveValue("old-secret-value")
+  // Два снимка: до генерации и до отката — «Вернуть» работает в обе стороны.
+  await expect(page.locator(".status-row")).toHaveCount(2)
+})
+
+test("отказ от генерации оставляет текущий секрет нетронутым", async ({ page }) => {
+  const mark = "no" + Date.now()
+  const api = await apiLogin()
+  const project = await (await api.post("/api/projects", { data: { name: "Отказ " + mark } })).json()
+  const secret = await (
+    await api.post(`/api/projects/${project.id}/secrets`, {
+      data: { title: "Учётка " + mark, secret: "kept-secret-value" },
+    })
+  ).json()
+
+  await login(page)
+  await page.goto(`/projects/${project.id}/secrets/${secret.id}`)
+  const secretInput = page.locator('input[autocomplete="new-password"]')
+
+  page.once("dialog", (dialog) => dialog.dismiss())
+  await page.getByRole("button", { name: "Сгенерировать", exact: true }).click()
+  await expect(secretInput).toHaveValue("")
+  await expect(page.getByText("Секрет задан и скрыт.")).toBeVisible()
+
+  // Сохранение без правки секретного поля — история не растёт, отменять нечего.
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click()
+  await expect(page.locator(".toast.success")).toContainText("Сохранено")
+  await expect(page.getByRole("button", { name: "Отменить" })).toHaveCount(0)
+})
+
+test("история хранит прежние значения: возврат и копирование", async ({ page }) => {
+  const mark = "rev" + Date.now()
+  const api = await apiLogin()
+  const project = await (await api.post("/api/projects", { data: { name: "Версии " + mark } })).json()
+  const secret = await (
+    await api.post(`/api/projects/${project.id}/secrets`, {
+      data: { title: "Учётка " + mark, username: "user-" + mark, secret: "first-pass" },
+    })
+  ).json()
+  await api.patch(`/api/projects/${project.id}/secrets/${secret.id}`, {
+    data: { secret: "second-pass", username: "other-" + mark },
+  })
+
+  await login(page)
+  await page.goto(`/projects/${project.id}/secrets/${secret.id}`)
+
+  // Один снимок, в нём отмечено что менялось; значения не светятся.
+  const row = page.locator(".status-row")
+  await expect(row).toHaveCount(1)
+  await expect(row).toContainText("изменялись: пароль, логин")
+  await expect(page.getByText("first-pass")).toHaveCount(0)
+
+  let dialogMessage = ""
+  page.once("dialog", (dialog) => {
+    dialogMessage = dialog.message()
+    dialog.accept()
+  })
+  await row.getByRole("button", { name: "Вернуть" }).click()
+  expect(dialogMessage).toContain("Вернуть прежние значения")
+  await expect(page.locator(".toast.success")).toContainText("Возвращены прежние значения")
+
+  await page.getByRole("button", { name: "Показать", exact: true }).click()
+  await expect(page.locator('input[autocomplete="new-password"]')).toHaveValue("first-pass")
+  await expect(page.getByLabel("Логин")).toHaveValue("user-" + mark)
+
+  // Прежний пароль из снимка — в буфер, с автоочисткой через 30 секунд.
+  // Разрешения на буфер нужны headless-браузеру, иначе writeText отклоняется.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
+  await row.first().getByRole("button", { name: "Скопировать" }).click()
+  await expect(page.getByText("Скопировано. Буфер очистится")).toBeVisible()
+})

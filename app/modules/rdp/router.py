@@ -114,16 +114,6 @@ def delete_connection(
     service.delete_connection(db, project.id, user.id, rdp_id)
 
 
-@router.post("/api/projects/{project_id}/rdp/{rdp_id}/ping")
-def ping_connection(
-    rdp_id: int,
-    project: Project = Depends(require_project),
-    db: Session = Depends(get_db),
-    user: User = Depends(require_user),
-) -> dict:
-    return service.ping_connection(db, project.id, user.id, rdp_id)
-
-
 def setup(app) -> None:
     register_defs(DEFS)
     register_search("rdp", service.search_provider)

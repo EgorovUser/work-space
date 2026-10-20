@@ -121,6 +121,39 @@ def reveal_secret(
     return service.reveal_secret(db, project.id, user.id, secret_id)
 
 
+@router.get("/api/projects/{project_id}/secrets/{secret_id}/revisions")
+def list_revisions(
+    secret_id: int,
+    project: Project = Depends(require_project),
+    db: Session = Depends(get_db),
+) -> dict:
+    # История значений: метаданные снимков без расшифровки — что менялось
+    # и когда. Копирование и откат идут отдельными эндпоинтами ниже.
+    return service.list_revisions(db, project.id, secret_id)
+
+
+@router.post("/api/projects/{project_id}/secrets/{secret_id}/revisions/{revision_id}/reveal")
+def reveal_revision(
+    secret_id: int,
+    revision_id: int,
+    project: Project = Depends(require_project),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    return service.reveal_revision(db, project.id, user.id, secret_id, revision_id)
+
+
+@router.post("/api/projects/{project_id}/secrets/{secret_id}/revisions/{revision_id}/restore")
+def restore_revision(
+    secret_id: int,
+    revision_id: int,
+    project: Project = Depends(require_project),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    return service.restore_revision(db, project.id, user.id, secret_id, revision_id)
+
+
 def setup(app) -> None:
     register_defs(DEFS)
     register_search("secrets", service.search_provider)

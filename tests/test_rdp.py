@@ -297,51 +297,5 @@ class RdpSecretLinkTest(unittest.TestCase):
         self.assertNotIn("corp-admin", body)
 
 
-class RdpPingTest(unittest.TestCase):
-    """TCP-пинг: форма ответа и обе ветки результата, без сети."""
-
-    def setUp(self):
-        client.post("/api/auth/logout")
-        _login()
-        self.mark = "ping" + str(id(self))[-6:]
-        self.project = _project("RDP пинг " + self.mark)
-        self.row = _rdp(self.project["id"], "Пингуемый " + self.mark, "10.0.0.7")
-
-    def test_anonymous_gets_401(self):
-        client.post("/api/auth/logout")
-        self.assertEqual(client.post(f"/api/projects/{self.project['id']}/rdp/{self.row['id']}/ping").status_code, 401)
-
-    def test_unknown_connection_404(self):
-        self.assertEqual(client.post(f"/api/projects/{self.project['id']}/rdp/999999/ping").status_code, 404)
-
-    def test_ok_shape(self):
-        from unittest.mock import patch
-
-        class _Sock:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return False
-
-        with patch("app.modules.rdp.service.socket.create_connection", return_value=_Sock()):
-            payload = client.post(f"/api/projects/{self.project['id']}/rdp/{self.row['id']}/ping").json()
-        self.assertTrue(payload["ok"])
-        self.assertIsInstance(payload["latency_ms"], int)
-        self.assertEqual(payload["error"], "")
-
-    def test_failure_shape(self):
-        from unittest.mock import patch
-
-        with patch(
-            "app.modules.rdp.service.socket.create_connection",
-            side_effect=OSError("нет маршрута к хосту"),
-        ):
-            payload = client.post(f"/api/projects/{self.project['id']}/rdp/{self.row['id']}/ping").json()
-        self.assertFalse(payload["ok"])
-        self.assertIsNone(payload["latency_ms"])
-        self.assertIn("нет маршрута", payload["error"])
-
-
 if __name__ == "__main__":
     unittest.main()
