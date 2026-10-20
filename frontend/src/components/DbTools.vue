@@ -7,6 +7,7 @@
       <button class="btn" type="button" :disabled="busy" @click="run('check')">Проверить целостность</button>
       <button class="btn secondary" type="button" :disabled="busy" @click="run('checkpoint')">Записать журнал</button>
       <button class="btn secondary" type="button" :disabled="busy" @click="run('vacuum')">Сжать</button>
+      <button class="btn secondary" type="button" :disabled="busy" @click="run('reindex')">Пересобрать поиск</button>
     </div>
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="note" class="ok-text">{{ note }}</p>

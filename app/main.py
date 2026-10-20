@@ -79,6 +79,7 @@ def create_app() -> FastAPI:
     app.add_api_route("/api/system/db/check", system_db_check, methods=["POST"])
     app.add_api_route("/api/system/db/checkpoint", system_db_checkpoint, methods=["POST"])
     app.add_api_route("/api/system/db/vacuum", system_db_vacuum, methods=["POST"])
+    app.add_api_route("/api/system/db/reindex", system_db_reindex, methods=["POST"])
     setup_modules(app)
 
     @app.exception_handler(ModuleDisabled)
@@ -164,6 +165,30 @@ def system_db_vacuum(user: User = Depends(require_user)) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc) or "Сжать базу не удалось") from exc
     payload["detail"] = "База сжата"
+    return payload
+
+
+def system_db_reindex(user: User = Depends(require_user)) -> dict:
+    """Пересобрать полнотекстовый индекс из источников (патч Y).
+
+    На случай, если поиск что-то не находит, а автолечение healthcheck
+    не успело сработать: пересбор идентичен авточинке, только руками.
+    """
+    from app.core import db as db_module
+    from app.core.db import db_info
+    from app.core.search import rebuild_search_index
+
+    try:
+        if db_module._engine is None:
+            raise RuntimeError("База ещё не открыта")
+        with db_module._engine.begin() as conn:
+            rebuilt = rebuild_search_index(conn)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc) or "Пересобрать поиск не удалось") from exc
+    payload = db_info()
+    payload["detail"] = "Поиск пересобран: " + ", ".join(
+        f"{name} — {rows}" for name, rows in rebuilt.items()
+    )
     return payload
 
 

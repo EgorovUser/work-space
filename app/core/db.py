@@ -17,6 +17,21 @@ SessionLocal: sessionmaker[Session] | None = None
 _BUSY_DEFAULT = 25000
 
 
+def _log_sqlite_version() -> None:
+    """Одна строка в лог при старте: какой SQLite реально работает.
+
+    Системный sqlite3 в дистрибутивах бывает старым, а старые SQLite
+    ложно ругаются «malformed inverted index» на живые FTS5-индексы
+    (чинено в 3.44+). Подмену на свежий pysqlite3 делает app/__init__.py,
+    если пакет установлен; здесь остаётся честно записать, на чём едем.
+    """
+    import sqlite3
+
+    from app.core.logging import logger
+
+    logger.info("SQLite {} ({})", sqlite3.sqlite_version, sqlite3.__name__)
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -49,6 +64,7 @@ class Base(DeclarativeBase):
 def init_db() -> None:
     global _engine, SessionLocal
     cfg = get_config()
+    _log_sqlite_version()
     _engine = create_engine(
         cfg.sqlite_url(),
         connect_args={"check_same_thread": False, "timeout": 30},
@@ -177,7 +193,60 @@ def healthcheck() -> None:
             rows = session.execute(text("PRAGMA quick_check")).all()
             verdict = [str(row[0]) for row in rows]
             if verdict != ["ok"]:
+                verdict = _heal_fts_verdicts(session, verdict)
+            if verdict != ["ok"]:
                 raise RuntimeError("База повреждена: " + "; ".join(verdict)[:240])
+
+
+def _heal_fts_verdicts(session, verdict: list[str]) -> list[str]:
+    """Разобрать жалобы quick_check на FTS5-индексы: точная проверка, починка.
+
+    «malformed inverted index» от quick_check бывает ложью старых SQLite
+    (до ~3.44) на живых индексах после удалений — именно поэтому статус
+    «сам чинился». Здесь жалоба не принимается на веру:
+
+    - индекс реально цел (родная fts5 integrity-check прошла) — строчка
+      из вердикта убирается, пишем предупреждение в лог;
+    - индекс битый — пересобираем из источника и проверяем снова;
+      вылечилось — убираем строчку, пишем error в лог (повреждение было
+      настоящим, поиск мог выдавать не всё);
+    - не вылечилось или жалоба не про FTS — строчка остаётся, и вызывающий
+      честно роняет статус.
+
+    Возвращает обновлённый verdict; ``["ok"]`` — база здорова.
+    """
+    from app.core.logging import log_scope, logger
+    from app.core.search import FTS5_VERDICT, fts_integrity_ok, rebuild_search_table
+
+    healed: list[str] = []
+    remaining: list[str] = []
+    for line in verdict:
+        match = FTS5_VERDICT.search(line)
+        if match is None:
+            remaining.append(line)
+            continue
+        fts = match.group(1)
+        try:
+            # Проверка и починка — в отдельной транзакции движка, чтобы
+            # упавшая команда не оставляла сессию healthcheck недееспособной.
+            with _engine.begin() as conn:
+                if fts_integrity_ok(conn, fts):
+                    continue
+                rebuild_search_table(conn, fts)
+                if fts_integrity_ok(conn, fts):
+                    healed.append(fts)
+                    continue
+        except Exception:
+            with log_scope("core", "db.fts"):
+                logger.exception("не удалось проверить/починить индекс {}", fts)
+        remaining.append(line)
+    if healed:
+        with log_scope("core", "db.fts"):
+            logger.error(
+                "FTS-индекс был повреждён и пересобран из источника: {}",
+                ", ".join(healed),
+            )
+    return remaining or ["ok"]
 
 
 def db_file() -> Path:

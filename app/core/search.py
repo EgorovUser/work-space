@@ -128,6 +128,60 @@ def _match_expression(query: str) -> str | None:
     return " ".join('"' + term.replace('"', '""') + '"*' for term in terms)
 
 
+FTS5_VERDICT = re.compile(r"malformed inverted index for FTS5 table (?:main\.)?(\w+)", re.IGNORECASE)
+
+
+def fts_specs() -> dict[str, dict]:
+    """Карта «имя fts-таблицы → спецификация источника»."""
+    return {spec["fts"]: spec for spec in SOURCES}
+
+
+def rebuild_search_table(conn, fts: str) -> int:
+    """Пересобрать один индекс из источника. Возвращает число строк.
+
+    FTS5-таблицы здесь с собственным хранением (без content=), поэтому
+    штатный ``'rebuild'`` не имеет откуда читать — пересбор это очистка
+    и повторное наполнение из таблицы-источника. Если сегменты битые
+    настолько, что даже очистка падает — таблицу пересоздаём с нуля:
+    DROP не читает содержимое, а триггеры синхронизации висят на
+    источнике и пересоздания не замечают.
+    """
+    spec = fts_specs().get(fts)
+    if spec is None:
+        raise RuntimeError(f"неизвестная таблица поиска: {fts}")
+    col_list = ", ".join(f'"{name}"' for name in spec["columns"])
+    fill = f'INSERT INTO "{fts}"(rowid, {col_list}) SELECT id, {col_list} FROM "{spec["table"]}"'
+    try:
+        conn.exec_driver_sql(f'DELETE FROM "{fts}"')
+        conn.exec_driver_sql(fill)
+    except Exception:
+        conn.exec_driver_sql(f'DROP TABLE IF EXISTS "{fts}"')
+        conn.exec_driver_sql(f'CREATE VIRTUAL TABLE "{fts}" USING fts5({col_list})')
+        conn.exec_driver_sql(fill)
+    return int(conn.exec_driver_sql(f'SELECT count(*) FROM "{fts}"').scalar() or 0)
+
+
+def rebuild_search_index(conn) -> dict[str, int]:
+    """Пересобрать все индексы. Возвращает «таблица → строк»."""
+    return {fts: rebuild_search_table(conn, fts) for fts in sorted(fts_specs())}
+
+
+def fts_integrity_ok(conn, fts: str) -> bool:
+    """Точная проверка FTS5-индекса: верен ли инвертированный индекс.
+
+    ``PRAGMA quick_check`` в старых SQLite (до ~3.44) ложно ругался
+    «malformed inverted index» на живые индексы после удалений — жалоба
+    приходила и уходила вместе с автомержем сегментов. Родная команда
+    FTS5 ``integrity-check`` сверяет сегменты с данными и не врёт:
+    прошла — индекс цел, что бы ни говорил quick_check.
+    """
+    try:
+        conn.exec_driver_sql(f'INSERT INTO "{fts}"("{fts}") VALUES (\'integrity-check\')')
+        return True
+    except Exception:
+        return False
+
+
 def ensure_search_index(conn) -> bool:
     """Создаёт FTS5-таблицы, триггеры и наполняет индекс. Идемпотентно.
 

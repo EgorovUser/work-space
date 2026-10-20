@@ -12,3 +12,7 @@ PyMuPDF==1.28.2
 openpyxl==3.1.5
 itsdangerous==2.2.0
 alembic==1.14.0
+# Свежий SQLite для прода (Docker = Debian со старым системным sqlite3,
+# у которого ложные «malformed inverted index» на FTS5 после удалений;
+# app/__init__.py подменяет им stdlib sqlite3, если он новее системного).
+pysqlite3-binary==0.5.4 ; platform_system == "Linux"
