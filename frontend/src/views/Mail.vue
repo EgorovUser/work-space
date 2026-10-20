@@ -82,6 +82,7 @@ import { api } from "../api"
 import Tabs from "../components/Tabs.vue"
 import SkeletonList from "../components/SkeletonList.vue"
 import { useNotice } from "../composables/useNotice"
+import { useSoftDelete } from "../composables/useSoftDelete"
 import { useWhen } from "../composables/useWhen"
 
 export default {
@@ -91,6 +92,7 @@ export default {
     const route = useRoute()
     const router = useRouter()
     const notice = useNotice()
+    const { softRemove } = useSoftDelete()
     const accounts = ref([])
     const rules = ref([])
     const messages = ref([])

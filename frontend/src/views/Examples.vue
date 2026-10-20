@@ -52,6 +52,7 @@ import SkeletonList from "../components/SkeletonList.vue"
 import { api, downloadFile } from "../api"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
+import { useSoftDelete } from "../composables/useSoftDelete"
 
 export default {
   components: { ActionMenu, SkeletonList },
@@ -68,6 +69,7 @@ export default {
     const fileInput = ref(null)
     const includeArchived = ref(false)
     const notice = useNotice()
+    const { softRemove } = useSoftDelete()
     const router = useRouter()
     const { when } = useWhen()
 
@@ -132,18 +134,16 @@ export default {
     }
 
     async function remove(item) {
-      if (!window.confirm("Удалить пример «" + item.title + "» и его файлы?")) return
+      // Примеры удаляются окончательно (в корзину не попадают) — просто
+      // подтверждаем действие, без кнопки отката.
       const snapshot = items.value.slice()
       items.value = items.value.filter((row) => row.id !== item.id)
-      try {
-        await api("/api/projects/" + props.project.id + "/examples/" + item.id, { method: "DELETE" })
-        // Примеры удаляются окончательно (в корзину не попадают) — просто
-        // подтверждаем действие, без кнопки отката.
-        notice.show("Пример «" + item.title + "» удалён", { kind: "success" })
-      } catch (err) {
-        items.value = snapshot
-        notice.show("Не удалось удалить пример. " + (err.message || "Ошибка"))
-      }
+      const ok = await softRemove({
+        confirm: "Удалить пример «" + item.title + "» и его файлы?",
+        url: "/api/projects/" + props.project.id + "/examples/" + item.id,
+        doneText: "Пример «" + item.title + "» удалён",
+      })
+      if (!ok) items.value = snapshot
     }
 
     watch(() => props.project && props.project.id, load, { immediate: true })

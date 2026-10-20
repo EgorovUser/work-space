@@ -141,6 +141,7 @@ import { api } from "../api"
 import { formatDuration, hoursToMinutes } from "../composables/timeFormat"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
+import { useSoftDelete } from "../composables/useSoftDelete"
 
 export default {
   components: { Tabs, TimeChart, SkeletonList },
@@ -166,6 +167,7 @@ export default {
     const manual = ref({ day: localDay(), hours: 1, note: "", task_id: "" })
     const edit = ref(null)
     const notice = useNotice()
+    const { softRemove } = useSoftDelete()
     const tab = ref("timer")
     const days = ref(14)
     const pageTabs = [
@@ -348,18 +350,16 @@ export default {
     }
 
     async function remove(item) {
-      if (!window.confirm("Удалить запись?")) return
-      busy.value = true
-      error.value = ""
-      try {
-        await api("/api/projects/" + props.project.id + "/time/entries/" + item.id, { method: "DELETE" })
-        notice.show("Запись " + (item.running ? "таймера" : formatDuration(item.minutes)) + " удалена", { kind: "success" })
-        await load()
-      } catch (err) {
-        error.value = err.message || "Не удалось удалить"
-      } finally {
-        busy.value = false
-      }
+      // Записи времени удаляются окончательно — без корзины и отката.
+      await softRemove({
+        confirm: "Удалить запись?",
+        url: "/api/projects/" + props.project.id + "/time/entries/" + item.id,
+        doneText: "Запись " + (item.running ? "таймера" : formatDuration(item.minutes)) + " удалена",
+        onDone: load,
+        onError: (err) => {
+          error.value = err.message || "Не удалось удалить"
+        },
+      })
     }
 
     watch(() => props.project && props.project.id, () => {

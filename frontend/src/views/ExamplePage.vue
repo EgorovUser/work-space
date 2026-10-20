@@ -70,6 +70,7 @@ import { computed, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
 import Tabs from "../components/Tabs.vue"
+import { useConflictedSave } from "../composables/useConflictedSave"
 import { useNotice } from "../composables/useNotice"
 
 export default {
@@ -91,6 +92,7 @@ export default {
       { id: "files", label: "Файлы" },
     ]
     const notice = useNotice()
+    const { onConflict } = useConflictedSave()
     const copied = ref(false)
     const file = ref(null)
     const fileInput = ref(null)
@@ -154,13 +156,9 @@ export default {
         }))
         notice.show("Сохранено", { kind: "success" })
       } catch (err) {
-        if (err.status === 409) {
-          if (window.confirm(err.message + "\n\nЗагрузить свежую версию? Несохранённые правки будут потеряны.")) {
-            await load()
-          }
-        } else {
-          formError.value = err.message || "Не сохранилось"
-        }
+        await onConflict(err, load, (e) => {
+          formError.value = e.message || "Не сохранилось"
+        })
       } finally {
         busy.value = false
       }

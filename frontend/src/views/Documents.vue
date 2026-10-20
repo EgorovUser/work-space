@@ -74,6 +74,7 @@ import ActionMenu from "../components/ActionMenu.vue"
 import SkeletonList from "../components/SkeletonList.vue"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
+import { useSoftDelete } from "../composables/useSoftDelete"
 import { formatSize } from "../composables/formatBytes"
 
 export default {
@@ -101,6 +102,7 @@ export default {
     const progress = ref(0)
     const { settings, when } = useWhen()
     const notice = useNotice()
+    const { softRemove } = useSoftDelete()
     const router = useRouter()
 
     const maxUploadMb = computed(() => Number(settings.get("files", "max_upload_mb")) || 50)
@@ -192,32 +194,19 @@ export default {
     }
 
     async function remove(item) {
-      if (!window.confirm("Удалить документ «" + item.title + "» и все его версии?")) return
+      // Документы удаляются мягко — «Отменить» достаёт его из корзины.
       const snapshot = items.value.slice()
       items.value = items.value.filter((row) => row.id !== item.id)
-      try {
-        await api("/api/projects/" + props.project.id + "/documents/" + item.id, { method: "DELETE" })
-        // Документы удаляются мягко — «Отменить» достаёт его из корзины.
-        notice.show("Документ «" + item.title + "» удалён в корзину", {
-          kind: "success",
-          timeout: 9000,
-          action: {
-            label: "Отменить",
-            run: async () => {
-              try {
-                await api("/api/trash/documents/" + item.id + "/restore", { method: "POST" })
-                notice.show("Документ «" + item.title + "» восстановлен", { kind: "success" })
-                await load()
-              } catch (err) {
-                notice.show("Не удалось восстановить документ. " + (err.message || "Ошибка"))
-              }
-            },
-          },
-        })
-      } catch (err) {
-        items.value = snapshot
-        notice.show("Не удалось удалить документ. " + (err.message || "Ошибка"))
-      }
+      const ok = await softRemove({
+        confirm: "Удалить документ «" + item.title + "» и все его версии?",
+        url: "/api/projects/" + props.project.id + "/documents/" + item.id,
+        restoreUrl: "/api/trash/documents/" + item.id + "/restore",
+        doneText: "Документ «" + item.title + "» удалён в корзину",
+        restoredText: "Документ «" + item.title + "» восстановлен",
+        restoreFailText: "Не удалось восстановить документ. ",
+        afterRestore: load,
+      })
+      if (!ok) items.value = snapshot
     }
 
     watch(() => props.project && props.project.id, () => {

@@ -70,6 +70,7 @@ import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
 import SecretRevisions from "../components/secret/SecretRevisions.vue"
 import { useClipboard } from "../composables/useClipboard"
+import { useConflictedSave } from "../composables/useConflictedSave"
 import { useNotice } from "../composables/useNotice"
 import { useWhen } from "../composables/useWhen"
 
@@ -92,6 +93,7 @@ export default {
     const touched = ref(false)
     const form = ref({ title: "", kind: "", username: "", url: "", note: "", secret: "" })
     const notice = useNotice()
+    const { onConflict } = useConflictedSave()
     const clipboard = useClipboard()
     const { copied, clipSeconds } = clipboard
     const revisions = ref(null)
@@ -166,13 +168,9 @@ export default {
           notice.show("Сохранено", { kind: "success" })
         }
       } catch (err) {
-        if (err.status === 409) {
-          if (window.confirm(err.message + "\n\nЗагрузить свежую версию? Несохранённые правки будут потеряны.")) {
-            await load()
-          }
-        } else {
-          formError.value = err.message || "Не сохранилось"
-        }
+        await onConflict(err, load, (e) => {
+          formError.value = e.message || "Не сохранилось"
+        })
       } finally {
         busy.value = false
       }

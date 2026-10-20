@@ -35,6 +35,7 @@ import { onMounted, ref } from "vue"
 import { api } from "../api"
 import SkeletonList from "../components/SkeletonList.vue"
 import { useNotice } from "../composables/useNotice"
+import { useSoftDelete } from "../composables/useSoftDelete"
 import { useWhen } from "../composables/useWhen"
 
 export default {
@@ -50,6 +51,7 @@ export default {
     const busy = ref(false)
     const { settings, when } = useWhen()
     const notice = useNotice()
+    const { softRemove } = useSoftDelete()
 
     async function load() {
       loading.value = true
@@ -105,18 +107,16 @@ export default {
     }
 
     async function remove(item) {
-      if (!window.confirm("Удалить заметку? Отменить будет нельзя.")) return
-      busy.value = true
-      error.value = ""
-      try {
-        await api("/api/projects/" + props.project.id + "/notes/" + item.id, { method: "DELETE" })
-        notice.show("Заметка удалена", { kind: "success" })
-        await load()
-      } catch (err) {
-        error.value = err.message || "Не удалилось"
-      } finally {
-        busy.value = false
-      }
+      // Заметки удаляются окончательно — без корзины и отката.
+      await softRemove({
+        confirm: "Удалить заметку? Отменить будет нельзя.",
+        url: "/api/projects/" + props.project.id + "/notes/" + item.id,
+        doneText: "Заметка удалена",
+        onDone: load,
+        onError: (err) => {
+          error.value = err.message || "Не удалилось"
+        },
+      })
     }
 
     onMounted(() => {

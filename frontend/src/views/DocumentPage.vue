@@ -85,6 +85,7 @@ import { useRoute, useRouter } from "vue-router"
 import { api, uploadApi } from "../api"
 import Tabs from "../components/Tabs.vue"
 import { useWhen } from "../composables/useWhen"
+import { useConflictedSave } from "../composables/useConflictedSave"
 import { useNotice } from "../composables/useNotice"
 import { formatSize } from "../composables/formatBytes"
 
@@ -116,6 +117,7 @@ export default {
     const versionProgress = ref(0)
     const { settings, when } = useWhen()
     const notice = useNotice()
+    const { onConflict } = useConflictedSave()
 
     const shownText = computed(() => {
       if (!doc.value) return ""
@@ -159,13 +161,9 @@ export default {
         }))
         notice.show("Сохранено", { kind: "success" })
       } catch (err) {
-        if (err.status === 409) {
-          if (window.confirm(err.message + "\n\nЗагрузить свежую версию? Несохранённые правки будут потеряны.")) {
-            await load()
-          }
-        } else {
-          formError.value = err.message || "Не сохранилось"
-        }
+        await onConflict(err, load, (e) => {
+          formError.value = e.message || "Не сохранилось"
+        })
       } finally {
         busy.value = false
       }

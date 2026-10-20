@@ -95,6 +95,7 @@ import { api } from "../api"
 import ActionMenu from "../components/ActionMenu.vue"
 import SkeletonList from "../components/SkeletonList.vue"
 import Tabs from "../components/Tabs.vue"
+import { useSoftDelete } from "../composables/useSoftDelete"
 import { useNotice } from "../composables/useNotice"
 import { useWhen } from "../composables/useWhen"
 
@@ -129,6 +130,7 @@ export default {
     const secrets = ref([])
     const editOriginal = ref(null)
     const notice = useNotice()
+    const { softRemove } = useSoftDelete()
     const { settings, when } = useWhen()
 
     function emptyForm() {
@@ -307,16 +309,20 @@ export default {
     }
 
     async function remove(item) {
-      if (!window.confirm("Удалить подключение «" + item.name + "»? Оно попадёт в корзину — 30 дней на восстановление.")) return
+      // RDP удаляется мягко — раньше тост не предлагал «Отменить», хотя
+      // запись лежит в корзине 30 дней; теперь достаёт оттуда как остальные.
       const snapshot = items.value.slice()
       items.value = items.value.filter((row) => row.id !== item.id)
-      try {
-        await api("/api/projects/" + props.project.id + "/rdp/" + item.id, { method: "DELETE" })
-        notice.show("Удалено в корзину")
-      } catch (err) {
-        items.value = snapshot
-        notice.show("Не удалось удалить. " + (err.message || "Ошибка"))
-      }
+      const ok = await softRemove({
+        confirm: "Удалить подключение «" + item.name + "»? Оно попадёт в корзину — 30 дней на восстановление.",
+        url: "/api/projects/" + props.project.id + "/rdp/" + item.id,
+        restoreUrl: "/api/trash/rdp/" + item.id + "/restore",
+        doneText: "Подключение «" + item.name + "» удалено в корзину",
+        restoredText: "Подключение «" + item.name + "» восстановлено",
+        restoreFailText: "Не удалось восстановить подключение. ",
+        afterRestore: load,
+      })
+      if (!ok) items.value = snapshot
     }
 
     function onAction(action, item) {

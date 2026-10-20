@@ -86,6 +86,7 @@ import SkeletonList from "../components/SkeletonList.vue"
 import Tabs from "../components/Tabs.vue"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
+import { useSoftDelete } from "../composables/useSoftDelete"
 
 export default {
   components: { ActionMenu, Tabs, SkeletonList },
@@ -110,6 +111,7 @@ export default {
     const form = ref({ title: "", kind: "", username: "", url: "", note: "", secret: "" })
     const { settings, when } = useWhen()
     const notice = useNotice()
+    const { softRemove } = useSoftDelete()
     const router = useRouter()
     const rowActions = [
       { id: "open", label: "Открыть" },
@@ -122,32 +124,19 @@ export default {
     }
 
     async function remove(item) {
-      if (!window.confirm("Удалить секрет «" + item.title + "»?")) return
+      // Секреты удаляются мягко — «Отменить» достаёт из корзины.
       const snapshot = items.value.slice()
       items.value = items.value.filter((row) => row.id !== item.id)
-      try {
-        await api("/api/projects/" + props.project.id + "/secrets/" + item.id, { method: "DELETE" })
-        // Секреты удаляются мягко — «Отменить» достаёт из корзины.
-        notice.show("Секрет «" + item.title + "» удалён в корзину", {
-          kind: "success",
-          timeout: 9000,
-          action: {
-            label: "Отменить",
-            run: async () => {
-              try {
-                await api("/api/trash/secrets/" + item.id + "/restore", { method: "POST" })
-                notice.show("Секрет «" + item.title + "» восстановлен", { kind: "success" })
-                await load()
-              } catch (err) {
-                notice.show("Не удалось восстановить секрет. " + (err.message || "Ошибка"))
-              }
-            },
-          },
-        })
-      } catch (err) {
-        items.value = snapshot
-        notice.show("Не удалось удалить секрет. " + (err.message || "Ошибка"))
-      }
+      const ok = await softRemove({
+        confirm: "Удалить секрет «" + item.title + "»?",
+        url: "/api/projects/" + props.project.id + "/secrets/" + item.id,
+        restoreUrl: "/api/trash/secrets/" + item.id + "/restore",
+        doneText: "Секрет «" + item.title + "» удалён в корзину",
+        restoredText: "Секрет «" + item.title + "» восстановлен",
+        restoreFailText: "Не удалось восстановить секрет. ",
+        afterRestore: load,
+      })
+      if (!ok) items.value = snapshot
     }
 
     function applyKinds(list) {
