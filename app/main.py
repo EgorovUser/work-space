@@ -202,13 +202,29 @@ def _mount_frontend(app: FastAPI) -> None:
             if full_path == "sw.js":
                 return FileResponse(candidate, media_type="text/javascript", headers={"Cache-Control": "no-cache"})
             if full_path == "manifest.webmanifest":
-                return FileResponse(candidate, media_type="application/manifest+json; charset=utf-8")
+                return FileResponse(
+                    candidate,
+                    media_type="application/manifest+json; charset=utf-8",
+                    headers={"Cache-Control": "no-cache"},
+                )
+            if full_path.startswith("assets/"):
+                # Чанки Vite несут хеш в имени и неизменны: годовой immutable
+                # убирает ревалидацию и дружит с cache-first сервис-воркера.
+                return FileResponse(
+                    candidate,
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"},
+                )
             return FileResponse(candidate)
         if full_path in ("sw.js", "manifest.webmanifest"):
             # Нет файла — не подсовываем index.html с text/javascript:
             # браузер отверг бы такого воркера с криптичной ошибкой MIME.
             raise HTTPException(status_code=404, detail="Не найдено")
-        return FileResponse(index)
+        # Оболочка SPA — всегда с ревалидацией. Без явного запрета браузер
+        # держит index.html в эвристическом кеше: после пересборки образа
+        # пользователь видит старый интерфейс, потому что старая оболочка
+        # ссылается на старые имена ассетов. no-cache оставляет ETag —
+        # неизменённая страница отдаётся 304, дёшево.
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
 
 app = create_app()

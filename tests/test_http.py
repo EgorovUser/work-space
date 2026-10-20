@@ -314,6 +314,32 @@ class PwaFilesTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200, name)
             self.assertIn("image/png", response.headers["content-type"], name)
 
+    def test_spa_shell_revalidates(self):
+        # После пересборки образа браузер обязан увидеть новую оболочку:
+        # эвристический кеш index.html — источник «обновился, но ничего
+        # не поменялось». no-cache оставляет ETag-ревалидацию (304).
+        response = client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("no-cache", response.headers.get("cache-control", ""))
+
+    def test_deep_route_serves_shell(self):
+        # Глубокие маршруты SPA (например, глобальные секреты) отдают ту же
+        # оболочку с той же политикой ревалидации.
+        response = client.get("/secrets")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("no-cache", response.headers.get("cache-control", ""))
+
+    def test_vite_assets_immutable(self):
+        # Хешированные чанки неизменны: годовой immutable без ревалидации.
+        assets_dir = ROOT / "frontend" / "dist" / "assets"
+        hashed = next((item for item in sorted(assets_dir.iterdir()) if item.is_file()), None)
+        self.assertIsNotNone(hashed, "в dist/assets нет файлов")
+        response = client.get("/assets/" + hashed.name)
+        self.assertEqual(response.status_code, 200)
+        control = response.headers.get("cache-control", "")
+        self.assertIn("immutable", control)
+        self.assertIn("max-age=31536000", control)
+
 
 if __name__ == "__main__":
     unittest.main()
