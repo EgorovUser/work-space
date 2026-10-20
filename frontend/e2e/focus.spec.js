@@ -84,3 +84,56 @@ test("старт таймера со страницы «Учёт» остана�
   await expect(page.locator(".pomo-chip")).toHaveCount(0)
   await expect(page.locator(".rail-focus.timer")).toBeVisible()
 })
+
+// Часы Playwright (page.clock) срабатывают интервалы «не более одного
+// раза» за прыжок — секундный тик помодоро так не докрутить. Гоним время
+// секунда-за-секундой: честный ход, только быстрый.
+async function tickSeconds(page, seconds) {
+  for (let i = 0; i < seconds; i++) {
+    await page.clock.fastForward(1000)
+  }
+}
+
+test("помодоро сообщает о смене фаз системными уведомлениями", async ({ page }) => {
+  // Браузерные Notification подменяем журналом: проверяем факт и тексты,
+  // не сам показ. Часы — фейковые (page.clock).
+  await page.addInitScript(() => {
+    const notes = []
+    window.__notes = notes
+    class FakeNotification {
+      constructor(title) {
+        notes.push(title)
+      }
+      close() {}
+    }
+    FakeNotification.permission = "granted"
+    FakeNotification.requestPermission = () => Promise.resolve("granted")
+    window.Notification = FakeNotification
+  })
+  await page.clock.install()
+
+  await login(page)
+  await page.goto("/")
+
+  // Подписка включена (по умолчанию) — фазы сообщаются. Фазы укорачиваем
+  // до минуты, чтобы круг прогона был коротким.
+  const toggle = page.getByLabel("уведомлять о смене фаз")
+  await expect(toggle).toBeChecked()
+  await page.locator(".pomo-input").first().fill("1")
+  await page.locator(".pomo-input").nth(1).fill("1")
+
+  await page.getByRole("button", { name: "Старт", exact: true }).click()
+  await expect(page.locator(".rail-focus.pomo")).toBeVisible()
+
+  // Фокус (1 минута) истёк — пора отдохнуть; перерыв стартует сам.
+  await tickSeconds(page, 65)
+  await expect
+    .poll(() => page.evaluate(() => window.__notes), { message: "ждём уведомление про отдых" })
+    .toContain("Пора отдохнуть")
+
+  // Перерыв (тоже минута) закончился — можно возвращаться к работе.
+  await tickSeconds(page, 65)
+  await expect
+    .poll(() => page.evaluate(() => window.__notes), { message: "ждём уведомление про конец отдыха" })
+    .toContain("Отдых закончился")
+})

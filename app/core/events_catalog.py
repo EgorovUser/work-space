@@ -42,6 +42,7 @@ RDP_UPDATED = "rdp.updated"
 RDP_DELETED = "rdp.deleted"
 TIME_STARTED = "time.started"
 TIME_STOPPED = "time.stopped"
+TIME_HOUR_PASSED = "time.hour_passed"
 TIME_CREATED = "time.created"
 TIME_UPDATED = "time.updated"
 TIME_DELETED = "time.deleted"
@@ -92,6 +93,7 @@ ALL_EVENTS = (
     RDP_DELETED,
     TIME_STARTED,
     TIME_STOPPED,
+    TIME_HOUR_PASSED,
     TIME_CREATED,
     TIME_UPDATED,
     TIME_DELETED,

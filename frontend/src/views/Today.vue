@@ -74,6 +74,13 @@
               <input v-model="autoBreak" type="checkbox" />
               <span>перерыв стартует сам</span>
             </label>
+            <!-- Патч AM: подписка на системные уведомления о смене фаз —
+                 работают и в фоновой вкладке; включение спрашивает
+                 разрешение браузера. -->
+            <label class="check">
+              <input v-model="phaseNotify" type="checkbox" />
+              <span>уведомлять о смене фаз</span>
+            </label>
             <div class="row-actions pomo-pick">
               <TaskPicker v-if="!pomoTask" @select="pomoTask = $event" />
               <span v-else class="pomo-task-chip" :title="pomoTask.title + ' · ' + pomoTask.project_name">
@@ -206,10 +213,19 @@ export default {
     const workMinutes = ref(pomo.state.settings.workMinutes)
     const breakMinutes = ref(pomo.state.settings.breakMinutes)
     const autoBreak = ref(pomo.state.settings.autoBreak)
+    const phaseNotify = ref(pomo.state.settings.notify)
 
     watch(workMinutes, (value) => pomo.updateSettings({ workMinutes: value }))
     watch(breakMinutes, (value) => pomo.updateSettings({ breakMinutes: value }))
     watch(autoBreak, (value) => pomo.updateSettings({ autoBreak: value }))
+    // Включение подписки спрашивает разрешение браузера один раз; отказ
+    // не мешает — останутся звук и заголовок вкладки.
+    watch(phaseNotify, (value) => {
+      pomo.updateSettings({ notify: value })
+      if (value && typeof Notification !== "undefined" && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {})
+      }
+    })
 
     function startPomo() {
       pomo.start(pomoTask.value)
@@ -275,7 +291,7 @@ export default {
       projects, overdue, upcoming, letters, events, notifications, sections,
       error, unavailable, loading, when, todayLabel, load,
       moreTasks, moreBusy, loadMoreTasks,
-      pomo, pomoTask, workMinutes, breakMinutes, autoBreak, startPomo,
+      pomo, pomoTask, workMinutes, breakMinutes, autoBreak, phaseNotify, startPomo,
       priorityLabel, priorityClass,
     }
   },

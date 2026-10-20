@@ -25,9 +25,19 @@ from app.modules.notifications.service.feed import (
     probe,
     unread,
 )
+from app.modules.notifications.service._queries import _dedup_exists
+
+
+def dedup_exists(session, user_id: int, dedup: str) -> bool:
+    """Публичная проверка дедуп-ключа: чужим модулям нужно решить, стоит ли
+    ставить событие в аутбокс, не зная внутренностей уведомлений (патч AM —
+    джоба «час по таймеру» в timetracking)."""
+    return _dedup_exists(session, user_id, dedup)
+
 
 __all__ = [
     "ALL_EVENTS",
+    "dedup_exists",
     "deliver_due",
     "handle",
     "home_items",

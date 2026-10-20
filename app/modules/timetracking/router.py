@@ -147,4 +147,16 @@ def setup(app) -> None:
         label="Автостоп таймера",
         detail="Останавливает таймер, который идёт слишком долго",
     )
+    # Час по таймеру (патч AM): уведомление на каждый полный час открытого
+    # таймера; дубли режет дедуп-ключ, отключается подпиской на событие.
+    register_job(
+        "timetracking.hours",
+        service.notify_hours_open,
+        module="timetracking",
+        action="hours",
+        interval_module="timetracking",
+        interval_key="timer.job_seconds",
+        label="Час по таймеру",
+        detail="Уведомляет, когда по таймеру проходит полный час",
+    )
     app.include_router(router)

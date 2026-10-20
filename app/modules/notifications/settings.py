@@ -45,6 +45,7 @@ _EVENTS = [
     {"id": "secret.opened", "label": "Секрет открыли"},
     {"id": "time.started", "label": "Таймер запущен"},
     {"id": "time.stopped", "label": "Таймер остановлен"},
+    {"id": "time.hour_passed", "label": "Час по таймеру"},
     {"id": "time.created", "label": "Запись времени добавлена"},
     {"id": "time.updated", "label": "Запись времени изменена"},
     {"id": "time.deleted", "label": "Запись времени удалена"},

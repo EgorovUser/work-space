@@ -10,13 +10,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.db import session_scope, utcnow
-from app.core.events_catalog import TIME_STARTED, TIME_STOPPED
+from app.core.events_catalog import TIME_HOUR_PASSED, TIME_STARTED, TIME_STOPPED
 from app.core.logging import log_scope, logger
 from app.core.outbox import enqueue
 from app.core.settings_store import get_bool, get_int
 from app.modules.projects.service import touch_project
 from app.modules.timetracking.models import TimeEntry
-from app.modules.timetracking.service._shared import _live_minutes, _note, _open_for_user, _out, _task
+from app.modules.timetracking.service._shared import (
+    _live_minutes,
+    _note,
+    _open_for_user,
+    _out,
+    _task,
+    _titles,
+)
 from app.modules.timetracking.service.entries import _normalize
 
 
@@ -121,6 +128,66 @@ def autostop_open() -> None:
             logger.info("timer autostop id={} minutes={}", row.id, row.minutes)
         if stopped:
             session.flush()
+
+
+def _hours_word(hours: int) -> str:
+    """Час/часа/часов — для заголовка уведомления."""
+    if hours % 10 == 1 and hours % 100 != 11:
+        return "час"
+    if 2 <= hours % 10 <= 4 and not 12 <= hours % 100 <= 14:
+        return "часа"
+    return "часов"
+
+
+def notify_hours_open() -> None:
+    """Джоба «час по таймеру» (патч AM): каждый полный час открытого
+    таймера — одно уведомление пользователю, который его запустил.
+
+    Дубли режет дедуп-ключ ``time.hour.<запись>.<час>``: джоба ходит часто
+    (тот же cadence, что автостоп), но событие в аутбокс встаёт только при
+    первом пересечении границы. Отключается подпиской на событие
+    time.hour_passed в настройках уведомлений — как у любого события.
+    """
+    from app.modules.notifications.service import dedup_exists
+
+    now = utcnow()
+    with session_scope() as session:
+        rows = list(session.scalars(select(TimeEntry).where(TimeEntry.ended_at.is_(None))).all())
+        for row in rows:
+            hours = _live_minutes(row, now) // 60
+            if hours < 1:
+                continue
+            # Заголовок задачи не храним в записи — подтягиваем тем же
+            # тихим хелпером, что и сериализация (удалённые задачи → "").
+            titles = _titles(session, row.project_id, [row.task_id])
+            for hour in range(1, hours + 1):
+                dedup = "time.hour.{}.{}".format(row.id, hour)
+                if dedup_exists(session, row.user_id, dedup):
+                    continue
+                title = "По таймеру прошёл {} {}".format(hour, _hours_word(hour))
+                if row.task_id and titles.get(row.task_id):
+                    subject = "Задача «{}»".format(titles[row.task_id])
+                elif row.note:
+                    subject = row.note
+                else:
+                    subject = "Без задачи"
+                if row.task_id:
+                    link = "/projects/{}/tasks/{}".format(row.project_id, row.task_id)
+                else:
+                    link = "/projects/{}/time".format(row.project_id)
+                enqueue(
+                    session,
+                    TIME_HOUR_PASSED,
+                    {
+                        "title": title,
+                        "subject": subject,
+                        "project_id": row.project_id,
+                        "task_id": row.task_id,
+                        "link": link,
+                        "dedup_key": dedup,
+                    },
+                    user_id=row.user_id,
+                )
 
 
 def _close(session: Session, row: TimeEntry, now, clamp: bool) -> None:

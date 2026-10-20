@@ -18,6 +18,7 @@ const DEFAULTS = {
   breakMinutes: 5,
   autoBreak: true,
   sound: true,
+  notify: true,
 }
 
 function loadSettings() {
@@ -28,6 +29,7 @@ function loadSettings() {
       breakMinutes: clampMinutes(raw.breakMinutes, DEFAULTS.breakMinutes, 1, 60),
       autoBreak: typeof raw.autoBreak === "boolean" ? raw.autoBreak : DEFAULTS.autoBreak,
       sound: typeof raw.sound === "boolean" ? raw.sound : DEFAULTS.sound,
+      notify: typeof raw.notify === "boolean" ? raw.notify : DEFAULTS.notify,
     }
   } catch {
     return { ...DEFAULTS }
@@ -69,6 +71,7 @@ function updateSettings(patch) {
     breakMinutes: clampMinutes(patch.breakMinutes ?? state.settings.breakMinutes, state.settings.breakMinutes, 1, 60),
     autoBreak: typeof patch.autoBreak === "boolean" ? patch.autoBreak : state.settings.autoBreak,
     sound: typeof patch.sound === "boolean" ? patch.sound : state.settings.sound,
+    notify: typeof patch.notify === "boolean" ? patch.notify : state.settings.notify,
   }
   persistSettings()
 }
@@ -90,6 +93,36 @@ function beep() {
     }
   } catch {
     /* нет звука — не страшно */
+  }
+}
+
+// Уведомления о смене фаз (патч AM): системное уведомление браузера —
+// работает и когда вкладка в фоне. Подписка — тумблер в карточке
+// помодоро: он запрашивает разрешение при включении. В тестах браузерный
+// показ подменяется приёмником (_setNotificationSink).
+let notifySink = null
+
+export function _setNotificationSink(fn) {
+  notifySink = fn
+}
+
+function sendPhaseNotification(kind) {
+  if (!state.settings.notify) return
+  const task = state.task ? "«" + state.task.title + "»" : ""
+  const text =
+    kind === "rest"
+      ? { title: "Пора отдохнуть", body: task ? "Фокус по задаче " + task + " завершён" : "Фокус завершён" }
+      : { title: "Отдых закончился", body: "Можно возвращаться к работе" }
+  if (notifySink) {
+    notifySink(text)
+    return
+  }
+  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+    try {
+      new Notification(text.title, { body: text.body, tag: "pomodoro-" + kind })
+    } catch {
+      /* браузер отказал — остаётся звук */
+    }
   }
 }
 
@@ -149,6 +182,7 @@ function tick() {
   if (state.phase === "work") {
     state.sessions += 1
     beep()
+    sendPhaseNotification("rest")
     saveWorkSession()
     if (state.settings.autoBreak) {
       startPhase("break")
@@ -156,6 +190,7 @@ function tick() {
     }
   } else {
     beep()
+    sendPhaseNotification("back")
   }
   stop(false)
 }
@@ -210,5 +245,7 @@ export function usePomodoro() {
     stop,
     skipBreak,
     updateSettings,
+    // внутреннее для тестов: проверка текстов уведомлений о фазах
+    _sendPhaseNotification: sendPhaseNotification,
   }
 }

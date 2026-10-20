@@ -17,6 +17,7 @@ from app.modules.timetracking.service.overview import overview
 from app.modules.timetracking.service.report import card_provider, dashboard_provider, project_time
 from app.modules.timetracking.service.timer import (
     autostop_open,
+    notify_hours_open,
     running_for_user,
     start_timer,
     stop_timer,
@@ -29,6 +30,7 @@ __all__ = [
     "create_entry",
     "dashboard_provider",
     "delete_entry",
+    "notify_hours_open",
     "overview",
     "project_time",
     "running_for_user",
