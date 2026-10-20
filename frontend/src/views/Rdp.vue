@@ -29,6 +29,14 @@
         <input v-model="form.domain" type="text" autocomplete="off" placeholder="CORP" />
       </label>
       <label>
+        Секрет с логином
+        <select v-model="form.secret_id">
+          <option value="">Не связывать</option>
+          <option v-for="item in secrets" :key="item.id" :value="String(item.id)">{{ item.title }}</option>
+        </select>
+        <span class="muted">Логин подтянется в .rdp, если поле «Логин» пустое.</span>
+      </label>
+      <label>
         Заметка
         <textarea v-model="form.note" />
       </label>
@@ -64,6 +72,7 @@
       <div v-for="item in items" :key="item.id" class="status-row">
         <div>
           <strong>{{ item.name }}</strong>
+          <span v-if="item.secret_title" class="pill" :title="'Связан с секретом «' + item.secret_title + '»'">секрет: {{ item.secret_title }}</span>
           <div class="muted mono-inline">{{ item.host }}<span v-if="item.port !== 3389">:{{ item.port }}</span></div>
           <div class="muted">
             <span v-if="item.username">логин {{ item.username }}<span v-if="item.domain"> · домен {{ item.domain }}</span> · </span>
@@ -71,7 +80,14 @@
             {{ when(item.updated_at) }}
           </div>
         </div>
-        <ActionMenu :actions="rowActions(item)" @choose="onAction($event, item)" />
+        <div class="rdp-tools">
+          <span v-if="pinging[item.id]" class="muted">проверяем…</span>
+          <span v-else-if="pingResult[item.id]" class="pill" :class="pingResult[item.id].ok ? 'ok' : 'warn'">
+            {{ pingResult[item.id].ok ? "доступен · " + pingResult[item.id].latency_ms + " мс" : "недоступен" }}
+          </span>
+          <button class="btn secondary rdp-ping" type="button" :disabled="pinging[item.id]" @click="ping(item)">Пинг</button>
+          <ActionMenu :actions="rowActions(item)" @choose="onAction($event, item)" />
+        </div>
       </div>
     </div>
     </div>
@@ -79,7 +95,7 @@
 </template>
 
 <script>
-import { computed, ref, watch } from "vue"
+import { computed, reactive, ref, watch } from "vue"
 import { api } from "../api"
 import ActionMenu from "../components/ActionMenu.vue"
 import SkeletonList from "../components/SkeletonList.vue"
@@ -88,8 +104,9 @@ import { useNotice } from "../composables/useNotice"
 import { useWhen } from "../composables/useWhen"
 
 // RDP-подключения проекта: адрес, порт, логин и домен — без пароля. Кнопка
-// «Скачать .rdp» забирает файл с сервера (content-disposition сам предлагает
-// сохранение), «Копировать адрес» кладёт host:port в буфер.
+// «Скачать .rdp» забирает файл с сервера, «Копировать адрес» кладёт
+// host:port в буфер, «Пинг» проверяет доступность TCP-коннектом.
+// Связка с секретом (патч N) подтягивает логин в .rdp из хранилища.
 export default {
   components: { ActionMenu, Tabs, SkeletonList },
   props: {
@@ -112,11 +129,14 @@ export default {
     const editId = ref(null)
     const editVersion = ref("")
     const portPlaceholder = ref("3389")
+    const secrets = ref([])
+    const pinging = reactive({})
+    const pingResult = reactive({})
     const notice = useNotice()
     const { settings, when } = useWhen()
 
     function emptyForm() {
-      return { name: "", host: "", port: "", username: "", domain: "", note: "" }
+      return { name: "", host: "", port: "", username: "", domain: "", secret_id: "", note: "" }
     }
 
     function rowActions(item) {
@@ -146,6 +166,15 @@ export default {
       }
     }
 
+    async function loadSecrets() {
+      try {
+        const data = await api("/api/projects/" + props.project.id + "/secrets")
+        secrets.value = (data.items || []).filter((item) => !item.archived)
+      } catch {
+        secrets.value = [] // модуль секретов может быть выключен
+      }
+    }
+
     async function submit() {
       formError.value = ""
       busy.value = true
@@ -156,6 +185,7 @@ export default {
         domain: form.value.domain,
         note: form.value.note,
       }
+      body.secret_id = form.value.secret_id ? Number(form.value.secret_id) : null
       if (form.value.port) body.port = Number(form.value.port)
       try {
         if (editId.value) {
@@ -191,9 +221,23 @@ export default {
         port: item.port === 3389 ? "" : String(item.port),
         username: item.username,
         domain: item.domain,
+        secret_id: item.secret_id ? String(item.secret_id) : "",
         note: item.note,
       }
       tab.value = "add"
+    }
+
+    async function ping(item) {
+      pinging[item.id] = true
+      delete pingResult[item.id]
+      try {
+        const data = await api("/api/projects/" + props.project.id + "/rdp/" + item.id + "/ping", { method: "POST" })
+        pingResult[item.id] = data
+      } catch (err) {
+        pingResult[item.id] = { ok: false, latency_ms: null, error: err.message || "Ошибка" }
+      } finally {
+        pinging[item.id] = false
+      }
     }
 
     function download(item) {
@@ -232,11 +276,12 @@ export default {
     }
 
     async function remove(item) {
-      if (!window.confirm("Удалить подключение «" + item.name + "»? Отменить будет нельзя.")) return
+      if (!window.confirm("Удалить подключение «" + item.name + "»? Оно попадёт в корзину — 30 дней на восстановление.")) return
       const snapshot = items.value.slice()
       items.value = items.value.filter((row) => row.id !== item.id)
       try {
         await api("/api/projects/" + props.project.id + "/rdp/" + item.id, { method: "DELETE" })
+        notice.show("Удалено в корзину")
       } catch (err) {
         items.value = snapshot
         notice.show("Не удалось удалить. " + (err.message || "Ошибка"))
@@ -260,11 +305,13 @@ export default {
       includeArchived.value = false
       query.value = ""
       load()
+      loadSecrets()
     }, { immediate: true })
 
     return {
       items, error, formError, loading, busy, query, includeArchived, tab, pageTabs,
-      form, editId, portPlaceholder, when, rowActions, load, submit, resetForm, onAction,
+      form, editId, portPlaceholder, secrets, pinging, pingResult, when,
+      rowActions, load, submit, resetForm, onAction, ping,
     }
   },
 }

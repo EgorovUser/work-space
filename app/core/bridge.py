@@ -108,12 +108,14 @@ def dashboard_blocks(session, project_id: int, user_id: int | None, limits: dict
     return merged
 
 
-def inbox_items(module: str, session, user_id: int | None, limit: int, project_ids: list[int]) -> list:
+def inbox_items(module: str, session, user_id: int | None, limit: int, project_ids: list[int], offset: int = 0) -> list:
     handler = _inbox.get(module)
     if handler is None or not project_ids:
         return []
     try:
-        rows = handler(session, user_id, limit, project_ids) or []
+        # Все провайдеры принимают offset (патч N): задачи его используют
+        # для «Показать ещё», почта и события — просто игнорируют.
+        rows = handler(session, user_id, limit, project_ids, offset) or []
     except Exception:
         logger.exception("inbox provider failed module={}", module)
         return []

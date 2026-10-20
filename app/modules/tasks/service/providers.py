@@ -22,6 +22,13 @@ from app.modules.tasks.service._serialize import _event_payload
 from app.modules.tasks.service._validators import _zone
 from app.core.db import utcnow
 
+# Ранг приоритета для сортировки «Сегодня»: чем выше — тем важнее.
+_PRIORITY_RANKS = {"high": 3, "normal": 2, "low": 1}
+
+
+def _priority_rank(value: str) -> int:
+    return _PRIORITY_RANKS.get(value or "", 0)
+
 
 def card_provider(session: Session, project_id: int, user_id: int | None) -> dict:
     zone = _zone()
@@ -29,7 +36,11 @@ def card_provider(session: Session, project_id: int, user_id: int | None) -> dic
     rows = session.execute(
         select(Task.deadline, TaskStatus.is_closed)
         .join(TaskStatus, TaskStatus.id == Task.status_id)
-        .where(Task.project_id == project_id)
+        .where(
+            Task.project_id == project_id,
+            # Удалённые в корзину задачи в счётчики не идут (патч N).
+            Task.deleted_at.is_(None),
+        )
     ).all()
     open_count = 0
     overdue = 0
@@ -51,7 +62,7 @@ def card_provider(session: Session, project_id: int, user_id: int | None) -> dic
     }
 
 
-def inbox_provider(session: Session, user_id: int | None, limit: int, project_ids: list[int]) -> list[dict]:
+def inbox_provider(session: Session, user_id: int | None, limit: int, project_ids: list[int], offset: int = 0) -> list[dict]:
     zone = _zone()
     today = datetime.now(zone).date()
     horizon = get_int("projects", "home.horizon_days")
@@ -64,6 +75,8 @@ def inbox_provider(session: Session, user_id: int | None, limit: int, project_id
             Task.project_id.in_(project_ids),
             Task.deadline.is_not(None),
             TaskStatus.is_closed.is_(False),
+            # Корзина в «Сегодня» не попадает (патч N).
+            Task.deleted_at.is_(None),
         )
         .order_by(Task.deadline.asc(), Task.id.asc())
         .limit(cap)
@@ -80,11 +93,18 @@ def inbox_provider(session: Session, user_id: int | None, limit: int, project_id
                 "title": task.title,
                 "deadline": task.deadline.isoformat(),
                 "overdue": due < today,
+                "priority": task.priority or "",
             }
         )
-        if len(items) >= limit:
-            break
-    return items
+    # Сортировка «Сегодня» (патч N): просроченные выше будущих; среди
+    # просроченных сначала важные (high > normal > low), потом по сроку;
+    # будущие — по сроку, при равном сроке важнее высокая приоритетность.
+    overdue_items = [item for item in items if item["overdue"]]
+    upcoming_items = [item for item in items if not item["overdue"]]
+    overdue_items.sort(key=lambda item: (-_priority_rank(item["priority"]), item["deadline"]))
+    upcoming_items.sort(key=lambda item: (item["deadline"], -_priority_rank(item["priority"])))
+    items = overdue_items + upcoming_items
+    return items[offset : offset + limit]
 
 
 def dashboard_provider(session: Session, project_id: int, user_id: int | None, limits: dict) -> dict:
@@ -155,7 +175,7 @@ def _counts(session: Session, project_id: int) -> list[dict]:
     rows = _statuses(session, project_id)
     counts = dict(
         session.execute(
-            select(Task.status_id, func.count()).where(Task.project_id == project_id).group_by(Task.status_id)
+            select(Task.status_id, func.count()).where(Task.project_id == project_id, Task.deleted_at.is_(None)).group_by(Task.status_id)
         ).all()
     )
     return [
@@ -172,7 +192,7 @@ def _chart(session: Session, project_id: int, days: int) -> dict:
     created = []
     closed = []
     rows = session.execute(
-        select(Task.created_at, Task.closed_at).where(Task.project_id == project_id)
+        select(Task.created_at, Task.closed_at).where(Task.project_id == project_id, Task.deleted_at.is_(None))
     ).all()
     from datetime import timedelta
 
@@ -188,7 +208,7 @@ def _upcoming(session: Session, project_id: int, limit: int) -> list[dict]:
     rows = session.execute(
         select(Task)
         .join(TaskStatus, TaskStatus.id == Task.status_id)
-        .where(Task.project_id == project_id, Task.deadline.is_not(None), TaskStatus.is_closed.is_(False))
+        .where(Task.project_id == project_id, Task.deadline.is_not(None), TaskStatus.is_closed.is_(False), Task.deleted_at.is_(None))
         .order_by(Task.deadline.asc(), Task.id.asc())
         .limit(max(1, limit))
     ).scalars().all()

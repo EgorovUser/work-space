@@ -48,7 +48,7 @@ def remind_events() -> None:
                 _notify_event(session, row, MAIL_EVENT_SOON, "События из почты скоро")
 
 
-def events_today(session: Session, user_id: int | None, limit: int, project_ids: list[int]) -> list[dict]:
+def events_today(session: Session, user_id: int | None, limit: int, project_ids: list[int], offset: int = 0) -> list[dict]:
     zone = _zone()
     now = datetime.now(zone)
     start = datetime(now.year, now.month, now.day, tzinfo=zone)
@@ -72,7 +72,7 @@ def events_today(session: Session, user_id: int | None, limit: int, project_ids:
     ]
 
 
-def inbox_provider(session: Session, user_id: int | None, limit: int, project_ids: list[int]) -> list[dict]:
+def inbox_provider(session: Session, user_id: int | None, limit: int, project_ids: list[int], offset: int = 0) -> list[dict]:
     scan = get_int("mail", "threads.scan_limit") if get_bool("mail", "threads.enabled") else max(1, limit)
     rows = list(
         session.scalars(

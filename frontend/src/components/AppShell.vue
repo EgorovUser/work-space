@@ -7,6 +7,7 @@
         <router-link to="/projects">Проекты</router-link>
         <router-link to="/mail">Почта<span v-if="mailBadge" class="rail-badge">{{ mailBadge }}</span></router-link>
         <router-link to="/secrets">Секреты</router-link>
+        <router-link to="/trash">Корзина</router-link>
         <router-link to="/notifications">Уведомления</router-link>
         <router-link to="/settings">Настройки</router-link>
         <router-link to="/system">Состояние</router-link>
@@ -22,6 +23,9 @@
         <div class="topbar-title">{{ heading }}</div>
         <GlobalSearch />
         <div class="topbar-tools">
+          <router-link v-if="pomo.state.running" to="/" class="pomo-chip" :class="{ break: pomo.state.phase === 'break' }" title="Идёт помодоро — вернуться на «Сегодня»">
+            {{ pomo.label() }}
+          </router-link>
           <ThemeToggle />
           <Bell />
         </div>
@@ -46,6 +50,7 @@ import { api } from "../api"
 import { useAuth } from "../composables/useAuth"
 import { useChrome } from "../composables/useChrome"
 import { useEvents } from "../composables/useEvents"
+import { usePomodoro } from "../composables/usePomodoro"
 import { useSettings } from "../composables/useSettings"
 
 // Рельса несёт только глобальные разделы. Навигация внутри проекта живёт
@@ -70,11 +75,14 @@ export default {
       if (route.path.startsWith("/projects")) return "Проекты"
       if (route.path.startsWith("/mail")) return "Почта"
       if (route.path.startsWith("/secrets")) return "Секреты"
+      if (route.path.startsWith("/trash")) return "Корзина"
       if (route.path.startsWith("/notifications")) return "Уведомления"
       if (route.path.startsWith("/settings")) return "Настройки"
       if (route.path.startsWith("/system")) return "Состояние"
       return settings.title.value || "Сегодня"
     })
+
+    const pomo = usePomodoro()
 
     const mailBadge = computed(() => {
       const value = events.mailUnread.value
@@ -111,6 +119,7 @@ export default {
       caption: chrome.caption,
       heading,
       mailBadge,
+      pomo,
       route,
       onLogout,
     }

@@ -46,6 +46,8 @@ class Task(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    # Мягкое удаление (патч N): заполнено — задача в корзине, восстановима.
+    deleted_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)
 

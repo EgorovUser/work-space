@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session, defer
 from app.core.events_bus import publish as publish_event
 from app.core.events_catalog import MAIL_ARCHIVED, MAIL_DELETED
 from app.core.files import add_link, save_bytes
+from app.core.models import StoredFile
+from app.modules.projects.models import Project
 from app.core.logging import log_scope, logger
 from app.core.outbox import enqueue
 from app.core.settings_store import get_bool, get_int
@@ -24,6 +26,7 @@ from app.modules.mail.models import (
 from app.modules.mail.service._matching import _row_matches
 from app.modules.mail.service._queries import _accounts, _all_accounts, _message, _rules
 from app.modules.mail.service._serialize import (
+    _meta,
     _account_out,
     _message_out,
     _rule_out,
@@ -69,11 +72,34 @@ def project_mail(session: Session, project_id: int, unread_only: bool, include_a
 def import_raw(session: Session, project_id: int, user_id: int, raw: bytes) -> dict:
     moves: list[tuple[int, str, int | None]] = []
     outcome, row = _ingest(session, project_id, user_id, raw, None, None, "", notify=True, moves=moves)
+    if outcome == "stored" and row is not None:
+        # Ручной импорт: сервера-источника у письма нет, вложения
+        # сохраняем сразу — позже взять их неоткуда (патч N: кнопка
+        # «В документы» и «Скачать» должны работать и для импорта).
+        _store_raw_attachments(session, project_id, user_id, row, raw)
     session.commit()
     _run_moves(moves)
     if outcome == "stored":
         publish_event("mail.changed")
     return {"status": outcome, "id": row.id if row is not None else None}
+
+
+def _store_raw_attachments(session: Session, project_id: int, user_id: int, row: MailMessage, raw: bytes) -> None:
+    for item in _meta(row):
+        section = str(item.get("section") or "")
+        if not section:
+            continue
+        try:
+            filename, mime, data = parse.part_bytes(raw, section, _limits())
+        except ValueError:
+            # Слишком большое вложение или битая секция: останется
+            # метаданные, как раньше.
+            continue
+        stored = save_bytes(session, data, filename, mime, user_id)
+        session.add(MailAttachment(message_id=row.id, file_id=stored.id, filename=stored.original_name))
+        add_link(session, stored.id, project_id=project_id or None, module="mail", entity_type="mail_message", entity_id=row.id)
+    with log_scope("mail", "import.attachments", user_id=user_id):
+        logger.info("imported attachments stored message={}", row.id)
 
 
 def get_message(session: Session, project_id: int, user_id: int, message_id: int) -> dict:
@@ -168,6 +194,67 @@ def download_attachment(session: Session, project_id: int, user_id: int, message
     session.flush()
     add_link(session, stored.id, project_id=project_id or None, module="mail", entity_type="mail_message", entity_id=row.id)
     return {"file_id": stored.id, "filename": stored.original_name}
+
+
+def attachment_to_document(
+    session: Session,
+    project_id: int | None,
+    user_id: int,
+    message_id: int,
+    section: str,
+    target_project_id: int | None = None,
+) -> dict:
+    """Вложение письма — в «Документы» одним действием (патч N).
+
+    Если вложение ещё не выгружено с сервера (в письме только метаданные),
+    сначала забираем его как «Скачать вложение», затем создаём документ
+    из уже сохранённого файла — повторной загрузки не происходит.
+    project_id — ящик, из которого читаем (0 для общего); target_project_id
+    — куда положить документ (по умолчанию проект письма или общий ящик).
+    """
+    from app.modules.documents import service as documents_service
+
+    row = _message(session, project_id or 0, message_id)
+    meta = _meta(row)
+    entry = next((item for item in meta if str(item.get("section") or "") == section), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Вложение не найдено")
+    filename = entry.get("filename") or "файл"
+
+    stored_row = session.scalars(
+        select(MailAttachment).where(MailAttachment.message_id == row.id, MailAttachment.filename == filename)
+    ).first()
+    if stored_row is None:
+        # Ещё не выгружено: забираем с IMAP-сервера тем же путём, что и
+        # кнопка «Скачать вложение» (метод сам сохранит файл и связь).
+        pulled = download_attachment(session, project_id or 0, user_id, message_id, section)
+        file_id = pulled["file_id"]
+    else:
+        file_id = stored_row.file_id
+
+    stored = session.get(StoredFile, file_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="Файл вложения не найден")
+
+    destination = target_project_id or row.project_id
+    if not destination:
+        raise HTTPException(status_code=400, detail="Укажите проект для документа")
+    if session.get(Project, destination) is None:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+
+    subject = (row.subject or "").strip()
+    note = "Из письма" + (": " + subject if subject else "")
+    document = documents_service.create_from_stored(
+        session,
+        destination,
+        user_id,
+        stored,
+        title="",
+        note=note,
+    )
+    with log_scope("mail", "attachment.document", user_id=user_id):
+        logger.info("mail attachment to document message={} section={} document={}", message_id, section, document["id"])
+    return {"document_id": document["id"], "title": document["title"], "project_id": destination}
 
 
 def _page_limit(project_id: int | None) -> int:

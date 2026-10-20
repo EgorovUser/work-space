@@ -131,3 +131,53 @@ test("глубокая ссылка сразу открывает письмо; 
   await expect(page.locator(".mailbox-list")).toBeVisible()
   await expect(page.locator(".mailbox-detail")).toHaveCount(0)
 })
+
+test("вложение письма сохраняется в документы одной кнопкой", async ({ page }) => {
+  const mark = "maildoc" + Date.now()
+  const api = await apiLogin()
+  await cleanMailbox(api)
+  const project = await (await api.post("/api/projects", { data: { name: "Документы из почты " + mark } })).json()
+
+  // Письмо с вложением: текстовая часть + файл с base64-содержимым.
+  const boundary = "mixed-" + mark
+  const payload = Buffer.from("Отчёт: строка один\nстрока два\n" + mark, "utf8")
+  const subject = Buffer.from("Счёт за октябрь " + mark, "utf8").toString("base64")
+  const raw = [
+    "From: =?utf-8?B?" + Buffer.from("Бухгалтерия").toString("base64") + "?= <billing@corp.example>",
+    "To: e2e <e2e@corp.example>",
+    "Subject: =?utf-8?B?" + subject + "?=",
+    "Date: Mon, 19 Oct 2026 10:00:00 +0000",
+    `Message-ID: <${mark}@corp.example>`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "",
+    "Тело письма со счётом.",
+    "",
+    `--${boundary}`,
+    'Content-Type: text/plain; name="invoice.txt"',
+    'Content-Disposition: attachment; filename="invoice.txt"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    payload.toString("base64"),
+    "",
+    `--${boundary}--`,
+    "",
+  ].join("\r\n")
+  const id = await importLetter(api, project.id, raw)
+
+  await login(page)
+  await page.goto("/mail/" + id)
+  await expect(page.locator(".mail-reader h1")).toHaveText("Счёт за октябрь " + mark)
+  await expect(page.getByText("invoice.txt")).toBeVisible()
+  await page.getByRole("button", { name: "→ В документы" }).click()
+  // Тост укорачивает длинные названия — точный титул проверит API ниже.
+  await expect(page.getByText(/Документ создан/)).toBeVisible()
+
+  const documents = await (await api.get(`/api/projects/${project.id}/documents`)).json()
+  // Название документа — имя файла без расширения (как при обычной загрузке).
+  const found = documents.items.find((item) => item.title === "invoice")
+  expect(found).toBeTruthy()
+})

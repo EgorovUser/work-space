@@ -45,7 +45,7 @@ test("подключение создаётся и скачивается .rdp",
   await page.getByLabel("Название").fill("Сервер отчётов " + mark)
   await page.getByLabel("Адрес сервера").fill("files.corp.local")
   await page.getByLabel("Порт").fill("3390")
-  await page.getByLabel("Логин").fill("admin")
+  await page.getByLabel("Логин", { exact: true }).fill("admin")
   await page.getByLabel("Домен").fill("CORP")
   await page.getByRole("button", { name: "Добавить" }).click()
 
@@ -96,4 +96,84 @@ test("рельса показывает сборку патча", async ({ page 
   const response = await context.get("/healthz")
   expect(response.ok()).toBeTruthy()
   expect((await response.json()).build).toBeTruthy()
+})
+
+test("связка с секретом: селектор, метка и логин в .rdp", async ({ page }) => {
+  const mark = "sec" + Date.now()
+  const api = await apiLogin()
+  const project = await (await api.post("/api/projects", { data: { name: "RDP секрет " + mark } })).json()
+  const secret = await (
+    await api.post(`/api/projects/${project.id}/secrets`, {
+      data: { title: "Учётка шлюза " + mark, secret: "para-" + mark, username: "svc-gateway" },
+    })
+  ).json()
+
+  await login(page)
+  await page.goto("/projects/" + project.id + "/rdp")
+  await page.getByRole("tab", { name: "Новый" }).click()
+  await page.getByLabel("Название").fill("Шлюз с секретом " + mark)
+  await page.getByLabel("Адрес сервера").fill("gw.corp.local")
+  // Логин не заполняем: он должен подтянуться из связанного секрета.
+  await page.getByLabel("Секрет с логином").selectOption(String(secret.id))
+  await page.getByRole("button", { name: "Добавить" }).click()
+
+  const row = page.locator(".status-row", { hasText: "Шлюз с секретом " + mark })
+  await expect(row).toBeVisible()
+  await expect(row.locator(".pill", { hasText: "секрет: Учётка шлюза " + mark })).toBeVisible()
+
+  await row.locator(".menu-btn").click()
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Скачать .rdp" }).click(),
+  ])
+  const body = readFileSync(await download.path(), "utf8")
+  expect(body).toContain("username:s:svc-gateway")
+  expect(body).not.toContain("para-" + mark)
+})
+
+test("пинг показывает доступность живого порта и закрытого", async ({ page }) => {
+  const mark = "ping" + Date.now()
+  const api = await apiLogin()
+  const project = await (await api.post("/api/projects", { data: { name: "RDP пинг " + mark } })).json()
+  const baseURL = test.info().project.use.baseURL
+  const appPort = Number(new URL(baseURL).port)
+  // Живой порт — сам тестируемый сервер; закрытый — 1-й, соединение
+  // отвергается сразу, ждать таймаута не приходится.
+  await api.post(`/api/projects/${project.id}/rdp`, { data: { name: "Живой " + mark, host: "127.0.0.1", port: appPort } })
+  await api.post(`/api/projects/${project.id}/rdp`, { data: { name: "Мёртвый " + mark, host: "127.0.0.1", port: 1 } })
+
+  await login(page)
+  await page.goto("/projects/" + project.id + "/rdp")
+
+  const alive = page.locator(".status-row", { hasText: "Живой " + mark })
+  await alive.getByRole("button", { name: "Пинг" }).click()
+  await expect(alive.locator(".pill.ok", { hasText: "доступен" })).toBeVisible({ timeout: 10_000 })
+
+  const dead = page.locator(".status-row", { hasText: "Мёртвый " + mark })
+  await dead.getByRole("button", { name: "Пинг" }).click()
+  await expect(dead.locator(".pill.warn", { hasText: "недоступен" })).toBeVisible({ timeout: 10_000 })
+})
+
+test("удаление уводит подключение в корзину и восстанавливается", async ({ page }) => {
+  const mark = "del" + Date.now()
+  const api = await apiLogin()
+  const project = await (await api.post("/api/projects", { data: { name: "RDP корзина " + mark } })).json()
+  const row = await (await api.post(`/api/projects/${project.id}/rdp`, { data: { name: "На удаление " + mark, host: "10.0.0.5" } })).json()
+
+  await login(page)
+  await page.goto("/projects/" + project.id + "/rdp")
+  const card = page.locator(".status-row", { hasText: "На удаление " + mark })
+  await card.locator(".menu-btn").click()
+  page.once("dialog", (dialog) => dialog.accept())
+  await page.getByRole("button", { name: "Удалить" }).click()
+  await expect(page.getByText("Удалено в корзину")).toBeVisible()
+
+  await page.goto("/trash")
+  const trashRow = page.locator(".status-row", { hasText: "На удаление " + mark })
+  await expect(trashRow).toBeVisible()
+  await trashRow.getByRole("button", { name: "Восстановить" }).click()
+  await expect(page.getByText("Восстановлено: На удаление " + mark)).toBeVisible()
+
+  const restored = await (await api.get(`/api/projects/${project.id}/rdp/${row.id}`)).json()
+  expect(restored.id).toBe(row.id)
 })

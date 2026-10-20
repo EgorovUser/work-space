@@ -37,8 +37,13 @@ class ArchiveBody(BaseModel):
 
 
 @router.get("/api/home")
-def home(db: Session = Depends(get_db), user: User = Depends(require_user)) -> dict:
-    return service.home(db, user.id)
+def home(
+    task_offset: int = 0,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    # task_offset — пагинация задач «Показать ещё» (патч N).
+    return service.home(db, user.id, task_offset)
 
 
 @router.get("/api/projects")

@@ -19,8 +19,13 @@ class RdpConnection(Base):
     port: Mapped[int] = mapped_column(Integer, default=3389)
     username: Mapped[str] = mapped_column(Text, default="")
     domain: Mapped[str] = mapped_column(Text, default="")
+    # Связка с секретом того же проекта: логин для .rdp подтягивается из
+    # хранилища, пароль по-прежнему нигде не хранится (путь «А»).
+    secret_id: Mapped[int | None] = mapped_column(ForeignKey("secrets.id"), nullable=True)
     note: Mapped[str] = mapped_column(Text, default="")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Мягкое удаление (патч N): пока заполнено — запись в корзине.
+    deleted_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)

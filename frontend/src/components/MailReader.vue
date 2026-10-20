@@ -62,6 +62,13 @@
           <span>{{ item.filename }}</span>
           <button class="btn secondary" type="button" :disabled="busy || !item.section" @click="pullFile(item)">Скачать вложение</button>
         </template>
+        <button
+          class="btn secondary"
+          type="button"
+          :disabled="busy || savingDoc || !documentTarget"
+          :title="documentTarget ? 'Документ создастся в проекте «' + documentTargetName + '»' : 'Выберите папку проекта ниже'"
+          @click="saveToDocuments(item)"
+        >→ В документы</button>
         <span v-if="item.size" class="muted"> · {{ formatSize(item.size) }}</span>
       </li>
     </ul>
@@ -117,6 +124,7 @@ export default {
     const error = ref("")
     const formError = ref("")
     const busy = ref(false)
+    const savingDoc = ref(false)
     const showImages = ref(false)
     const { settings, when } = useWhen()
     const notice = useNotice()
@@ -187,6 +195,48 @@ export default {
         formError.value = err.message || "Вложение не скачалось"
       } finally {
         busy.value = false
+      }
+    }
+
+    // Куда ляжет документ из вложения: проект письма или выбранная папка.
+    const documentTarget = computed(() => {
+      if (props.project && props.project.id) return Number(props.project.id)
+      const raw = message.value && message.value.project_id
+      if (raw) return Number(raw)
+      const picked = Number(folderProject.value)
+      return picked || null
+    })
+
+    const documentTargetName = computed(() => {
+      const id = documentTarget.value
+      const found = projects.value.find((item) => item.id === id)
+      return found ? found.name : ""
+    })
+
+    async function saveToDocuments(item) {
+      if (!documentTarget.value) {
+        formError.value = "Сначала выберите папку проекта для документа"
+        return
+      }
+      formError.value = ""
+      savingDoc.value = true
+      try {
+        let sectionPath = ""
+        if (item.section) {
+          sectionPath = "/attachments/" + encodeURIComponent(item.section)
+        }
+        const url =
+          (props.project && props.project.id
+            ? "/api/projects/" + props.project.id + "/mail/messages/" + props.messageId
+            : "/api/mail/messages/" + props.messageId) + sectionPath + "/document"
+        const body = props.project && props.project.id ? {} : { project_id: documentTarget.value }
+        const created = await api(url, { method: "POST", body })
+        notice.show("Документ создан: " + created.title)
+        emit("changed")
+      } catch (err) {
+        formError.value = err.message || "Документ не создался"
+      } finally {
+        savingDoc.value = false
       }
     }
 
@@ -283,7 +333,7 @@ export default {
       load()
     }, { immediate: true })
 
-    return { message, projects, folderProject, error, formError, busy, showImages, hasImages, fromLine, fromLineOf, frameHtml, tagStyle, threadLink, when, formatSize, toggleRead, toggleArchive, toggleTag, remove, pullFile, place, emit }
+    return { message, projects, folderProject, error, formError, busy, savingDoc, showImages, hasImages, fromLine, fromLineOf, frameHtml, tagStyle, threadLink, when, formatSize, toggleRead, toggleArchive, toggleTag, remove, pullFile, saveToDocuments, documentTarget, documentTargetName, place, emit }
   },
 }
 </script>

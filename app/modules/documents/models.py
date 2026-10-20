@@ -17,6 +17,8 @@ class Document(Base):
     title: Mapped[str] = mapped_column(Text)
     note: Mapped[str] = mapped_column(Text, default="")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Мягкое удаление (патч N): заполнено — документ в корзине.
+    deleted_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)

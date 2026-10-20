@@ -1,4 +1,4 @@
-"""Бизнес-модули: проекты, задачи, документы, примеры, секреты, RDP, время, почта, уведомления."""
+"""Бизнес-модули: проекты, задачи, документы, примеры, секреты, RDP, время, почта, уведомления, корзина."""
 
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ def setup_modules(app) -> None:
     from app.modules.rdp.router import setup as setup_rdp
     from app.modules.secrets.router import setup as setup_secrets
     from app.modules.tasks.router import setup as setup_tasks
+    from app.modules.trash.router import setup as setup_trash
     from app.modules.timetracking.router import setup as setup_timetracking
 
     modules = (
@@ -46,6 +47,8 @@ def setup_modules(app) -> None:
         ("timetracking", setup_timetracking),
         ("mail", setup_mail),
         ("notifications", setup_notifications),
+        # Корзина — витрина поверх чужих таблиц, своих моделей не имеет.
+        ("trash", setup_trash),
     )
     for name, setup in modules:
         try_register(name, lambda app=app, setup=setup: setup(app))

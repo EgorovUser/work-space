@@ -291,6 +291,42 @@ class HomeHubTest(unittest.TestCase):
         client.cookies.clear()
         self.assertEqual(client.get("/api/home").status_code, 401)
 
+    def test_home_tasks_carry_priority_and_offset_pages(self):
+        """Патч N: приоритет в ленте, порядок «важное и горящее вверх» и
+        task_offset для кнопки «Показать ещё»."""
+        import uuid as _uuid
+
+        mark = "prio" + _uuid.uuid4().hex[:6]
+        created = client.post("/api/projects", json={"name": "Сегодня приоритеты " + mark}).json()
+        project_id = created["id"]
+        for title, priority in (
+            ("Низкий " + mark, "low"),
+            ("Высокий " + mark, "high"),
+            ("Обычный " + mark, "normal"),
+        ):
+            response = client.post(
+                f"/api/projects/{project_id}/tasks",
+                json={"title": title, "deadline": "2026-10-01T09:00:00", "priority": priority},
+            )
+            assert response.status_code == 201, response.text
+
+        body = client.get("/api/home").json()
+        rows = [item for item in body["tasks"] if mark in item["title"]]
+        self.assertTrue(rows, "задачи проекта не попали в /api/home")
+        priorities = {item["title"].split()[0]: item["priority"] for item in rows}
+        self.assertEqual(priorities["Высокий"], "high")
+        self.assertEqual(priorities["Обычный"], "normal")
+        self.assertEqual(priorities["Низкий"], "low")
+        # Просроченные: сначала высокий приоритет, потом обычный, потом низкий.
+        order = [item["title"].split()[0] for item in rows]
+        self.assertEqual(order, ["Высокий", "Обычный", "Низкий"])
+
+        # Пагинация: со сдвигом 1 прилетает хвост того же списка.
+        paged = client.get("/api/home", params={"task_offset": 1}).json()
+        rows_tail = [item for item in paged["tasks"] if mark in item["title"]]
+        tail_order = [item["title"].split()[0] for item in rows_tail]
+        self.assertEqual(tail_order, ["Обычный", "Низкий"])
+
 
 @unittest.skipUnless(DIST_READY, "нужен собранный frontend/dist")
 class PwaFilesTest(unittest.TestCase):

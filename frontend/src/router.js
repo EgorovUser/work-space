@@ -14,6 +14,8 @@ const router = createRouter({
     { path: "/mail/:messageId", component: () => import("./views/Mailbox.vue"), meta: { auth: true } },
     // Общий список секретов всех проектов — свой раздел рядом с почтой.
     { path: "/secrets", component: () => import("./views/SecretsGlobal.vue"), meta: { auth: true } },
+    // Корзина (патч N): мягко удалённые задачи/документы/секреты/RDP.
+    { path: "/trash", component: () => import("./views/Trash.vue"), meta: { auth: true } },
     { path: "/system", component: () => import("./views/Home.vue"), meta: { auth: true } },
     { path: "/settings", component: () => import("./views/Settings.vue"), meta: { auth: true } },
     { path: "/notifications", component: () => import("./views/Notifications.vue"), meta: { auth: true } },

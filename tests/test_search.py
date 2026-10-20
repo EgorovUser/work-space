@@ -168,6 +168,38 @@ class SearchTest(unittest.TestCase):
         response = anonymous.get("/api/search", params={"q": "что угодно"})
         self.assertEqual(response.status_code, 401)
 
+    def test_types_filter_limits_groups(self):
+        # Палитра (патч N): фильтр по типам оставляет только выбранные
+        # источники; неизвестные типы молча отбрасываются.
+        word = _word()
+        client.post(
+            f"/api/projects/{self.project_id}/tasks",
+            json={"title": f"Задача для фильтра {word}"},
+        )
+        client.post(
+            f"/api/projects/{self.project_id}/documents",
+            files={"file": ("doc.txt", b"content", "text/plain")},
+            data={"title": f"Документ для фильтра {word}", "note": ""},
+        )
+        response = client.get("/api/search", params={"q": word, "types": "tasks"})
+        self.assertEqual(_group_ids(response.json()), {"tasks"})
+        response = client.get("/api/search", params={"q": word, "types": "tasks,secrets,nosuchthing"})
+        self.assertEqual(_group_ids(response.json()), {"tasks"})
+        # Пустой фильтр — все источники (задача и документ одновременно).
+        response = client.get("/api/search", params={"q": word})
+        self.assertIn("tasks", _group_ids(response.json()))
+        self.assertIn("documents", _group_ids(response.json()))
+
+    def test_trashed_rows_are_excluded(self):
+        word = _word()
+        created = client.post(
+            f"/api/projects/{self.project_id}/tasks",
+            json={"title": f"В корзину поиска {word}"},
+        ).json()
+        self.assertIn("tasks", _group_ids(client.get("/api/search", params={"q": word}).json()))
+        client.delete(f"/api/projects/{self.project_id}/tasks/{created['id']}")
+        self.assertNotIn("tasks", _group_ids(client.get("/api/search", params={"q": word}).json()))
+
     def test_short_query_returns_no_groups(self):
         response = client.get("/api/search", params={"q": "я"})
         self.assertEqual(response.status_code, 200)

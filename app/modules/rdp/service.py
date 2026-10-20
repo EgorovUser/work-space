@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import socket
+import time
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,6 +15,8 @@ from app.core.settings_store import get_bool, get_int
 from app.core.versioning import check_version
 from app.modules.projects.service import touch_project
 from app.modules.rdp.models import RdpConnection
+from app.modules.secrets.crypto import decrypt as secret_decrypt
+from app.modules.secrets.models import Secret
 
 # Порт RDP по умолчанию; в .rdp пишется только при отличии от него.
 STANDARD_PORT = 3389
@@ -21,14 +26,19 @@ def list_connections(session: Session, project_id: int, include_archived: bool, 
     needle = (query or "").strip().casefold()
     scan = get_int("rdp", "list.scan_limit", project_id=project_id)
     limit = get_int("rdp", "list.limit", project_id=project_id)
-    statement = select(RdpConnection).where(RdpConnection.project_id == project_id)
+    statement = select(RdpConnection).where(
+        RdpConnection.project_id == project_id,
+        # Записи из корзины в рабочем списке не показываем.
+        RdpConnection.deleted_at.is_(None),
+    )
     if not include_archived:
         statement = statement.where(RdpConnection.archived.is_(False))
     rows = list(session.scalars(statement.order_by(RdpConnection.updated_at.desc(), RdpConnection.id.desc()).limit(scan)).all())
     if needle:
         rows = [row for row in rows if needle in (row.name or "").casefold() or needle in (row.host or "").casefold()]
     rows = rows[:limit]
-    return {"items": [_public(row) for row in rows]}
+    titles = _secret_titles(session, [row.secret_id for row in rows])
+    return {"items": [_public(row, titles.get(row.secret_id)) for row in rows]}
 
 
 def create_connection(session: Session, project_id: int, user_id: int, fields: dict) -> dict:
@@ -40,6 +50,7 @@ def create_connection(session: Session, project_id: int, user_id: int, fields: d
         port=_clean_port(fields.get("port"), project_id),
         username=_clean_text(fields.get("username") or "", "username.max_length", strip=True),
         domain=_clean_text(fields.get("domain") or "", "domain.max_length", strip=True),
+        secret_id=_secret_id(session, project_id, fields.get("secret_id")),
         note=_clean_text(fields.get("note") or "", "note.max_length", strip=False),
         archived=False,
         created_by=user_id,
@@ -57,11 +68,12 @@ def create_connection(session: Session, project_id: int, user_id: int, fields: d
         {"title": row.name, "project_id": project_id, "link": "/projects/" + str(project_id) + "/rdp"},
         user_id=user_id,
     )
-    return _public(row)
+    return _public(row, _secret_titles(session, [row.secret_id]).get(row.secret_id))
 
 
 def get_connection(session: Session, project_id: int, rdp_id: int) -> dict:
-    return _public(_row(session, project_id, rdp_id))
+    row = _row(session, project_id, rdp_id)
+    return _public(row, _secret_titles(session, [row.secret_id]).get(row.secret_id))
 
 
 def update_connection(session: Session, project_id: int, user_id: int, rdp_id: int, fields: dict) -> dict:
@@ -77,6 +89,8 @@ def update_connection(session: Session, project_id: int, user_id: int, rdp_id: i
         row.username = _clean_text(fields["username"], "username.max_length", strip=True)
     if "domain" in fields and fields["domain"] is not None:
         row.domain = _clean_text(fields["domain"], "domain.max_length", strip=True)
+    if "secret_id" in fields:
+        row.secret_id = _secret_id(session, project_id, fields.get("secret_id"))
     if "note" in fields and fields["note"] is not None:
         row.note = _clean_text(fields["note"], "note.max_length", strip=False)
     if "archived" in fields and fields["archived"] is not None:
@@ -92,12 +106,17 @@ def update_connection(session: Session, project_id: int, user_id: int, rdp_id: i
     )
     with log_scope("rdp", "update", user_id=user_id):
         logger.info("rdp connection updated id={} archived={}", row.id, row.archived)
-    return _public(row)
+    return _public(row, _secret_titles(session, [row.secret_id]).get(row.secret_id))
 
 
-def delete_connection(session: Session, project_id: int, user_id: int, rdp_id: int) -> None:
+def delete_connection(session: Session, project_id: int, user_id: int, rdp_id: int) -> dict:
+    """Мягкое удаление: запись уходит в корзину и восстановима (патч N).
+
+    Возвращает краткое описание для ответа API (событие и лог — как раньше).
+    """
     row = _row(session, project_id, rdp_id)
-    session.delete(row)
+    row.deleted_at = utcnow()
+    row.updated_at = utcnow()
     touch_project(session, project_id)
     session.flush()
     enqueue(
@@ -108,22 +127,54 @@ def delete_connection(session: Session, project_id: int, user_id: int, rdp_id: i
     )
     with log_scope("rdp", "delete", user_id=user_id):
         logger.info("rdp connection deleted id={}", rdp_id)
+    return {"id": row.id, "deleted_at": row.deleted_at.isoformat(), "title": row.name}
+
+
+def purge_connection(session: Session, project_id: int, user_id: int, rdp_id: int) -> None:
+    """Настоящее удаление из корзины — окончательное."""
+    row = _row(session, project_id, rdp_id, in_trash=True)
+    session.delete(row)
+    touch_project(session, project_id)
+    session.flush()
+    with log_scope("rdp", "purge", user_id=user_id):
+        logger.info("rdp connection purged id={}", rdp_id)
+
+
+def restore_connection(session: Session, project_id: int, user_id: int, rdp_id: int) -> dict:
+    row = _row(session, project_id, rdp_id, in_trash=True)
+    row.deleted_at = None
+    row.updated_at = utcnow()
+    touch_project(session, project_id)
+    session.flush()
+    enqueue(
+        session,
+        RDP_UPDATED,
+        {"title": "Подключение восстановлено", "subject": row.name, "project_id": project_id, "link": "/projects/" + str(project_id) + "/rdp"},
+        user_id=user_id,
+    )
+    with log_scope("rdp", "restore", user_id=user_id):
+        logger.info("rdp connection restored id={}", rdp_id)
+    return _public(row, _secret_titles(session, [row.secret_id]).get(row.secret_id))
 
 
 def connection_file(session: Session, project_id: int, user_id: int, rdp_id: int) -> dict:
     """Собирает .rdp для подключения. Пароль не хранится и не пишется:
     mstsc спросит его сам (prompt for credentials), см. путь «А».
+
+    Логин берётся из записи, а если поле пустое и указан секрет — из
+    хранилища (расшифровывается только логин, значение остаётся на сервере).
     """
     row = _row(session, project_id, rdp_id)
     address = row.host if row.port == STANDARD_PORT else row.host + ":" + str(row.port)
+    username = row.username or _secret_username(session, row.secret_id)
     lines = [
         "screen mode id:i:1",
         "use multimon:i:0",
         "smart sizing:i:1",
         "full address:s:" + address,
     ]
-    if row.username:
-        lines.append("username:s:" + row.username)
+    if username:
+        lines.append("username:s:" + username)
     if row.domain:
         lines.append("domain:s:" + row.domain)
     lines.append("prompt for credentials:i:1")
@@ -133,9 +184,34 @@ def connection_file(session: Session, project_id: int, user_id: int, rdp_id: int
     return {"filename": _filename(row.name), "content": "\r\n".join(lines) + "\r\n"}
 
 
+def ping_connection(session: Session, project_id: int, user_id: int, rdp_id: int) -> dict:
+    """TCP-проверка доступности: коннект к host:port с таймаутом.
+
+    Возвращает {ok, latency_ms, error}. Самохостинг-контекст: сервер
+    проверяет ровно тот адрес, что уже сохранён в подключении.
+    """
+    row = _row(session, project_id, rdp_id)
+    timeout = get_int("rdp", "ping.timeout_seconds", project_id=project_id)
+    started = time.monotonic()
+    error = ""
+    try:
+        with socket.create_connection((row.host, row.port), timeout=timeout):
+            pass
+    except OSError as exc:
+        error = _ping_error(exc)
+    latency = int((time.monotonic() - started) * 1000)
+    ok = not error
+    with log_scope("rdp", "ping", user_id=user_id):
+        logger.info("rdp ping id={} host={} ok={} latency_ms={}", row.id, row.host, ok, latency if ok else -1)
+    return {"ok": ok, "latency_ms": latency if ok else None, "error": error}
+
+
 def search_provider(session: Session, project_id: int, user_id: int | None, query: str, limit: int) -> list[dict]:
     needle = (query or "").casefold()
-    statement = select(RdpConnection).where(RdpConnection.project_id == project_id)
+    statement = select(RdpConnection).where(
+        RdpConnection.project_id == project_id,
+        RdpConnection.deleted_at.is_(None),
+    )
     if not get_bool("rdp", "search.include_archived", project_id=project_id):
         statement = statement.where(RdpConnection.archived.is_(False))
     rows = session.scalars(statement.order_by(RdpConnection.updated_at.desc(), RdpConnection.id.desc())).all()
@@ -148,14 +224,57 @@ def search_provider(session: Session, project_id: int, user_id: int | None, quer
     return found
 
 
-def _row(session: Session, project_id: int, rdp_id: int) -> RdpConnection:
+def _row(session: Session, project_id: int, rdp_id: int, in_trash: bool = False) -> RdpConnection:
     row = session.get(RdpConnection, rdp_id)
     if row is None or row.project_id != project_id:
         raise HTTPException(status_code=404, detail="Подключение не найдено")
+    if in_trash and row.deleted_at is None:
+        raise HTTPException(status_code=404, detail="Подключение не в корзине")
+    if not in_trash and row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Подключение удалено в корзину")
     return row
 
 
-def _public(row: RdpConnection) -> dict:
+def _secret_id(session: Session, project_id: int, value) -> int | None:
+    """Валидация связки: секрет того же проекта, не в корзине; None очищает."""
+    if value is None or value == 0 or value == "":
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise HTTPException(status_code=400, detail="Секрет указан некорректно")
+    row = session.get(Secret, value)
+    if row is None or row.project_id != project_id or row.deleted_at is not None:
+        raise HTTPException(status_code=400, detail="Секрет не найден в этом проекте")
+    return row.id
+
+
+def _secret_titles(session: Session, secret_ids: list[int | None]) -> dict[int, str]:
+    ids = [value for value in secret_ids if value]
+    if not ids:
+        return {}
+    rows = session.execute(select(Secret.id, Secret.title).where(Secret.id.in_(ids))).all()
+    return {row_id: title for row_id, title in rows}
+
+
+def _secret_username(session: Session, secret_id: int | None) -> str:
+    if not secret_id:
+        return ""
+    row = session.get(Secret, secret_id)
+    if row is None or not row.username_enc:
+        return ""
+    try:
+        return secret_decrypt(row.username_enc).strip()
+    except Exception:
+        with log_scope("rdp", "secret.username"):
+            logger.warning("не удалось прочитать логин секрета id={}", secret_id)
+        return ""
+
+
+def _ping_error(exc: OSError) -> str:
+    text = str(exc) or exc.__class__.__name__
+    return text[:200]
+
+
+def _public(row: RdpConnection, secret_title: str | None = None) -> dict:
     return {
         "id": row.id,
         "project_id": row.project_id,
@@ -164,8 +283,11 @@ def _public(row: RdpConnection) -> dict:
         "port": row.port,
         "username": row.username or "",
         "domain": row.domain or "",
+        "secret_id": row.secret_id,
+        "secret_title": secret_title or "",
         "note": row.note or "",
         "archived": bool(row.archived),
+        "deleted_at": row.deleted_at.isoformat() if row.deleted_at else None,
         "created_at": row.created_at.isoformat(),
         "updated_at": row.updated_at.isoformat(),
     }

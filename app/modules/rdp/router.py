@@ -25,6 +25,7 @@ class RdpIn(BaseModel):
     port: int | None = None
     username: str = ""
     domain: str = ""
+    secret_id: int | None = None
     note: str = ""
 
 
@@ -36,6 +37,7 @@ class RdpPatch(BaseModel):
     port: int | None = None
     username: str | None = None
     domain: str | None = None
+    secret_id: int | None = None
     note: str | None = None
     archived: bool | None = None
     # Оптимистичная блокировка: при несовпадении сервер ответит 409.
@@ -108,7 +110,18 @@ def delete_connection(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ) -> None:
+    # Мягкое удаление: запись попадает в корзину (патч N).
     service.delete_connection(db, project.id, user.id, rdp_id)
+
+
+@router.post("/api/projects/{project_id}/rdp/{rdp_id}/ping")
+def ping_connection(
+    rdp_id: int,
+    project: Project = Depends(require_project),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    return service.ping_connection(db, project.id, user.id, rdp_id)
 
 
 def setup(app) -> None:

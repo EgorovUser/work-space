@@ -39,6 +39,7 @@ SOURCES = (
         "id": "tasks",
         "label": "Задачи",
         "table": "tasks",
+        "soft_delete": True,
         "fts": "fts_tasks",
         "module": "tasks",
         "columns": ("title", "description"),
@@ -69,6 +70,7 @@ SOURCES = (
         "id": "documents",
         "label": "Документы",
         "table": "documents",
+        "soft_delete": True,
         "fts": "fts_documents",
         "module": "documents",
         "columns": ("title", "note"),
@@ -90,6 +92,7 @@ SOURCES = (
         "id": "secrets",
         "label": "Секреты",
         "table": "secrets",
+        "soft_delete": True,
         "fts": "fts_secrets",
         "module": "secrets",
         "columns": ("title", "kind"),
@@ -102,6 +105,7 @@ SOURCES = (
         "id": "rdp",
         "label": "RDP",
         "table": "rdp_connections",
+        "soft_delete": True,
         "fts": "fts_rdp",
         "module": "rdp",
         "columns": ("name", "host", "username", "domain", "note"),
@@ -185,12 +189,15 @@ def _search_source(session, spec: dict, match: str, limit: int) -> list[dict]:
         for index in range(len(columns))
     )
     archived_expr = "t.archived" if spec["archived"] else "0"
+    # Мягко удалённые записи (патч N) из поиска исчезают: у источников
+    # с колонкой deleted_at добавляем фильтр, остальные её не имеют.
+    deleted_expr = "t.deleted_at IS NULL" if spec.get("soft_delete") else "1"
 
     sql = text(
         f'SELECT f.rowid AS id, t.project_id, {spec["title"]} AS title, '
         f'{archived_expr} AS archived, {snippet_exprs} '
         f'FROM "{fts}" f JOIN "{spec["table"]}" t ON t.id = f.rowid '
-        f'WHERE "{fts}" MATCH :match '
+        f'WHERE "{fts}" MATCH :match AND {deleted_expr} '
         f'ORDER BY bm25("{fts}") '
         f"LIMIT :limit"
     )
@@ -223,14 +230,23 @@ def _search_source(session, spec: dict, match: str, limit: int) -> list[dict]:
 
 
 @router.get("/api/search")
-def search(q: str = "", limit: int = 5, user: User = Depends(require_user)) -> dict:
+def search(q: str = "", limit: int = 5, types: str = "", user: User = Depends(require_user)) -> dict:
     """Глобальный поиск по содержимому. Слова объединяются как AND,
-    каждое ищется с префиксом («проект» найдёт «проекты»)."""
+    каждое ищется с префиксом («проект» найдёт «проекты»).
+
+    types — список источников через запятую (tasks,mail,...): фильтр
+    командной палитры. Пустая строка — все источники.
+    """
     match = _match_expression(q)
+    wanted = {part.strip() for part in types.split(",") if part.strip()}
+    known = {spec["id"] for spec in SOURCES}
+    wanted &= known
     groups: list[dict] = []
     if match and 1 <= limit <= 20:
         with session_scope() as session:
             for spec in SOURCES:
+                if wanted and spec["id"] not in wanted:
+                    continue
                 if not registry.is_enabled(spec["module"]):
                     continue
                 try:

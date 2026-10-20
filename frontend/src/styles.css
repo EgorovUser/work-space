@@ -1182,6 +1182,34 @@ textarea.mono { min-height: 220px; }
 
 /* — Инструменты шапки: тема + уведомления — */
 .topbar-tools { display: flex; align-items: center; gap: 8px; }
+/* Помодоро (патч N): живой чип в шапке, клик ведёт на «Сегодня». */
+.pomo-chip {
+  border: 1px solid var(--accent-strong);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.pomo-chip.break { border-color: var(--ok-line); background: var(--ok-bg); color: var(--ok); }
+/* Карточка помодоро на «Сегодня». */
+.today-pomo .pomo-clock {
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  color: var(--accent-strong);
+}
+.today-pomo .pomo-clock.break { color: var(--ok); }
+.pomo-input { width: 72px; }
+.pomo-task { max-width: 320px; }
+.today-more { margin-top: 8px; }
+/* RDP: строка с пингом и меню. */
+.rdp-tools { display: flex; align-items: center; gap: 8px; flex: none; }
+.rdp-ping { padding: 4px 10px; font-size: 0.85rem; }
 .theme-btn-icon { font-size: 1.05rem; line-height: 1; }
 
 /* — Глобальный поиск в шапке — */
@@ -1205,6 +1233,64 @@ textarea.mono { min-height: 220px; }
   overflow: auto;
 }
 .search-empty { padding: 14px 10px; text-align: center; }
+/* Палитра (патч N): фильтры по типам, активный пункт, недавние, подсказки. */
+.search-kbd {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 0.72rem;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 6px;
+  pointer-events: none;
+  background: var(--paper);
+}
+.search-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+.search-chip {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.search-chip:hover { background: var(--hover); color: var(--ink); }
+.search-chip.on { background: var(--accent-soft); color: var(--accent-strong); border-color: var(--accent-strong); }
+.search-item.active { background: var(--hover); outline: 1px solid var(--line); }
+.search-more {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  padding: 6px 10px 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.search-more:hover { color: var(--accent-strong); }
+.search-recents { padding: 6px 10px 10px; border-top: 1px solid var(--line); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.search-recents .search-group-label { padding: 0 0 2px; width: 100%; }
+.search-hints {
+  display: flex;
+  gap: 14px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  font-size: 0.75rem;
+}
+@media (max-width: 800px) {
+  .search-kbd { display: none; }
+  .search-hints { display: none; }
+}
 .search-group + .search-group { margin-top: 4px; }
 .search-group-label {
   padding: 8px 10px 4px;

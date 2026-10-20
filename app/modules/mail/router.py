@@ -80,6 +80,14 @@ class FolderBody(BaseModel):
     move: bool = False
 
 
+class DocumentTarget(BaseModel):
+    """Куда положить документ из вложения (общий ящик)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: int
+
+
 class TagRuleIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -279,6 +287,18 @@ def download_global_attachment(
     return service.download_attachment(db, 0, user.id, message_id, section)
 
 
+@router.post("/api/mail/messages/{message_id}/attachments/{section}/document", status_code=201)
+def attachment_to_document_global(
+    message_id: int,
+    section: str,
+    body: DocumentTarget,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    # Из общего ящика проект для документа выбирает пользователь.
+    return service.attachment_to_document(db, 0, user.id, message_id, section, body.project_id)
+
+
 @router.post("/api/mail/messages/{message_id}/folder")
 def folder_global_message(
     message_id: int,
@@ -406,6 +426,18 @@ def download_attachment(
     user: User = Depends(require_user),
 ) -> dict:
     return service.download_attachment(db, project.id, user.id, message_id, section)
+
+
+@router.post("/api/projects/{project_id}/mail/messages/{message_id}/attachments/{section}/document", status_code=201)
+def attachment_to_document(
+    message_id: int,
+    section: str,
+    project: Project = Depends(require_project),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    # Документ ложится в проект ящика (или в выбранный — через поле).
+    return service.attachment_to_document(db, project.id, user.id, message_id, section)
 
 
 @router.post("/api/projects/{project_id}/mail/messages/{message_id}/folder")

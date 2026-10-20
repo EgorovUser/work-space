@@ -17,6 +17,7 @@
           <div v-for="item in overdue" :key="item.id" class="status-row">
             <div>
               <router-link :to="'/projects/' + item.project_id + '/tasks/' + item.id">{{ item.title }}</router-link>
+              <span v-if="priorityLabel(item.priority)" class="pill" :class="priorityClass(item.priority)">{{ priorityLabel(item.priority) }}</span>
               <div class="muted">{{ item.project_name }}</div>
             </div>
             <span class="bad-text">{{ when(item.deadline) }}</span>
@@ -29,10 +30,60 @@
           <div v-for="item in upcoming" :key="item.id" class="status-row">
             <div>
               <router-link :to="'/projects/' + item.project_id + '/tasks/' + item.id">{{ item.title }}</router-link>
+              <span v-if="priorityLabel(item.priority)" class="pill" :class="priorityClass(item.priority)">{{ priorityLabel(item.priority) }}</span>
               <div class="muted">{{ item.project_name }}</div>
             </div>
             <span class="muted">{{ when(item.deadline) }}</span>
           </div>
+          <button
+            v-if="moreTasks"
+            class="btn secondary today-more"
+            type="button"
+            :disabled="moreBusy"
+            @click="loadMoreTasks"
+          >{{ moreBusy ? "Загружаем…" : "Показать ещё задачи" }}</button>
+        </section>
+
+        <section class="card today-pomo">
+          <h2>Помодоро</h2>
+          <template v-if="pomo.state.running">
+            <div class="pomo-clock" :class="{ break: pomo.state.phase === 'break' }">{{ pomo.label() }}</div>
+            <p class="muted">
+              <template v-if="pomo.state.task">{{ pomo.state.task.title }} · после фокуса запишется в «Время»</template>
+              <template v-else>Фокус без задачи — просто таймер</template>
+            </p>
+            <div class="row-actions">
+              <button v-if="pomo.state.phase === 'break'" class="btn secondary" type="button" @click="pomo.skipBreak()">Закончить перерыв</button>
+              <button class="btn secondary" type="button" @click="pomo.stop()">Стоп</button>
+            </div>
+          </template>
+          <template v-else>
+            <p class="muted">
+              {{ pomo.state.settings.workMinutes }} минут фокуса, {{ pomo.state.settings.breakMinutes }} отдыха.
+              <span v-if="pomo.state.sessions">Завершено на этой вкладке: {{ pomo.state.sessions }}.</span>
+            </p>
+            <label class="check">
+              <input v-model.number="workMinutes" class="pomo-input" type="number" min="1" max="120" />
+              <span>мин фокуса</span>
+            </label>
+            <label class="check">
+              <input v-model.number="breakMinutes" class="pomo-input" type="number" min="1" max="60" />
+              <span>мин перерыва</span>
+            </label>
+            <label class="check">
+              <input v-model="autoBreak" type="checkbox" />
+              <span>перерыв стартует сам</span>
+            </label>
+            <div class="row-actions">
+              <select v-model="pomoTaskId" class="pomo-task">
+                <option value="">Без задачи (просто таймер)</option>
+                <option v-for="item in pomoTasks" :key="item.id" :value="String(item.id)">
+                  {{ item.title }} · {{ item.project_name }}
+                </option>
+              </select>
+              <button class="btn" type="button" @click="startPomo()">Старт</button>
+            </div>
+          </template>
         </section>
 
         <section v-if="sections.events" class="card">
@@ -103,15 +154,25 @@
 </template>
 
 <script>
-import { computed, onMounted, ref } from "vue"
+import { computed, onMounted, ref, watch } from "vue"
 import AppShell from "../components/AppShell.vue"
 import SkeletonList from "../components/SkeletonList.vue"
 import { api } from "../api"
+import { usePomodoro } from "../composables/usePomodoro"
 import { useWhen } from "../composables/useWhen"
 
 // Хаб «Сегодня»: один экран вместо утреннего обхода разделов. Данные —
 // агрегат /api/home по всем проектам; ленты второстепенные, падение блока
 // не должно ронять остальные.
+//
+// Патч N: приоритетные метки у задач (важное видно сразу), «Показать ещё»
+// для задач и карточка помодоро — фокус по задаче из списка дня.
+const PRIORITIES = {
+  high: "важная",
+  normal: "обычная",
+  low: "низкая",
+}
+
 export default {
   components: { AppShell, SkeletonList },
   setup() {
@@ -124,40 +185,92 @@ export default {
     const error = ref("")
     const unavailable = ref(false)
     const loading = ref(true)
+    const moreTasks = ref(false)
+    const moreBusy = ref(false)
     const { when } = useWhen()
+    const pomo = usePomodoro()
 
     const overdue = computed(() => tasks.value.filter((item) => item.overdue))
     const upcoming = computed(() => tasks.value.filter((item) => !item.overdue))
+
+    // Задачи для помодоро: всё со сроком, что уже показано на экране.
+    const pomoTasks = computed(() => tasks.value.slice(0, 30))
+    const pomoTaskId = ref("")
+    const workMinutes = ref(pomo.state.settings.workMinutes)
+    const breakMinutes = ref(pomo.state.settings.breakMinutes)
+    const autoBreak = ref(pomo.state.settings.autoBreak)
+
+    watch(workMinutes, (value) => pomo.updateSettings({ workMinutes: value }))
+    watch(breakMinutes, (value) => pomo.updateSettings({ breakMinutes: value }))
+    watch(autoBreak, (value) => pomo.updateSettings({ autoBreak: value }))
+
+    function startPomo() {
+      const chosen = pomoTasks.value.find((item) => String(item.id) === pomoTaskId.value)
+      pomo.start(chosen || null)
+    }
+
+    function priorityLabel(value) {
+      return PRIORITIES[value] || ""
+    }
+
+    function priorityClass(value) {
+      if (value === "high") return "warn"
+      if (value === "low") return "low"
+      return ""
+    }
 
     const todayLabel = computed(() => {
       const now = new Date()
       return now.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })
     })
 
-    async function load() {
-      loading.value = true
-      error.value = ""
-      unavailable.value = false
+    let taskLimit = 10
+
+    async function load(taskOffset = 0, append = false) {
+      if (taskOffset === 0) {
+        loading.value = true
+        error.value = ""
+        unavailable.value = false
+      } else {
+        moreBusy.value = true
+      }
       try {
-        const data = await api("/api/home")
+        const params = taskOffset ? "?task_offset=" + taskOffset : ""
+        const data = await api("/api/home" + params)
         projects.value = data.projects || []
-        tasks.value = data.tasks || []
+        if (append) {
+          const seen = new Set(tasks.value.map((item) => item.id))
+          tasks.value = tasks.value.concat((data.tasks || []).filter((item) => !seen.has(item.id)))
+        } else {
+          tasks.value = data.tasks || []
+        }
         letters.value = data.mail || []
         events.value = data.events || []
         notifications.value = data.notifications || []
         sections.value = data.sections || sections.value
+        taskLimit = Number(data.task_limit) || taskLimit
+        moreTasks.value = (data.tasks || []).length >= taskLimit
       } catch (err) {
         if (err.status === 503) unavailable.value = true
         else error.value = err.message || "Не удалось загрузить сводку"
       } finally {
         loading.value = false
+        moreBusy.value = false
       }
     }
 
-    onMounted(load)
+    function loadMoreTasks() {
+      if (moreBusy.value) return
+      load(tasks.value.length, true)
+    }
+
+    onMounted(() => load())
     return {
       projects, overdue, upcoming, letters, events, notifications, sections,
       error, unavailable, loading, when, todayLabel, load,
+      moreTasks, moreBusy, loadMoreTasks,
+      pomo, pomoTasks, pomoTaskId, workMinutes, breakMinutes, autoBreak, startPomo,
+      priorityLabel, priorityClass,
     }
   },
 }

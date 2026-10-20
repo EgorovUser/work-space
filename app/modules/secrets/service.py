@@ -22,7 +22,11 @@ def list_secrets(session: Session, project_id: int, include_archived: bool, quer
     needle = _query_needle(query, project_id)
     scan = get_int("secrets", "list.scan_limit", project_id=project_id)
     limit = get_int("secrets", "list.limit", project_id=project_id)
-    statement = select(Secret).where(Secret.project_id == project_id)
+    statement = select(Secret).where(
+        Secret.project_id == project_id,
+        # Секреты из корзины в списке не показываем (патч N).
+        Secret.deleted_at.is_(None),
+    )
     if not include_archived:
         statement = statement.where(Secret.archived.is_(False))
     rows = list(session.scalars(statement.order_by(Secret.updated_at.desc(), Secret.id.desc()).limit(scan)).all())
@@ -74,7 +78,10 @@ def list_all_secrets(session: Session, include_archived: bool, query: str) -> di
 def _project_rows(session: Session, project_id: int, include_archived: bool, needle: str) -> list[Secret]:
     scan = get_int("secrets", "list.scan_limit", project_id=project_id)
     limit = get_int("secrets", "list.limit", project_id=project_id)
-    statement = select(Secret).where(Secret.project_id == project_id)
+    statement = select(Secret).where(
+        Secret.project_id == project_id,
+        Secret.deleted_at.is_(None),
+    )
     if not include_archived:
         statement = statement.where(Secret.archived.is_(False))
     rows = list(session.scalars(statement.order_by(Secret.updated_at.desc(), Secret.id.desc()).limit(scan)).all())
@@ -148,9 +155,15 @@ def update_secret(session: Session, project_id: int, user_id: int, secret_id: in
     return _detail(session, row)
 
 
-def delete_secret(session: Session, project_id: int, user_id: int, secret_id: int) -> None:
+def delete_secret(session: Session, project_id: int, user_id: int, secret_id: int) -> dict:
+    """Мягкое удаление: секрет уходит в корзину (патч N).
+
+    Зашифрованные значения остаются при записи — восстановление вернёт
+    секрет целиком, без потери данных.
+    """
     row = _row(session, project_id, secret_id)
-    session.delete(row)
+    row.deleted_at = utcnow()
+    row.updated_at = utcnow()
     touch_project(session, project_id)
     session.flush()
     enqueue(
@@ -161,6 +174,34 @@ def delete_secret(session: Session, project_id: int, user_id: int, secret_id: in
     )
     with log_scope("secrets", "delete", user_id=user_id):
         logger.info("secret deleted id={}", secret_id)
+    return {"id": row.id, "title": row.title, "deleted_at": row.deleted_at.isoformat()}
+
+
+def restore_secret(session: Session, project_id: int, user_id: int, secret_id: int) -> dict:
+    row = _row(session, project_id, secret_id, in_trash=True)
+    row.deleted_at = None
+    row.updated_at = utcnow()
+    touch_project(session, project_id)
+    session.flush()
+    enqueue(
+        session,
+        SECRET_UPDATED,
+        {"title": "Секрет восстановлен", "subject": row.title, "project_id": project_id, "link": "/projects/" + str(project_id) + "/secrets/" + str(row.id)},
+        user_id=user_id,
+    )
+    with log_scope("secrets", "restore", user_id=user_id):
+        logger.info("secret restored id={}", secret_id)
+    return _public(row, project_id)
+
+
+def purge_secret(session: Session, project_id: int, user_id: int, secret_id: int) -> None:
+    """Окончательное удаление — только из корзины."""
+    row = _row(session, project_id, secret_id, in_trash=True)
+    session.delete(row)
+    touch_project(session, project_id)
+    session.flush()
+    with log_scope("secrets", "purge", user_id=user_id):
+        logger.info("secret purged id={}", secret_id)
 
 
 def reveal_secret(session: Session, project_id: int, user_id: int, secret_id: int) -> dict:
@@ -190,7 +231,10 @@ def generate_secret(project_id: int) -> dict:
 
 def search_provider(session: Session, project_id: int, user_id: int | None, query: str, limit: int) -> list[dict]:
     needle = query.casefold()
-    statement = select(Secret).where(Secret.project_id == project_id)
+    statement = select(Secret).where(
+        Secret.project_id == project_id,
+        Secret.deleted_at.is_(None),
+    )
     if not get_bool("secrets", "search.include_archived", project_id=project_id):
         statement = statement.where(Secret.archived.is_(False))
     rows = session.scalars(statement.order_by(Secret.updated_at.desc(), Secret.id.desc())).all()
@@ -203,10 +247,14 @@ def search_provider(session: Session, project_id: int, user_id: int | None, quer
     return found
 
 
-def _row(session: Session, project_id: int, secret_id: int) -> Secret:
+def _row(session: Session, project_id: int, secret_id: int, in_trash: bool = False) -> Secret:
     row = session.get(Secret, secret_id)
     if row is None or row.project_id != project_id:
         raise HTTPException(status_code=404, detail="Секрет не найден")
+    if in_trash and row.deleted_at is None:
+        raise HTTPException(status_code=404, detail="Секрет не в корзине")
+    if not in_trash and row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Секрет удалён в корзину")
     return row
 
 

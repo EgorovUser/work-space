@@ -93,4 +93,15 @@ DEFS: tuple[SettingDef, ...] = (
         allowed_scopes=("global", "project"),
         ui_hint="checkbox",
     ),
+    _s(
+        key="ping.timeout_seconds",
+        value_type="int",
+        default=3,
+        label="Таймаут проверки доступности, сек",
+        description="Кнопка «Пинг» в списке подключений: TCP-коннект к серверу.",
+        allowed_scopes=("global", "project"),
+        ui_hint="number",
+        min_value=1,
+        max_value=30,
+    ),
 )

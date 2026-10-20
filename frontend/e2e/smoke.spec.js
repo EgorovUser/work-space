@@ -128,3 +128,15 @@ test("healthz жив", async ({ request }) => {
   const payload = await response.json()
   expect(payload.status).toMatch(/ok|degraded/)
 })
+
+test("помодоро на «Сегодня»: старт показывает чип в шапке", async ({ page }) => {
+  await login(page)
+  await expect(page.getByRole("heading", { name: "Помодоро" })).toBeVisible()
+  await page.getByRole("button", { name: "Старт", exact: true }).click()
+  // Чип в шапке — живой индикатор; клик возвращает на «Сегодня».
+  const chip = page.locator(".pomo-chip")
+  await expect(chip).toBeVisible()
+  await expect(chip).toContainText(/помодоро/)
+  await page.getByRole("button", { name: "Стоп", exact: true }).click()
+  await expect(page.locator(".pomo-chip")).toHaveCount(0)
+})

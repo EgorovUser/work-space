@@ -22,7 +22,11 @@ from app.modules.projects.service import touch_project
 
 def list_documents(session: Session, project_id: int, include_archived: bool) -> dict:
     limit = get_int("documents", "list.limit", project_id=project_id)
-    query = select(Document).where(Document.project_id == project_id)
+    query = select(Document).where(
+        Document.project_id == project_id,
+        # Документы из корзины в списке не показываем (патч N).
+        Document.deleted_at.is_(None),
+    )
     if not include_archived:
         query = query.where(Document.archived.is_(False))
     rows = session.scalars(query.order_by(Document.updated_at.desc(), Document.id.desc()).limit(limit)).all()
@@ -70,6 +74,51 @@ def create_document(
 
 def get_document(session: Session, project_id: int, document_id: int) -> dict:
     return _full(session, _document(session, project_id, document_id))
+
+
+def create_from_stored(
+    session: Session,
+    project_id: int,
+    user_id: int | None,
+    stored: StoredFile,
+    title: str = "",
+    note: str = "",
+) -> dict:
+    """Документ из уже сохранённого файла (патч N): без повторной загрузки.
+
+    Так вложение письма попадает в «Документы» одним кликом: файл уже
+    лежит в хранилище (files), здесь появляется запись документа с версией,
+    извлечённым текстом и событием. Байты читаются с диска по sha256.
+    """
+    data = path_for(stored.sha256).read_bytes()
+    parsed = extract_bytes(stored.original_name, data, project_id)
+    attempts = 1 if parsed[1] == ERROR else 0
+    name = _clean_title(title, stored.original_name)
+    text_note = _clean_note(note, "note.max_length")
+    now = utcnow()
+    document = Document(
+        project_id=project_id,
+        title=name,
+        note=text_note,
+        archived=False,
+        created_by=user_id,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(document)
+    session.flush()
+    version = _add_version(session, document, stored, (parsed[0], parsed[1], parsed[2], attempts), user_id, "")
+    _link_and_event(session, project_id, user_id, document, version)
+    touch_project(session, project_id)
+    with log_scope("documents", "create.stored", user_id=user_id):
+        logger.info(
+            "document created from stored file id={} version={} file={} status={}",
+            document.id,
+            version.version_number,
+            stored.id,
+            version.extract_status,
+        )
+    return _full(session, document)
 
 
 def update_document(session: Session, project_id: int, user_id: int, document_id: int, fields: dict) -> dict:
@@ -177,11 +226,11 @@ def delete_version(session: Session, project_id: int, user_id: int, document_id:
         logger.info("document version deleted id={} version={}", document.id, version_id)
 
 
-def delete_document(session: Session, project_id: int, user_id: int, document_id: int) -> None:
+def delete_document(session: Session, project_id: int, user_id: int, document_id: int) -> dict:
+    """Мягкое удаление: документ уходит в корзину, версии остаются (патч N)."""
     document = _document(session, project_id, document_id)
-    ids = [row.id for row in _versions(session, document.id)]
-    _drop_links(session, ids)
-    session.delete(document)
+    document.deleted_at = utcnow()
+    document.updated_at = utcnow()
     touch_project(session, project_id)
     session.flush()
     with log_scope("documents", "delete", user_id=user_id):
@@ -192,6 +241,36 @@ def delete_document(session: Session, project_id: int, user_id: int, document_id
         {"title": "Документ удалён", "subject": document.title, "project_id": project_id, "link": "/projects/" + str(project_id) + "/documents"},
         user_id=user_id,
     )
+    return {"id": document.id, "title": document.title, "deleted_at": document.deleted_at.isoformat()}
+
+
+def restore_document(session: Session, project_id: int, user_id: int, document_id: int) -> dict:
+    document = _document(session, project_id, document_id, in_trash=True)
+    document.deleted_at = None
+    document.updated_at = utcnow()
+    touch_project(session, project_id)
+    session.flush()
+    enqueue(
+        session,
+        DOC_UPDATED,
+        {"title": "Документ восстановлен", "subject": document.title, "project_id": project_id, "link": "/projects/" + str(project_id) + "/documents/" + str(document.id)},
+        user_id=user_id,
+    )
+    with log_scope("documents", "restore", user_id=user_id):
+        logger.info("document restored id={}", document_id)
+    return _full(session, document)
+
+
+def purge_document(session: Session, project_id: int, user_id: int, document_id: int) -> None:
+    """Окончательное удаление — только из корзины."""
+    document = _document(session, project_id, document_id, in_trash=True)
+    ids = [row.id for row in _versions(session, document.id)]
+    _drop_links(session, ids)
+    session.delete(document)
+    touch_project(session, project_id)
+    session.flush()
+    with log_scope("documents", "purge", user_id=user_id):
+        logger.info("document purged id={}", document_id)
 
 
 def document_text(session: Session, project_id: int, document_id: int) -> dict:
@@ -205,7 +284,7 @@ def dashboard_provider(session: Session, project_id: int, user_id: int | None, l
     limit = int(limits.get("recent_documents") or 1)
     rows = session.scalars(
         select(Document)
-        .where(Document.project_id == project_id, Document.archived.is_(False))
+        .where(Document.project_id == project_id, Document.archived.is_(False), Document.deleted_at.is_(None))
         .order_by(Document.updated_at.desc(), Document.id.desc())
         .limit(limit)
     ).all()
@@ -218,7 +297,10 @@ def dashboard_provider(session: Session, project_id: int, user_id: int | None, l
 
 def search_provider(session: Session, project_id: int, user_id: int | None, query: str, limit: int) -> list[dict]:
     needle = query.casefold()
-    statement = select(Document).where(Document.project_id == project_id)
+    statement = select(Document).where(
+        Document.project_id == project_id,
+        Document.deleted_at.is_(None),
+    )
     if not get_bool("documents", "search.include_archived", project_id=project_id):
         statement = statement.where(Document.archived.is_(False))
     documents = session.scalars(statement.order_by(Document.updated_at.desc(), Document.id.desc())).all()
@@ -367,10 +449,14 @@ def _next_number(session: Session, document_id: int) -> int:
     return int(current or 0) + 1
 
 
-def _document(session: Session, project_id: int, document_id: int) -> Document:
+def _document(session: Session, project_id: int, document_id: int, in_trash: bool = False) -> Document:
     row = session.get(Document, document_id)
     if row is None or row.project_id != project_id:
         raise HTTPException(status_code=404, detail="Документ не найден")
+    if in_trash and row.deleted_at is None:
+        raise HTTPException(status_code=404, detail="Документ не в корзине")
+    if not in_trash and row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Документ удалён в корзину")
     return row
 
 

@@ -30,10 +30,14 @@ def _status(session: Session, project_id: int, status_id: int) -> TaskStatus:
     return row
 
 
-def _task(session: Session, project_id: int, task_id: int) -> Task:
+def _task(session: Session, project_id: int, task_id: int, in_trash: bool = False) -> Task:
     row = session.get(Task, task_id)
     if row is None or row.project_id != project_id:
         raise HTTPException(status_code=404, detail="Задача не найдена")
+    if in_trash and row.deleted_at is None:
+        raise HTTPException(status_code=404, detail="Задача не в корзине")
+    if not in_trash and row.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Задача удалена в корзину")
     return row
 
 

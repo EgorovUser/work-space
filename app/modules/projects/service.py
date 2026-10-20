@@ -37,7 +37,7 @@ def list_projects(session: Session, user_id: int, include_archived: bool) -> lis
     return [_card(session, row, user_id) for row in rows]
 
 
-def home(session: Session, user_id: int) -> dict:
+def home(session: Session, user_id: int, task_offset: int = 0) -> dict:
     projects = list_projects(session, user_id, include_archived=False)
     ids = [item["id"] for item in projects]
     names = {item["id"]: item["name"] for item in projects}
@@ -45,7 +45,8 @@ def home(session: Session, user_id: int) -> dict:
     show_mail = get_bool("projects", "home.show_mail")
     show_events = get_bool("projects", "home.show_events")
     show_notifications = get_bool("projects", "home.show_notifications")
-    tasks = inbox_items("tasks", session, user_id, get_int("projects", "home.task_limit"), ids) if show_tasks else []
+    task_limit = get_int("projects", "home.task_limit")
+    tasks = inbox_items("tasks", session, user_id, task_limit, ids, max(0, task_offset)) if show_tasks else []
     mail = inbox_items("mail", session, user_id, get_int("projects", "home.mail_limit"), ids) if show_mail else []
     events = inbox_items("events", session, user_id, get_int("projects", "home.event_limit"), ids) if show_events else []
     # Уведомления не делятся по проектам — это пользовательская лента,
@@ -61,6 +62,8 @@ def home(session: Session, user_id: int) -> dict:
         "mail": mail,
         "events": events,
         "notifications": notifications,
+        "task_limit": task_limit,
+        "task_offset": max(0, task_offset),
         "sections": {
             "tasks": show_tasks,
             "mail": show_mail,

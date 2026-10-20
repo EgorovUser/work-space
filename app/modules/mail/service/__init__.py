@@ -119,6 +119,7 @@ from app.modules.mail.service.ingest import (
 )
 from app.modules.mail.service.messages import (
     _message_list,
+    attachment_to_document,
     delete_message,
     download_attachment,
     get_message,

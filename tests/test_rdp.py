@@ -227,5 +227,121 @@ class RdpSearchTest(unittest.TestCase):
         self.assertIn("Игла " + self.mark, titles)
 
 
+class RdpSecretLinkTest(unittest.TestCase):
+    """Связка подключения с секретом (патч N): валидация и подтяжка логина."""
+
+    def setUp(self):
+        client.post("/api/auth/logout")
+        _login()
+        self.mark = "sec" + str(id(self))[-6:]
+        self.project = _project("RDP секреты " + self.mark)
+        self.other = _project("Чужой секрет " + self.mark)
+        response = client.post(
+            f"/api/projects/{self.project['id']}/secrets",
+            json={"title": "Учётка сервера " + self.mark, "secret": "pass-" + self.mark, "username": "corp-admin"},
+        )
+        assert response.status_code == 201, response.text
+        self.secret = response.json()
+
+    def test_link_and_title_in_list(self):
+        created = _rdp(self.project["id"], "С секретом " + self.mark, "10.0.0.9", secret_id=self.secret["id"])
+        self.assertEqual(created["secret_id"], self.secret["id"])
+        self.assertEqual(created["secret_title"], "Учётка сервера " + self.mark)
+        payload = client.get(f"/api/projects/{self.project['id']}/rdp").json()
+        row = next(item for item in payload["items"] if item["id"] == created["id"])
+        self.assertEqual(row["secret_title"], "Учётка сервера " + self.mark)
+
+    def test_foreign_or_wrong_secret_rejected(self):
+        response = client.post(
+            f"/api/projects/{self.project['id']}/rdp",
+            json={"name": "Чужой " + self.mark, "host": "10.0.0.9", "secret_id": 999999},
+        )
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        self.assertIn("Секрет не найден", body["detail"])
+
+    def test_secret_from_other_project_rejected(self):
+        response = client.post(
+            f"/api/projects/{self.other['id']}/secrets",
+            json={"title": "Не тот проект " + self.mark, "secret": "x", "username": "x"},
+        )
+        other_secret = response.json()
+        response = client.post(
+            f"/api/projects/{self.project['id']}/rdp",
+            json={"name": "Подмена " + self.mark, "host": "10.0.0.9", "secret_id": other_secret["id"]},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_clear_link_with_null(self):
+        created = _rdp(self.project["id"], "Очистка " + self.mark, "10.0.0.9", secret_id=self.secret["id"])
+        response = client.patch(
+            f"/api/projects/{self.project['id']}/rdp/{created['id']}",
+            json={"secret_id": None, "updated_at": created["updated_at"]},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIsNone(response.json()["secret_id"])
+
+    def test_file_pulls_username_from_secret(self):
+        created = _rdp(self.project["id"], "Без логина " + self.mark, "10.0.0.9", secret_id=self.secret["id"])
+        body = client.get(f"/api/projects/{self.project['id']}/rdp/{created['id']}/file").text
+        self.assertIn("username:s:corp-admin", body)
+        self.assertNotIn("pass-" + self.mark, body)
+
+    def test_manual_username_wins(self):
+        created = _rdp(
+            self.project["id"], "Свой логин " + self.mark, "10.0.0.9",
+            username="local-admin", secret_id=self.secret["id"],
+        )
+        body = client.get(f"/api/projects/{self.project['id']}/rdp/{created['id']}/file").text
+        self.assertIn("username:s:local-admin", body)
+        self.assertNotIn("corp-admin", body)
+
+
+class RdpPingTest(unittest.TestCase):
+    """TCP-пинг: форма ответа и обе ветки результата, без сети."""
+
+    def setUp(self):
+        client.post("/api/auth/logout")
+        _login()
+        self.mark = "ping" + str(id(self))[-6:]
+        self.project = _project("RDP пинг " + self.mark)
+        self.row = _rdp(self.project["id"], "Пингуемый " + self.mark, "10.0.0.7")
+
+    def test_anonymous_gets_401(self):
+        client.post("/api/auth/logout")
+        self.assertEqual(client.post(f"/api/projects/{self.project['id']}/rdp/{self.row['id']}/ping").status_code, 401)
+
+    def test_unknown_connection_404(self):
+        self.assertEqual(client.post(f"/api/projects/{self.project['id']}/rdp/999999/ping").status_code, 404)
+
+    def test_ok_shape(self):
+        from unittest.mock import patch
+
+        class _Sock:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        with patch("app.modules.rdp.service.socket.create_connection", return_value=_Sock()):
+            payload = client.post(f"/api/projects/{self.project['id']}/rdp/{self.row['id']}/ping").json()
+        self.assertTrue(payload["ok"])
+        self.assertIsInstance(payload["latency_ms"], int)
+        self.assertEqual(payload["error"], "")
+
+    def test_failure_shape(self):
+        from unittest.mock import patch
+
+        with patch(
+            "app.modules.rdp.service.socket.create_connection",
+            side_effect=OSError("нет маршрута к хосту"),
+        ):
+            payload = client.post(f"/api/projects/{self.project['id']}/rdp/{self.row['id']}/ping").json()
+        self.assertFalse(payload["ok"])
+        self.assertIsNone(payload["latency_ms"])
+        self.assertIn("нет маршрута", payload["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

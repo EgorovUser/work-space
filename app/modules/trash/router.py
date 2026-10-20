@@ -1,0 +1,205 @@
+"""Корзина (патч N): мягко удалённые записи задач, документов, секретов и RDP.
+
+Модули сами решают, что значит «удалено» (колонка deleted_at), а здесь —
+общая витрина: список по типам, восстановление, окончательное удаление
+и фоновая очистка по retention-дням. Почта в корзину не попадает: у неё
+есть свой архив, а мягкое удаление сломало бы уникальность UID при
+повторном заборе с сервера.
+"""
+
+from __future__ import annotations
+
+from datetime import timedelta
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core import registry
+from app.core.auth import require_user
+from app.core.db import get_db, session_scope, utcnow
+from app.core.logging import log_scope, logger
+from app.core.models import User
+from app.core.scheduler import register_job
+from app.core.settings_store import get_int, register_defs
+from app.modules.documents.models import Document
+from app.modules.projects.models import Project
+from app.modules.rdp.models import RdpConnection
+from app.modules.secrets.models import Secret
+from app.modules.tasks.models import Task
+
+from .settings import DEFS
+
+router = APIRouter()
+
+# Что умеет лежать в корзине. restore/purge вызывают сервисы модулей —
+# события, счётчики проектов и логи остаются консистентными.
+_KINDS = ("tasks", "documents", "secrets", "rdp")
+
+_LABELS = {
+    "tasks": "Задачи",
+    "documents": "Документы",
+    "secrets": "Секреты",
+    "rdp": "RDP-подключения",
+}
+
+_MODELS = {
+    "tasks": Task,
+    "documents": Document,
+    "secrets": Secret,
+    "rdp": RdpConnection,
+}
+
+
+def _kind(kind: str) -> str:
+    if kind not in _KINDS:
+        raise HTTPException(status_code=404, detail="Такого типа в корзине нет")
+    return kind
+
+
+@router.get("/api/trash")
+def list_trash(db: Session = Depends(get_db), user: User = Depends(require_user)) -> dict:
+    groups = []
+    names = {row.id: row.name for row in db.scalars(select(Project)).all()}
+    for kind in _KINDS:
+        if not registry.is_enabled(kind):
+            continue
+        model = _MODELS[kind]
+        rows = list(
+            db.scalars(
+                select(model)
+                .where(model.deleted_at.is_not(None))
+                .order_by(model.deleted_at.desc(), model.id.desc())
+                .limit(200)
+            ).all()
+        )
+        if not rows:
+            continue
+        groups.append(
+            {
+                "id": kind,
+                "label": _LABELS[kind],
+                "items": [
+                    {
+                        "id": row.id,
+                        "project_id": row.project_id,
+                        "project_name": names.get(row.project_id, ""),
+                        "title": row.title if kind != "rdp" else row.name,
+                        "deleted_at": row.deleted_at.isoformat(),
+                    }
+                    for row in rows
+                ],
+            }
+        )
+    return {"groups": groups, "retention_days": get_int("trash", "retention_days")}
+
+
+@router.post("/api/trash/{kind}/{item_id}/restore")
+def restore_item(
+    kind: str,
+    item_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    _kind(kind)
+    model = _MODELS[kind]
+    row = db.get(model, item_id)
+    if row is None or row.deleted_at is None:
+        raise HTTPException(status_code=404, detail="Запись не найдена в корзине")
+    restored = _dispatch_restore(db, kind, row.project_id, user.id, item_id)
+    with log_scope("trash", "restore", user_id=user.id):
+        logger.info("trash restored kind={} id={}", kind, item_id)
+    return {"kind": kind, "item": restored}
+
+
+@router.delete("/api/trash/{kind}/{item_id}", status_code=204)
+def purge_item(
+    kind: str,
+    item_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> None:
+    _kind(kind)
+    model = _MODELS[kind]
+    row = db.get(model, item_id)
+    if row is None or row.deleted_at is None:
+        raise HTTPException(status_code=404, detail="Запись не найдена в корзине")
+    project_id = row.project_id
+    _dispatch_purge(db, kind, project_id, user.id, item_id)
+    with log_scope("trash", "purge", user_id=user.id):
+        logger.info("trash purged kind={} id={}", kind, item_id)
+
+
+def _dispatch_restore(session: Session, kind: str, project_id: int, user_id: int, item_id: int) -> dict:
+    if kind == "tasks":
+        from app.modules.tasks.service import board
+
+        return board.restore_task(session, project_id, user_id, item_id)
+    if kind == "documents":
+        from app.modules.documents import service
+
+        return service.restore_document(session, project_id, user_id, item_id)
+    if kind == "secrets":
+        from app.modules.secrets import service
+
+        return service.restore_secret(session, project_id, user_id, item_id)
+    from app.modules.rdp import service
+
+    return service.restore_connection(session, project_id, user_id, item_id)
+
+
+def _dispatch_purge(session: Session, kind: str, project_id: int, user_id: int, item_id: int) -> None:
+    if kind == "tasks":
+        from app.modules.tasks.service import board
+
+        board.purge_task(session, project_id, user_id, item_id)
+    elif kind == "documents":
+        from app.modules.documents import service
+
+        service.purge_document(session, project_id, user_id, item_id)
+    elif kind == "secrets":
+        from app.modules.secrets import service
+
+        service.purge_secret(session, project_id, user_id, item_id)
+    else:
+        from app.modules.rdp import service
+
+        service.purge_connection(session, project_id, user_id, item_id)
+
+
+def purge_expired() -> None:
+    """Джоба планировщика: окончательно убирает то, что лежит дольше retention."""
+    days = get_int("trash", "retention_days")
+    cutoff = utcnow() - timedelta(days=days)
+    removed = 0
+    with session_scope() as session:
+        for kind in _KINDS:
+            if not registry.is_enabled(kind):
+                continue
+            model = _MODELS[kind]
+            rows = list(
+                session.scalars(
+                    select(model).where(model.deleted_at.is_not(None), model.deleted_at < cutoff).limit(500)
+                ).all()
+            )
+            for row in rows:
+                _dispatch_purge(session, kind, row.project_id, None, row.id)
+                removed += 1
+    if removed:
+        with log_scope("trash", "job"):
+            logger.info("trash purged expired count={}", removed)
+
+
+def setup(app) -> None:
+    register_defs(DEFS)
+    register_job(
+        "trash.purge",
+        purge_expired,
+        module="trash",
+        action="purge",
+        interval_module="trash",
+        interval_key="purge.interval_seconds",
+        label="Очистка корзины",
+        detail="Удаление записей старше retention-дней",
+    )
+    app.include_router(router)

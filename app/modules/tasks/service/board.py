@@ -58,7 +58,11 @@ def load_task(session: Session, task_id: int) -> Task | None:
 def list_tasks(session: Session, project_id: int) -> dict:
     limit = get_int("tasks", "board.max_tasks", project_id=project_id)
     rows = session.scalars(
-        select(Task).where(Task.project_id == project_id).order_by(Task.position.asc(), Task.id.asc()).limit(limit)
+        select(Task).where(
+            Task.project_id == project_id,
+            # Задачи из корзины на доске не показываем (патч N).
+            Task.deleted_at.is_(None),
+        ).order_by(Task.position.asc(), Task.id.asc()).limit(limit)
     ).all()
     task_ids = [row.id for row in rows]
     checks_by_task = _checks_by_tasks(session, task_ids)
@@ -239,14 +243,15 @@ def update_task(session: Session, project_id: int, user_id: int, task_id: int, f
     return _task_full(session, task)
 
 
-def delete_task(session: Session, project_id: int, user_id: int, task_id: int) -> None:
+def delete_task(session: Session, project_id: int, user_id: int, task_id: int) -> dict:
+    """Мягкое удаление: задача уходит в корзину и восстановима (патч N).
+
+    Чеклист/метки/события остаются при задаче — после восстановления
+    всё на месте. Окончательно запись разбирает purge_task из корзины.
+    """
     task = _task(session, project_id, task_id)
-    for model in (ChecklistItem, TaskTag, TaskEvent):
-        for row in session.scalars(select(model).where(model.task_id == task.id)).all():
-            session.delete(row)
-    for link in _links(session, task.id):
-        session.delete(link)
-    session.delete(task)
+    task.deleted_at = utcnow()
+    task.updated_at = utcnow()
     touch_project(session, project_id)
     session.flush()
     enqueue(
@@ -257,6 +262,39 @@ def delete_task(session: Session, project_id: int, user_id: int, task_id: int) -
     )
     with log_scope("tasks", "delete", user_id=user_id):
         logger.info("task deleted id={} project={}", task_id, project_id)
+    return {"id": task.id, "title": task.title, "deleted_at": task.deleted_at.isoformat()}
+
+
+def restore_task(session: Session, project_id: int, user_id: int, task_id: int) -> dict:
+    task = _task(session, project_id, task_id, in_trash=True)
+    task.deleted_at = None
+    task.updated_at = utcnow()
+    touch_project(session, project_id)
+    session.flush()
+    enqueue(
+        session,
+        TASK_UPDATED,
+        {"title": "Задача восстановлена", "subject": task.title, "project_id": project_id, "link": "/projects/" + str(project_id) + "/tasks/" + str(task.id)},
+        user_id=user_id,
+    )
+    with log_scope("tasks", "restore", user_id=user_id):
+        logger.info("task restored id={} project={}", task_id, project_id)
+    return _task_full(session, task)
+
+
+def purge_task(session: Session, project_id: int, user_id: int, task_id: int) -> None:
+    """Окончательное удаление — только для записей из корзины."""
+    task = _task(session, project_id, task_id, in_trash=True)
+    for model in (ChecklistItem, TaskTag, TaskEvent):
+        for row in session.scalars(select(model).where(model.task_id == task.id)).all():
+            session.delete(row)
+    for link in _links(session, task.id):
+        session.delete(link)
+    session.delete(task)
+    touch_project(session, project_id)
+    session.flush()
+    with log_scope("tasks", "purge", user_id=user_id):
+        logger.info("task purged id={} project={}", task_id, project_id)
 
 
 def order_tasks(session: Session, project_id: int, user_id: int, status_id: int, ids: list[int]) -> None:
