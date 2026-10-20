@@ -168,12 +168,13 @@
 </template>
 
 <script>
-import { computed, reactive, ref, onMounted, watch } from "vue"
+import { computed, reactive, ref, onBeforeUnmount, onMounted, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import AppShell from "../components/AppShell.vue"
 import Tabs from "../components/Tabs.vue"
 import SkeletonList from "../components/SkeletonList.vue"
 import { api } from "../api"
+import { useEvents } from "../composables/useEvents"
 import { useWhen } from "../composables/useWhen"
 
 const TAB_IDS = new Set(["letters", "tags", "notify", "accounts"])
@@ -556,6 +557,30 @@ export default {
     }
 
     watch(tab, syncUrl)
+
+    // Живые события: счётчик непрочитанных — сразу из состояния канала,
+    // а когда серверный забор приносит письма — список обновляется сам,
+    // без F5. Обновляем только видимую вкладку: невидимой всё равно
+    // свежие данные подтянутся при возврате.
+    const events = useEvents()
+    let syncTimer = null
+    const offUnread = watch(events.mailUnread, (value) => {
+      if (typeof value === "number") unread.value = value
+    })
+    const offEvents = events.on((type) => {
+      if (type !== "mail.sync") return
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return
+      if (syncTimer) clearTimeout(syncTimer)
+      syncTimer = setTimeout(() => {
+        syncTimer = null
+        if (tab.value === "letters") load()
+      }, 800)
+    })
+    onBeforeUnmount(() => {
+      offUnread()
+      offEvents()
+      if (syncTimer) clearTimeout(syncTimer)
+    })
 
     onMounted(() => {
       settings.load().catch(() => {})

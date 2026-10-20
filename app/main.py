@@ -8,6 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.core import auth, files
 from app.core import search as search_module
+from app.core import sse as sse_module
 from app.core.auth import require_user
 from app.core.config import ROOT, prepare
 from app.core.db import init_db
@@ -63,6 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_router)
     app.include_router(files.router)
     app.include_router(search_module.router)
+    app.include_router(sse_module.router)
     app.add_api_route("/healthz", healthz, methods=["GET"])
     app.add_api_route("/api/system/check", system_check, methods=["POST"])
     app.add_api_route("/api/system/db", system_db, methods=["GET"])

@@ -30,9 +30,10 @@
 </template>
 
 <script>
-import { onBeforeUnmount, onMounted, ref } from "vue"
+import { onBeforeUnmount, onMounted, ref, watch } from "vue"
 import Pop from "./Pop.vue"
 import { api } from "../api"
+import { useEvents } from "../composables/useEvents"
 import { useSettings } from "../composables/useSettings"
 import { useNotice } from "../composables/useNotice"
 
@@ -45,6 +46,7 @@ export default {
     const busy = ref(false)
     const settings = useSettings()
     const notice = useNotice()
+    const events = useEvents()
     let timer = null
 
     async function load() {
@@ -96,13 +98,22 @@ export default {
       timer = setInterval(load, Math.max(5, seconds) * 1000)
     }
 
+    // Живые события опережают опрос: счётчик дёргается сразу, как только
+    // на сервере что-то изменилось. Опрос остаётся запасным путём.
+    const offEvents = watch(events.notificationsUnread, (value) => {
+      if (typeof value === "number" && value !== count.value) load()
+    })
+
     onMounted(() => {
       settings.load().catch(() => {}).finally(() => {
         load()
         arm()
       })
     })
-    onBeforeUnmount(() => clearInterval(timer))
+    onBeforeUnmount(() => {
+      clearInterval(timer)
+      offEvents()
+    })
 
     return { items, count, error, busy, read, readAll }
   },

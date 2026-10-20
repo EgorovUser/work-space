@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.db import session_scope, utcnow
+from app.core.events_bus import publish as publish_event
 from app.core.events_catalog import MAIL_AUTH_FAILED
 from app.core.logging import log_scope, logger
 from app.core.outbox import enqueue
@@ -126,7 +127,14 @@ def check_account(session: Session, project_id: int, user_id: int, account_id: i
 
 def fetch_account(session: Session, project_id: int, user_id: int | None, account_id: int) -> dict:
     row = _account(session, project_id, account_id)
-    return _fetch_row(session, row, user_id)
+    name = row.name
+    result = _fetch_row(session, row, user_id)
+    # Открытые вкладки узнают о письмах сразу, не дожидаясь своего опроса.
+    fetched = int(result.get("fetched") or 0)
+    if fetched:
+        publish_event("mail.sync", {"account_id": account_id, "account": name, "fetched": fetched})
+        publish_event("mail.changed")
+    return result
 
 
 def test_account(session: Session, user_id: int, account_id: int) -> dict:
@@ -232,13 +240,22 @@ def poll_accounts() -> None:
     with session_scope() as session:
         ids = list(session.scalars(select(MailAccount.id).where(MailAccount.enabled.is_(True))).all())
     for account_id in ids:
+        result: dict = {}
+        name = ""
         try:
             with session_scope() as session:
                 row = session.get(MailAccount, account_id)
                 if row is not None and row.enabled and not row.auth_blocked:
-                    _fetch_row(session, row, None)
+                    name = row.name
+                    result = _fetch_row(session, row, None)
         except Exception:
             logger.exception("mail poll failed account={}", account_id)
+            continue
+        # session_scope уже закоммитил: открытые вкладки могут пересчитывать счётчики.
+        fetched = int(result.get("fetched") or 0)
+        if fetched:
+            publish_event("mail.sync", {"account_id": account_id, "account": name, "fetched": fetched})
+            publish_event("mail.changed")
 
 
 def _fetch_row(session: Session, row: MailAccount, user_id: int | None) -> dict:

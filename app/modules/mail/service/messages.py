@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, defer
 
+from app.core.events_bus import publish as publish_event
 from app.core.events_catalog import MAIL_ARCHIVED, MAIL_DELETED
 from app.core.files import add_link, save_bytes
 from app.core.logging import log_scope, logger
@@ -70,6 +71,8 @@ def import_raw(session: Session, project_id: int, user_id: int, raw: bytes) -> d
     outcome, row = _ingest(session, project_id, user_id, raw, None, None, "", notify=True, moves=moves)
     session.commit()
     _run_moves(moves)
+    if outcome == "stored":
+        publish_event("mail.changed")
     return {"status": outcome, "id": row.id if row is not None else None}
 
 
@@ -78,6 +81,7 @@ def get_message(session: Session, project_id: int, user_id: int, message_id: int
     if not row.read and get_bool("mail", "message.mark_read_on_open", project_id=project_id or None):
         row.read = True
         session.flush()
+        publish_event("mail.changed")
         with log_scope("mail", "read", user_id=user_id):
             logger.info("mail read id={}", row.id)
     payload = _message_out(session, row, full=True)
@@ -100,6 +104,7 @@ def update_message(session: Session, project_id: int, user_id: int, message_id: 
                 user_id=user_id,
             )
     session.flush()
+    publish_event("mail.changed")
     payload = _message_out(session, row, full=True)
     payload["thread"], payload["thread_total"] = _thread_out(session, row, project_id)
     _attach_tags(session, [payload])
@@ -111,6 +116,7 @@ def delete_message(session: Session, project_id: int, user_id: int, message_id: 
     title = _title(row, project_id)
     session.delete(row)
     session.flush()
+    publish_event("mail.changed")
     enqueue(session, MAIL_DELETED, {"title": "Письмо удалено", "subject": title, "link": "/mail"}, user_id=user_id)
     with log_scope("mail", "message.delete", user_id=user_id):
         logger.info("mail message deleted id={}", message_id)

@@ -966,6 +966,21 @@ textarea.mono { min-height: 220px; }
   text-align: center;
 }
 
+.rail-badge {
+  display: inline-block;
+  min-width: 1.2em;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--badge);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  vertical-align: middle;
+}
+
 .matrix-wrap { overflow-x: auto; max-width: 100%; }
 .matrix { width: 100%; border-collapse: collapse; }
 .matrix th, .matrix td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; }

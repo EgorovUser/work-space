@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.db import session_scope, utcnow
+from app.core.events_bus import publish as publish_event
 from app.core.events_catalog import ALL_EVENTS
 from app.core.logging import log_scope, logger
 from app.core.models import User
@@ -78,6 +79,8 @@ def handle(message: EventMessage) -> None:
         if created:
             with log_scope("notifications", "create", user_id=message.user_id):
                 logger.info("notifications created event={} count={}", message.event_type, created)
+            # Открытые вкладки пересчитают свой счётчик уведомлений сразу.
+            publish_event("notifications.changed")
     for delivery_id in delivery_ids:
         send_delivery(delivery_id)
 
@@ -234,6 +237,7 @@ def _mark_read(session: Session, user_id: int, notification_id: int) -> dict:
     row = _own(session, user_id, notification_id)
     row.read = True
     session.flush()
+    publish_event("notifications.changed", user_id=user_id)
     with log_scope("notifications", "read", user_id=user_id):
         logger.info("notification read id={}", notification_id)
     return _out(session, row, user_id)
@@ -254,6 +258,7 @@ def _mark_all_read(session: Session, user_id: int) -> dict:
     for row in rows:
         row.read = True
     session.flush()
+    publish_event("notifications.changed", user_id=user_id)
     with log_scope("notifications", "read", user_id=user_id):
         logger.info("notifications read all count={}", len(rows))
     return {"updated": len(rows)}

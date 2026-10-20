@@ -13,13 +13,19 @@
 - **Бэкенд** `app/` — Python 3.12, FastAPI (sync-эндпоинты), SQLAlchemy 2,
   SQLite (WAL). Модули: projects, tasks, documents, examples, secrets,
   timetracking, mail, notifications. Ядро: `app/core/` (конфиг, база, вход,
-  файлы, настройки, очередь, планировщик).
+  файлы, настройки, очередь, планировщик). Живые события для открытых
+  вкладок — `app/core/events_bus.py` (внутрипроцессная шина) и
+  `app/core/sse.py` (канал `/api/events`): джобы и обработчики публикуют
+  сигналы `mail.changed` / `mail.sync` / `notifications.changed`, канал сам
+  пересчитывает счётчики. Брокеров не заводить — см. «Чего не делать».
 - **Фронтенд** `frontend/` — Vue 3 + Vite, обычный JavaScript, composables без
   Pinia, свой CSS. Прокси `/api` и `/healthz` на порт 8000.
 - **Миграции** — Alembic (`alembic/versions/`). `0001` — baseline-заглушка
   (схема = `create_all`); дальше — реальные миграции. Новые изменения моделей
   оформлять миграцией, а не правкой `create_all`.
-- **Тесты** — `tests/` (unittest, 43 проверки; запускаются на временной базе).
+- **Тесты** — `tests/` (unittest, 59 проверок; запускаются на временной базе)
+  и `frontend/e2e/` (Playwright против настоящего uvicorn: `cd frontend &&
+  npm run test:e2e`, нужен собранный `dist`).
 - **Скрипты** — `scripts/backup.sh` (бэкап SQLite через `.backup` + `data/files`
   + `.env`; запускается на хосте, не в контейнере).
 
@@ -28,8 +34,8 @@
 ```bash
 python -m venv .venv && . .venv/bin/activate   # или .venv\Scripts\activate
 pip install -r requirements.txt -r requirements-dev.txt
-python -m unittest discover -s tests           # бэкенд, все зелёные
-cd frontend && npm install && npm test         # фронтенд, все зелёные
+DATABASE_URL= python -m unittest discover -s tests   # бэкенд, все зелёные
+cd frontend && npm install && npm test               # фронтенд, все зелёные
 ```
 
 Если в окружении есть переменная `DATABASE_URL`, тесты способны подхватить её и

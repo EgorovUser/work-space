@@ -4,7 +4,7 @@
       <div class="brand">{{ title || "Рабочее пространство" }}</div>
       <nav class="rail-nav">
         <router-link to="/">Проекты</router-link>
-        <router-link to="/mail">Почта</router-link>
+        <router-link to="/mail">Почта<span v-if="mailBadge" class="rail-badge">{{ mailBadge }}</span></router-link>
         <router-link to="/notifications">Уведомления</router-link>
         <router-link to="/settings">Настройки</router-link>
         <router-link to="/system">Состояние</router-link>
@@ -49,6 +49,7 @@ import ThemeToggle from "./ThemeToggle.vue"
 import GlobalSearch from "./GlobalSearch.vue"
 import { useAuth } from "../composables/useAuth"
 import { useChrome } from "../composables/useChrome"
+import { useEvents } from "../composables/useEvents"
 import { useSettings } from "../composables/useSettings"
 
 export default {
@@ -60,6 +61,7 @@ export default {
     const auth = useAuth()
     const settings = useSettings()
     const chrome = useChrome()
+    const events = useEvents()
     const router = useRouter()
     const route = useRoute()
 
@@ -72,11 +74,19 @@ export default {
       return settings.title.value || "Проекты"
     })
 
+    const mailBadge = computed(() => {
+      const value = events.mailUnread.value
+      if (typeof value !== "number" || value <= 0) return ""
+      return value > 99 ? "99+" : String(value)
+    })
+
     onMounted(() => {
       settings.load().catch(() => {})
+      events.start()
     })
 
     async function onLogout() {
+      events.stop()
       await auth.logout()
       router.push("/login")
     }
@@ -88,6 +98,7 @@ export default {
       caption: chrome.caption,
       extra: chrome.extra,
       heading,
+      mailBadge,
       route,
       onLogout,
     }

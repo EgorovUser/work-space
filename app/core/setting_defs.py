@@ -152,6 +152,23 @@ CORE_DEFS: tuple[SettingDef, ...] = (
         max_value=3600,
     ),
     _s(
+        key="events.enabled",
+        value_type="bool",
+        default=True,
+        label="Живые события",
+        description="Мгновенные счётчики и новые письма в открытой вкладке без перезагрузки (канал /api/events).",
+    ),
+    _s(
+        key="events.heartbeat_seconds",
+        value_type="int",
+        default=20,
+        label="Период оживления живых событий",
+        description="Секунды между контрольными пакетами открытого канала.",
+        ui_hint="number",
+        min_value=5,
+        max_value=300,
+    ),
+    _s(
         key="ui.timezone",
         value_type="str",
         default="Europe/Moscow",
