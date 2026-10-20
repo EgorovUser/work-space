@@ -209,9 +209,10 @@ export default {
           page.limit = Number(data.page.limit) || page.limit
         }
         hasMore.value = (data.messages || []).length >= page.limit
-        // Первый заход без ящиков — сразу на вкладку настройки. Но если
-        // пришли по глубокой ссылке на письмо — показываем письмо.
-        if (firstLoad && !accounts.value.length && !route.query.tab && !route.params.messageId) tab.value = "accounts"
+        // Патч AI: без подключённых ящиков больше не прыгаем на вкладку
+        // «Ящик» — базовое окно почты всегда открывается на «Письма».
+        // Подключить ящик можно осознанно: вкладка рядом, и пустое
+        // состояние списка само подсказывает, откуда берутся письма.
       } catch (err) {
         error.value = err.message || "Почта недоступна"
       } finally {

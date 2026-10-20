@@ -132,6 +132,23 @@ test("глубокая ссылка сразу открывает письмо; 
   await expect(page.locator(".mailbox-detail")).toHaveCount(0)
 })
 
+test("без подключённых ящиков окно почты открывается на «Письма»", async ({ page }) => {
+  const api = await apiLogin()
+  await cleanMailbox(api)
+  await login(page)
+
+  // Раньше пустой список ящиков перебрасывал на вкладку «Ящик» (патч AI):
+  // базовое окно всегда начинается с писем, настройка подключения —
+  // осознанный клик по соседней вкладке.
+  await page.goto("/mail")
+  const lettersTab = page.getByRole("tab", { name: "Письма" })
+  await expect(lettersTab).toHaveClass(/active/, { timeout: 10_000 })
+  await expect(page.getByRole("tab", { name: "Ящик" })).not.toHaveClass(/active/)
+  await expect(page.locator(".mailbox-list")).toBeVisible()
+  // URL не тащит за собой служебный ?tab= — чистая ссылка на почту.
+  await expect(page).toHaveURL(/\/mail$/)
+})
+
 test("вложение письма сохраняется в документы одной кнопкой", async ({ page }) => {
   const mark = "maildoc" + Date.now()
   const api = await apiLogin()
