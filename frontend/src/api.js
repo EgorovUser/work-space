@@ -12,6 +12,21 @@ export function setUnauthorizedHandler(handler) {
   onUnauthorized = handler
 }
 
+// Бейджи навигации подписываются сюда (useCounters, патч AC): после
+// успешной записи (не-GET) числа обновляются одним отложенным запросом,
+// а не ждут опроса или SSE. Серверный кеш мутации сбрасывают сами
+// (touch_project и publish-обёртки), поэтому здесь обычное чтение —
+// не форс-пересчёт. Не срабатывает на логин/логаут — там свои переходы.
+let onMutation = null
+
+export function setMutationHandler(handler) {
+  onMutation = handler
+}
+
+function _notifyMutation(path) {
+  if (onMutation && !path.startsWith("/api/auth/")) onMutation()
+}
+
 export function downloadFile(fileId) {
   if (!fileId) return
   window.location.assign("/api/files/" + fileId)
@@ -38,6 +53,7 @@ export function uploadApi(path, body, onProgress) {
         }
       }
       if (xhr.status >= 200 && xhr.status < 300) {
+        _notifyMutation(path)
         resolve(data)
         return
       }
@@ -104,5 +120,7 @@ export async function api(path, options = {}) {
     }
     throw new ApiError(message, response.status, moduleName)
   }
+  const method = (options.method || "GET").toUpperCase()
+  if (method !== "GET") _notifyMutation(path)
   return data
 }
