@@ -106,3 +106,24 @@ test("недавние запросы всплывают при пустой с�
   await expect(recents.locator(".search-chip", { hasText: mark })).toBeVisible()
   await page.keyboard.press("Escape")
 })
+
+test("у каждого результата виден его проект", async ({ page }) => {
+  const mark = "проект" + Date.now()
+  const api = await apiLogin()
+  const project = await (await api.post("/api/projects", { data: { name: "Витрина " + mark } })).json()
+  await api.post(`/api/projects/${project.id}/tasks`, {
+    data: { title: "Задача витрины " + mark },
+  })
+
+  await login(page)
+  await page.keyboard.press("Control+k")
+  await page.getByLabel("Поиск по всему workspace").fill(mark)
+  // Патч P: проект подписан прямо в строке — до перехода, не после.
+  const row = page.locator(".search-item", { hasText: "Задача витрины " + mark })
+  await expect(row).toBeVisible()
+  await expect(row.locator(".search-item-proj")).toHaveText("Витрина " + mark)
+
+  // Фильтр по типу не теряет подпись проекта.
+  await page.locator(".search-chip", { hasText: "Задачи" }).click()
+  await expect(page.locator(".search-item", { hasText: "Задача витрины " + mark }).locator(".search-item-proj")).toHaveText("Витрина " + mark)
+})

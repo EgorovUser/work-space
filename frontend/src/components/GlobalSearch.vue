@@ -47,8 +47,11 @@
               <span class="muted search-item-snip">{{ entry.item.hint }}</span>
             </template>
             <template v-else>
-              <span class="search-item-title">
-                {{ entry.item.title }}<span v-if="entry.item.archived" class="muted"> · архив</span>
+              <span class="search-item-head">
+                <span class="search-item-title">
+                  {{ entry.item.title }}<span v-if="entry.item.archived" class="muted"> · архив</span>
+                </span>
+                <span v-if="entry.item.project_name" class="search-item-proj" :title="entry.item.project_name">{{ entry.item.project_name }}</span>
               </span>
               <span v-if="entry.item.snippet" class="search-item-snip">
                 <template v-for="(part, index) in parts(entry.item.snippet)" :key="index">
@@ -139,6 +142,7 @@ function loadRecents() {
 
 // Палитра (патч N): поиск вырос в командную — Ctrl+K открывает, фильтры
 // по типам, стрелки и Enter, недавние запросы и быстрые команды разделов.
+// Патч P: у каждого результата виден проект — до перехода, не после.
 export default {
   setup() {
     const router = useRouter()

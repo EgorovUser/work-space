@@ -96,6 +96,94 @@ class TrashAuthTest(unittest.TestCase):
         self.assertEqual(client.get("/api/trash").status_code, 401)
         self.assertEqual(client.post("/api/trash/tasks/1/restore").status_code, 401)
         self.assertEqual(client.delete("/api/trash/tasks/1").status_code, 401)
+        self.assertEqual(client.delete("/api/trash").status_code, 401)
+
+
+class TrashDaysLeftTest(unittest.TestCase):
+    """Сколько дней осталось до автоочистки (патч P)."""
+
+    def setUp(self):
+        client.post("/api/auth/logout")
+        _login()
+        self.project = _project("Корзина сроки " + MARK)
+
+    def _entry(self, task_id: int) -> dict | None:
+        trash = client.get("/api/trash").json()
+        group = next((item for item in trash["groups"] if item["id"] == "tasks"), None)
+        if group is None:
+            return None
+        return next((item for item in group["items"] if item["id"] == task_id), None)
+
+    def test_fresh_deletion_shows_full_retention(self):
+        task = _task(self.project["id"], "Свежая со сроком " + MARK)
+        self.assertEqual(client.delete(f"/api/projects/{self.project['id']}/tasks/{task['id']}").status_code, 204)
+        trash = client.get("/api/trash").json()
+        group = next((item for item in trash["groups"] if item["id"] == "tasks"), None)
+        entry = next((item for item in group["items"] if item["id"] == task["id"]), None)
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["days_left"], trash["retention_days"])
+
+    def test_backdated_deletion_counts_down(self):
+        from app.core.db import session_scope, utcnow
+        from app.modules.tasks.models import Task as TaskModel
+
+        task = _task(self.project["id"], "Старая со сроком " + MARK)
+        client.delete(f"/api/projects/{self.project['id']}/tasks/{task['id']}")
+
+        def backdate(**delta):
+            with session_scope() as session:
+                row = session.get(TaskModel, task["id"])
+                row.deleted_at = utcnow() - timedelta(**delta)
+                session.flush()
+
+        backdate(days=10)
+        self.assertEqual(self._entry(task["id"])["days_left"], 20)
+        backdate(days=29, hours=12)
+        self.assertEqual(self._entry(task["id"])["days_left"], 1)
+        backdate(days=40)
+        self.assertEqual(self._entry(task["id"])["days_left"], 0)
+
+
+class TrashPurgeAllTest(unittest.TestCase):
+    """«Очистить всё» (патч P): все типы разом и окончательно."""
+
+    def setUp(self):
+        client.post("/api/auth/logout")
+        _login()
+        self.project = _project("Корзина всё " + MARK)
+
+    def test_purge_all_empties_trash(self):
+        task = _task(self.project["id"], "Всё задача " + MARK)
+        secret = _secret(self.project["id"], "Всё секрет " + MARK)
+        row = _rdp(self.project["id"], "Всё rdp " + MARK)
+        self.assertEqual(client.delete(f"/api/projects/{self.project['id']}/tasks/{task['id']}").status_code, 204)
+        self.assertEqual(client.delete(f"/api/projects/{self.project['id']}/secrets/{secret['id']}").status_code, 204)
+        self.assertEqual(client.delete(f"/api/projects/{self.project['id']}/rdp/{row['id']}").status_code, 204)
+
+        before = client.get("/api/trash").json()
+        titles = [item["title"] for group in before["groups"] for item in group["items"]]
+        self.assertIn("Всё задача " + MARK, titles)
+        self.assertIn("Всё секрет " + MARK, titles)
+        self.assertIn("Всё rdp " + MARK, titles)
+
+        response = client.delete("/api/trash")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertGreaterEqual(response.json()["purged"], 3)
+
+        after = client.get("/api/trash").json()
+        titles = [item["title"] for group in after["groups"] for item in group["items"]]
+        self.assertNotIn("Всё задача " + MARK, titles)
+        self.assertNotIn("Всё секрет " + MARK, titles)
+        self.assertNotIn("Всё rdp " + MARK, titles)
+        # Восстановить больше нельзя — записи вычищены окончательно.
+        self.assertEqual(client.post(f"/api/trash/tasks/{task['id']}/restore").status_code, 404)
+        self.assertEqual(client.post(f"/api/trash/secrets/{secret['id']}/restore").status_code, 404)
+        self.assertEqual(client.post(f"/api/trash/rdp/{row['id']}/restore").status_code, 404)
+
+    def test_purge_all_returns_count_shape(self):
+        response = client.delete("/api/trash")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response.json()["purged"], int)
 
 
 class TrashTaskTest(unittest.TestCase):

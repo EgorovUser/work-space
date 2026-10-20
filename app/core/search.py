@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.core import registry
 from app.core.auth import require_user
@@ -229,6 +229,33 @@ def _search_source(session, spec: dict, match: str, limit: int) -> list[dict]:
     return items
 
 
+def _attach_project_names(session, groups: list[dict]) -> None:
+    """Дописывает project_name каждому результату (патч P).
+
+    Палитра показывает проект прямо в строке результата — раньше имя
+    было видно только после перехода. Имена берём одним запросом по
+    множеству project_id всех групп; Import проектов — локальный,
+    чтобы core не тянул модули на старте (циклические импорты).
+    """
+    ids = sorted(
+        {
+            item["project_id"]
+            for group in groups
+            for item in group["items"]
+            if item.get("project_id") is not None
+        }
+    )
+    if not ids:
+        return
+    from app.modules.projects.models import Project
+
+    rows = session.execute(select(Project.id, Project.name).where(Project.id.in_(ids))).all()
+    names = {row_id: name for row_id, name in rows}
+    for group in groups:
+        for item in group["items"]:
+            item["project_name"] = names.get(item.get("project_id"), "")
+
+
 @router.get("/api/search")
 def search(q: str = "", limit: int = 5, types: str = "", user: User = Depends(require_user)) -> dict:
     """Глобальный поиск по содержимому. Слова объединяются как AND,
@@ -258,4 +285,5 @@ def search(q: str = "", limit: int = 5, types: str = "", user: User = Depends(re
                     continue
                 if items:
                     groups.append({"id": spec["id"], "label": spec["label"], "items": items})
+            _attach_project_names(session, groups)
     return {"query": q, "groups": groups}

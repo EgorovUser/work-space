@@ -1,8 +1,13 @@
 <template>
   <AppShell>
     <div class="page-head">
-      <h1>Корзина</h1>
-      <p class="muted">Удалённое хранится {{ retentionDays }} дней, потом чистится окончательно.</p>
+      <div>
+        <h1>Корзина</h1>
+        <p class="muted">Удалённое хранится {{ retentionDays }} дней, потом чистится окончательно.</p>
+      </div>
+      <button v-if="groups.length" class="btn danger" type="button" :disabled="busy === 'all'" @click="purgeAll">
+        Очистить всё
+      </button>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -23,6 +28,7 @@
             </div>
           </div>
           <div class="row-actions">
+            <span class="pill" :class="item.days_left <= 7 ? 'warn' : ''" :title="'Хранится ещё ' + item.days_left + ' дн.'">осталось {{ item.days_left }} дн.</span>
             <button class="btn secondary" type="button" :disabled="busy === group.id + '-' + item.id" @click="restore(group, item)">
               Восстановить
             </button>
@@ -46,7 +52,8 @@ import { useWhen } from "../composables/useWhen"
 
 // Корзина (патч N): мягко удалённые записи всех модулей одним экраном.
 // Восстановление возвращает запись в её модуль; «Удалить навсегда»
-// вычищает безвозвратно — с подтверждением.
+// вычищает безвозвратно — с подтверждением. Патч P: у каждой записи —
+// сколько дней осталось до автоочистки, и «Очистить всё» одним махом.
 export default {
   components: { AppShell, SkeletonList },
   setup() {
@@ -109,8 +116,23 @@ export default {
       }
     }
 
+    async function purgeAll() {
+      const total = groups.value.reduce((sum, group) => sum + group.items.length, 0)
+      if (!window.confirm("Очистить корзину целиком — " + total + " записей? Восстановить будет нельзя.")) return
+      busy.value = "all"
+      try {
+        const data = await api("/api/trash", { method: "DELETE" })
+        notice.show("Корзина очищена: " + (data.purged || 0) + " записей")
+      } catch (err) {
+        notice.show((err.message || "Ошибка") + " — обновите список")
+      } finally {
+        busy.value = ""
+        await load()
+      }
+    }
+
     onMounted(load)
-    return { groups, retentionDays, loading, error, busy, when, restore, purge }
+    return { groups, retentionDays, loading, error, busy, when, restore, purge, purgeAll }
   },
 }
 </script>

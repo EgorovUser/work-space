@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -59,6 +60,8 @@ def _kind(kind: str) -> str:
 
 @router.get("/api/trash")
 def list_trash(db: Session = Depends(get_db), user: User = Depends(require_user)) -> dict:
+    days = get_int("trash", "retention_days")
+    now = utcnow()
     groups = []
     names = {row.id: row.name for row in db.scalars(select(Project)).all()}
     for kind in _KINDS:
@@ -86,12 +89,24 @@ def list_trash(db: Session = Depends(get_db), user: User = Depends(require_user)
                         "project_name": names.get(row.project_id, ""),
                         "title": row.title if kind != "rdp" else row.name,
                         "deleted_at": row.deleted_at.isoformat(),
+                        # Сколько проживёт до очистки джобой (патч P).
+                        "days_left": _days_left(now, row.deleted_at, days),
                     }
                     for row in rows
                 ],
             }
         )
-    return {"groups": groups, "retention_days": get_int("trash", "retention_days")}
+    return {"groups": groups, "retention_days": days}
+
+
+def _days_left(now, deleted_at, retention: int) -> int:
+    """Дней до окончательной очистки, с округлением вверх.
+
+    Только что удалённая запись при retention 30 показывает 30; в
+    последний неполный день — 1; после истечения — 0 (джоба заберёт).
+    """
+    remaining = (deleted_at + timedelta(days=retention)) - now
+    return max(math.ceil(remaining.total_seconds() / 86400), 0)
 
 
 @router.post("/api/trash/{kind}/{item_id}/restore")
@@ -128,6 +143,30 @@ def purge_item(
     _dispatch_purge(db, kind, project_id, user.id, item_id)
     with log_scope("trash", "purge", user_id=user.id):
         logger.info("trash purged kind={} id={}", kind, item_id)
+
+
+@router.delete("/api/trash")
+def purge_all(db: Session = Depends(get_db), user: User = Depends(require_user)) -> dict:
+    """Очистить корзину целиком (патч P): все типы, окончательно.
+
+    Идёт теми же сервисами, что и одиночное удаление — события, счётчики
+    проектов и логи остаются консистентными. Потолок 2000 на тип — защита
+    от случайно огромной корзины; остаток дочистит фоновая джоба.
+    """
+    removed = 0
+    for kind in _KINDS:
+        if not registry.is_enabled(kind):
+            continue
+        model = _MODELS[kind]
+        rows = list(
+            db.scalars(select(model).where(model.deleted_at.is_not(None)).limit(2000)).all()
+        )
+        for row in rows:
+            _dispatch_purge(db, kind, row.project_id, user.id, row.id)
+            removed += 1
+    with log_scope("trash", "purge-all", user_id=user.id):
+        logger.info("trash purged all count={}", removed)
+    return {"purged": removed}
 
 
 def _dispatch_restore(session: Session, kind: str, project_id: int, user_id: int, item_id: int) -> dict:

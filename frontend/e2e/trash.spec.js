@@ -74,3 +74,29 @@ test("корзина в рельсе доступна с любого экран
   await expect(page).toHaveURL(/\/trash$/)
   await expect(page.getByRole("heading", { name: "Корзина", exact: true })).toBeVisible()
 })
+
+test("осталось N дней и «Очистить всё» вычищает корзину целиком", async ({ page }) => {
+  const mark = "дни" + Date.now()
+  const api = await apiLogin()
+  const project = await (await api.post("/api/projects", { data: { name: "Корзина сроки " + mark } })).json()
+  const first = await (await api.post(`/api/projects/${project.id}/tasks`, { data: { title: "Срочная к очистке " + mark } })).json()
+  const second = await (await api.post(`/api/projects/${project.id}/tasks`, { data: { title: "Вторая к очистке " + mark } })).json()
+  await api.delete(`/api/projects/${project.id}/tasks/${first.id}`)
+  await api.delete(`/api/projects/${project.id}/tasks/${second.id}`)
+
+  await login(page)
+  await page.goto("/trash")
+  // Патч P: у записи видно, сколько дней осталось до автоочистки.
+  const row = page.locator(".status-row", { hasText: "Срочная к очистке " + mark })
+  await expect(row.locator(".pill", { hasText: "осталось 30 дн." })).toBeVisible()
+
+  // «Очистить всё» — с подтверждением; корзина пустеет одним махом.
+  page.once("dialog", (dialog) => dialog.accept())
+  await page.getByRole("button", { name: "Очистить всё" }).click()
+  await expect(page.getByText("Корзина очищена:")).toBeVisible()
+  await expect(page.locator(".empty")).toBeVisible()
+  await expect(page.getByText("Срочная к очистке " + mark)).toHaveCount(0)
+  await expect(page.getByText("Вторая к очистке " + mark)).toHaveCount(0)
+  // Кнопка «Очистить всё» исчезает вместе с содержимым.
+  await expect(page.getByRole("button", { name: "Очистить всё" })).toHaveCount(0)
+})

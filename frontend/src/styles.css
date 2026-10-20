@@ -1309,6 +1309,11 @@ textarea.mono { min-height: 220px; }
 }
 .search-item:hover { background: var(--hover); }
 .search-item-title { color: var(--ink); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Патч P: строка результата — заголовок и проект рядом; проект справа,
+   не competing со сниппетом, обрезается с многоточием на узких экранах. */
+.search-item-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.search-item-head .search-item-title { flex: 1 1 auto; min-width: 0; }
+.search-item-proj { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 0.8rem; font-weight: 500; }
 .search-item-snip { color: var(--muted); font-size: 0.85rem; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .search-item-snip mark { background: var(--accent-soft); color: var(--accent-strong); border-radius: 3px; padding: 0 1px; }
 @media (max-width: 800px) {

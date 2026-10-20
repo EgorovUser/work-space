@@ -168,6 +168,28 @@ class SearchTest(unittest.TestCase):
         response = anonymous.get("/api/search", params={"q": "что угодно"})
         self.assertEqual(response.status_code, 401)
 
+    def test_results_carry_project_name(self):
+        # Патч P: палитра показывает проект у каждого результата — имя
+        # приходит сразу, а не после перехода по ссылке.
+        word = _word()
+        client.post(
+            f"/api/projects/{self.project_id}/tasks",
+            json={"title": f"Задача с проектом {word}"},
+        )
+        client.post(
+            f"/api/projects/{self.project_id}/documents",
+            files={"file": ("doc.txt", b"content", "text/plain")},
+            data={"title": f"Документ с проектом {word}", "note": ""},
+        )
+        payload = client.get("/api/search", params={"q": word}).json()
+        found = _group_ids(payload)
+        self.assertIn("tasks", found)
+        self.assertIn("documents", found)
+        for group in payload["groups"]:
+            for item in group["items"]:
+                if item.get("project_id") is not None:
+                    self.assertEqual(item["project_name"], "поиск-проект")
+
     def test_types_filter_limits_groups(self):
         # Палитра (патч N): фильтр по типам оставляет только выбранные
         # источники; неизвестные типы молча отбрасываются.
