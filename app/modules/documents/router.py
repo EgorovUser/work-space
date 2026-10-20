@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import require_user
 from app.core.bridge import register_dashboard, register_materialize, register_search
+from app.core.counters import register_project_counters
+from app.modules.documents.service import counters as counters_service
 from app.core.db import get_db
 from app.core.deps import require_project
 from app.core.models import User
@@ -122,6 +124,7 @@ def setup(app) -> None:
     service.ensure_parsers()
     register_defs(DEFS)
     events.register()
+    register_project_counters("documents", counters_service.project_counts)
     register_materialize("document", _materialize_document)
     register_dashboard("documents", service.dashboard_provider)
     register_search("documents", service.search_provider)

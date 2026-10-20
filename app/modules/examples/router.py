@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import require_user
 from app.core.bridge import register_materialize, register_search
+from app.core.counters import register_project_counters
+from app.modules.examples.service import counters as counters_service
 from app.core.db import get_db
 from app.core.deps import require_project
 from app.core.models import User
@@ -140,6 +142,7 @@ def _materialize_example(session, project_id: int, user_id: int, upload) -> dict
 
 def setup(app) -> None:
     register_defs(DEFS)
+    register_project_counters("examples", counters_service.project_counts)
     register_materialize("example", _materialize_example)
     register_search("examples", service.search_provider)
     app.include_router(router)

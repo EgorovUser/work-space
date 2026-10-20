@@ -23,6 +23,24 @@ def list_project_ids(session: Session) -> list[int]:
     return list(session.scalars(select(Project.id)).all())
 
 
+def project_counts(session: Session) -> dict[int, dict]:
+    """Счётчик таба «Заметки» (патч AA): заметки по проектам, GROUP BY.
+
+    Провайдер для хаба ``app/core/counters.py``. Заметки не архивируются
+    и не удаляются в корзину — считаем все; outer join от проектов, чтобы
+    каждый проект попадал в ответ даже без заметок.
+    """
+    rows = session.execute(
+        select(Project.id, func.count(ProjectNote.id))
+        .outerjoin(ProjectNote, ProjectNote.project_id == Project.id)
+        .group_by(Project.id)
+    ).all()
+    return {int(project_id): {"notes": int(count or 0)} for project_id, count in rows}
+
+
+
+
+
 def touch_project(session: Session, project_id: int) -> None:
     project = session.get(Project, project_id)
     if project is None:

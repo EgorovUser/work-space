@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_user
+from app.core.counters import register_project_counters
 from app.core.db import get_db
 from app.core.deps import require_project, set_project_loader
 from app.core.models import User
@@ -159,6 +160,7 @@ def search(
 
 def setup(app) -> None:
     register_defs(DEFS)
+    register_project_counters("projects", service.project_counts)
     set_project_loader(service.load_project)
     events.register()
     app.include_router(router)

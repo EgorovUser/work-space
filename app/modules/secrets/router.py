@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import require_user
 from app.core.bridge import register_search
+from app.core.counters import register_global_counters, register_project_counters
+from app.modules.secrets.service import counters as counters_service
 from app.core.db import get_db
 from app.core.deps import require_project
 from app.core.models import User
@@ -156,5 +158,7 @@ def restore_revision(
 
 def setup(app) -> None:
     register_defs(DEFS)
+    register_global_counters("secrets", counters_service.global_counts)
+    register_project_counters("secrets", counters_service.project_counts)
     register_search("secrets", service.search_provider)
     app.include_router(router)

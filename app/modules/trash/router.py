@@ -13,7 +13,7 @@ import math
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import registry
@@ -21,6 +21,7 @@ from app.core.auth import require_user
 from app.core.db import get_db, session_scope, utcnow
 from app.core.logging import log_scope, logger
 from app.core.models import User
+from app.core.counters import register_global_counters
 from app.core.scheduler import register_job
 from app.core.settings_store import get_int, register_defs
 from app.modules.documents.models import Document
@@ -56,6 +57,24 @@ def _kind(kind: str) -> str:
     if kind not in _KINDS:
         raise HTTPException(status_code=404, detail="Такого типа в корзине нет")
     return kind
+
+
+def global_counts(session: Session, user_id: int | None = None) -> dict:
+    """Счётчик рельсы «Корзина» (патч AA): сколько мягко удалённого лежит внутри.
+
+    Провайдер для хаба ``app/core/counters.py``. Учитываются только
+    включённые модули — как и в самой витрине корзины.
+    """
+    total = 0
+    for kind in _KINDS:
+        if not registry.is_enabled(kind):
+            continue
+        model = _MODELS[kind]
+        value = session.scalar(
+            select(func.count()).select_from(model).where(model.deleted_at.is_not(None))
+        )
+        total += int(value or 0)
+    return {"trash_total": total}
 
 
 @router.get("/api/trash")
@@ -242,6 +261,7 @@ def purge_expired() -> None:
 
 def setup(app) -> None:
     register_defs(DEFS)
+    register_global_counters("trash", global_counts)
     register_job(
         "trash.purge",
         purge_expired,

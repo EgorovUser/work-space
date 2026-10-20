@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.core.db import utcnow
@@ -181,6 +181,27 @@ def connection_file(session: Session, project_id: int, user_id: int, rdp_id: int
     with log_scope("rdp", "file", user_id=user_id):
         logger.info("rdp file built id={} host={}", row.id, row.host)
     return {"filename": _filename(row.name), "content": "\r\n".join(lines) + "\r\n"}
+
+
+def project_counts(session: Session) -> dict[int, dict]:
+    """Счётчик таба «RDP» (патч AA): активные подключения по проектам.
+
+    Провайдер для хаба ``app/core/counters.py`` — один GROUP BY на все
+    проекты от таблицы проектов (outer join): в ответе каждый проект,
+    даже полностью пустой.
+    """
+    from app.modules.projects.models import Project
+
+    active = case(
+        (RdpConnection.archived.is_(False) & RdpConnection.deleted_at.is_(None), 1),
+        else_=0,
+    )
+    rows = session.execute(
+        select(Project.id, func.sum(active))
+        .outerjoin(RdpConnection, RdpConnection.project_id == Project.id)
+        .group_by(Project.id)
+    ).all()
+    return {int(project_id): {"rdp": int(count or 0)} for project_id, count in rows}
 
 
 def search_provider(session: Session, project_id: int, user_id: int | None, query: str, limit: int) -> list[dict]:

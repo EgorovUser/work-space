@@ -16,6 +16,8 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.core.bridge import register_card, register_dashboard, register_inbox, register_search
+from app.core.counters import register_global_counters, register_project_counters
+from app.modules.mail.service import counters as counters_service
 from app.core.scheduler import register_job
 from app.core.settings_store import register_defs
 from app.modules.mail import service
@@ -31,6 +33,8 @@ router.include_router(project_routes.router)
 def setup(app) -> None:
     service.ensure_schema()
     register_defs(DEFS)
+    register_global_counters("mail", counters_service.global_counts)
+    register_project_counters("mail", counters_service.project_counts)
     register_card("mail", service.card_provider)
     register_inbox("mail", service.inbox_provider)
     register_inbox("events", service.events_today)

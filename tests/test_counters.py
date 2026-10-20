@@ -75,6 +75,20 @@ class CountersApiTest(unittest.TestCase):
     def test_requires_login(self):
         self.assertEqual(client.get("/api/counters").status_code, 401)
 
+    def test_provider_registry_filled(self):
+        # Все модули зарегистрировали своих провайдеров (патч AA): забыть
+        # регистрацию — и бейдж молча опустеет, поэтому проверяем реестр.
+        from app.core import counters
+
+        self.assertEqual(
+            sorted(counters._global_providers.keys()),
+            ["mail", "notifications", "secrets", "trash"],
+        )
+        self.assertEqual(
+            sorted(counters._project_providers.keys()),
+            ["documents", "examples", "mail", "projects", "rdp", "secrets"],
+        )
+
     def test_global_block_present(self):
         _login()
         response = client.get("/api/counters")

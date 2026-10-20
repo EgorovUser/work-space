@@ -1,4 +1,4 @@
-"""Хаб счётчиков с кэшем (патч T).
+"""Хаб счётчиков с кешом (патч T; провайдер-реестр — патч AA).
 
 Одна точка, где живут числа для бейджей интерфейса: непрочитанные письма
 и уведомления, корзина, секреты — глобально; документы, примеры, секреты,
@@ -6,21 +6,29 @@ RDP, письма и заметки — по проекту. Раньше эти
 SSE-канал сам по себе, колокольчик — своим опросом, карточка проекта —
 третьим путём. Теперь источник один.
 
+Кто что считает — решают сами модули: ядро хранит только реестр
+провайдеров (``register_global_counters`` / ``register_project_counters``), регистрация
+идёт в ``setup()`` роутера модуля. Ядро не импортирует модели модулей,
+модули не знают друг о друге — добавить числа нового раздела значит
+написать один GROUP BY и одну строчку регистрации.
+
 Как это экономит запросы (не плодим их с каждой новой фичей):
 
-- в процессе живёт кэш с TTL (``core.counters.ttl_seconds``, по умолчанию
+- в процессе живёт кеш с TTL (``core.counters.ttl_seconds``, по умолчанию
   15 секунд): сколько бы вкладок ни спрашивало ``/api/counters``, к базе
-  идёт один запрос на окно, остальные читают кэш;
-- каждая мутация сбрасывает кэш сама: проектные изменения проходят через
+  идёт один запрос на окно, остальные читают кеш;
+- проектные провайдеры считают GROUP BY по всем проектам сразу — один
+  запрос на модуль, а не по запросу на каждый таб;
+- каждая мутация сбрасывает кеш сама: проектные изменения проходят через
   ``touch_project()``, письма и уведомления публикуют сигналы шины — рядом
   стоит ``counters.invalidate()``. Числа не висят устаревшими после
   действий пользователя, TTL страхует только от правок мимо API;
 - SSE-канал после сигнала шины пересчитывает принудительно (force=True)
-  и записывает результат в кэш: открытые вкладки получают свежие числа
+  и записывает результат в кеш: открытые вкладки получают свежие числа
   сразу, а HTTP-запросы следом читают уже готовое.
 
-Упавший модуль не роняет остальные: как и в SSE, каждый блок считается
-в своём try/except — не посчиталось, поля просто нет.
+Упавший провайдер не роняет остальные: каждый блок считается в своём
+try/except — не посчиталось, поля просто нет.
 """
 
 from __future__ import annotations
@@ -29,7 +37,6 @@ import threading
 import time
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
 
 from app.core import db as db_module
 from app.core.auth import require_user
@@ -40,9 +47,27 @@ from app.core.models import User
 router = APIRouter()
 
 _lock = threading.Lock()
-# user_id / project_id -> (monotonic-метка, снимок)
+# Реестр: имя модуля -> провайдер. Глобальный: fn(session, user_id) -> dict
+# (плоские числа). Проектный: fn(session) -> dict[project_id, dict].
+_global_providers: dict[str, object] = {}
+_project_providers: dict[str, object] = {}
+
+# user_id -> (monotonic-метка, снимок)
 _user_cache: dict[int, tuple[float, dict]] = {}
-_project_cache: dict[int, tuple[float, dict]] = {}
+# Общий снимок всех проектов: (monotonic-метка, {project_id: {поля}}).
+# Проектные числа считаются GROUP BY по всем проектам сразу, поэтому
+# и кеш один на все: пересчёт любого проекта стоит столько же.
+_projects_cache: tuple[float, dict[int, dict]] | None = None
+
+
+def register_global_counters(module: str, handler) -> None:
+    """Зарегистрировать глобальный провайдер: ``fn(session, user_id) -> dict``."""
+    _global_providers[module] = handler
+
+
+def register_project_counters(module: str, handler) -> None:
+    """Зарегистрировать проектный провайдер: ``fn(session) -> dict[pid, dict]``."""
+    _project_providers[module] = handler
 
 
 def ttl_seconds() -> float:
@@ -53,31 +78,29 @@ def ttl_seconds() -> float:
 
 
 def invalidate(project_id: int | None = None) -> None:
-    """Сброс кэша. Вызывается из точек мутаций.
+    """Сброс кеша. Вызывается из точек мутаций.
 
-    ``project_id=None`` — всё; конкретный проект — его счётчики плюс
-    глобальные (корзина и секреты меняются проектными мутациями, поэтому
-    пользовательский кэш сбрасывается целиком).
+    ``project_id`` здесь для смысла, а не для адресности: проектные
+    мутации меняют и глобальные числа (корзина, секреты), а проектный
+    снимок общий — GROUP BY по всем проектам. Так что сбрасывается всё;
+    пересчёт дешёвый, а свежесть гарантирована.
 
     Заодно — тихий сигнал шины ``counters.changed``: открытые SSE-каналы
     пересчитают глобальные числа сами (тип наружу не пересылается, он
     только будит генератор — как heartbeat, но сразу после действия).
     """
+    global _projects_cache
     with _lock:
-        if project_id is None:
-            _user_cache.clear()
-            _project_cache.clear()
-        else:
-            _project_cache.pop(project_id, None)
-            _user_cache.clear()
+        _user_cache.clear()
+        _projects_cache = None
     _bus_publish("counters.changed")
 
 
 def user_state(user_id: int, force: bool = False) -> dict:
     """Глобальные числа для пользователя: почта, уведомления, корзина, секреты.
 
-    ``force=True`` — пересчитать мимо кэша (SSE после сигнала шины) и
-    записать результат в кэш.
+    ``force=True`` — пересчитать мимо кеша (SSE после сигнала шины) и
+    записать результат в кеш.
     """
     now = time.monotonic()
     with _lock:
@@ -97,15 +120,16 @@ def project_counts(project_id: int, force: bool = False) -> dict:
     (не в архиве, не в корзине). «Почта» — непрочитанные, подходящие под
     правила проекта, как в карточке проекта.
     """
+    global _projects_cache
     now = time.monotonic()
     with _lock:
-        hit = _project_cache.get(project_id)
+        hit = _projects_cache
     if not force and hit is not None and now - hit[0] < ttl_seconds():
-        return hit[1]
-    counts = _compute_project_counts(project_id)
+        return hit[1].get(project_id, {})
+    snapshot = _compute_projects()
     with _lock:
-        _project_cache[project_id] = (time.monotonic(), counts)
-    return counts
+        _projects_cache = (time.monotonic(), snapshot)
+    return snapshot.get(project_id, {})
 
 
 @router.get("/api/counters")
@@ -122,116 +146,30 @@ def counters_state(
 
 def _compute_user_state(user_id: int) -> dict:
     state: dict = {}
-    try:
-        from app.modules.mail.models import MailMessage
-
-        with db_module.SessionLocal() as session:
-            unread = session.scalar(
-                select(func.count())
-                .select_from(MailMessage)
-                .where(MailMessage.read.is_(False), MailMessage.archived.is_(False))
-            )
-        state["mail_unread"] = int(unread or 0)
-    except Exception:
-        logger.opt(exception=True).warning("counters mail unread failed")
-    try:
-        from app.modules.notifications.models import Notification
-
-        with db_module.SessionLocal() as session:
-            unread = session.scalar(
-                select(func.count())
-                .select_from(Notification)
-                .where(
-                    Notification.user_id == user_id,
-                    Notification.show_browser.is_(True),
-                    Notification.read.is_(False),
-                )
-            )
-        state["notifications_unread"] = int(unread or 0)
-    except Exception:
-        logger.opt(exception=True).warning("counters notifications failed")
-    try:
-        from app.modules.documents.models import Document
-        from app.modules.rdp.models import RdpConnection
-        from app.modules.secrets.models import Secret
-        from app.modules.tasks.models import Task
-
-        with db_module.SessionLocal() as session:
-            total = 0
-            for model in (Task, Document, Secret, RdpConnection):
-                total += int(
-                    session.scalar(
-                        select(func.count()).select_from(model).where(model.deleted_at.is_not(None))
-                    )
-                    or 0
-                )
-        state["trash_total"] = total
-    except Exception:
-        logger.opt(exception=True).warning("counters trash failed")
-    try:
-        from app.modules.secrets.models import Secret
-
-        with db_module.SessionLocal() as session:
-            active = session.scalar(
-                select(func.count())
-                .select_from(Secret)
-                .where(Secret.archived.is_(False), Secret.deleted_at.is_(None))
-            )
-        state["secrets_total"] = int(active or 0)
-    except Exception:
-        logger.opt(exception=True).warning("counters secrets failed")
+    for module, handler in list(_global_providers.items()):
+        try:
+            with db_module.SessionLocal() as session:
+                piece = handler(session, user_id) or {}
+        except Exception:
+            logger.opt(exception=True).warning("counters provider failed module={}", module)
+            continue
+        if isinstance(piece, dict):
+            state.update(piece)
     return state
 
 
-def _count(session, model, *conditions) -> int:
-    return int(session.scalar(select(func.count()).select_from(model).where(*conditions)) or 0)
-
-
-def _compute_project_counts(project_id: int) -> dict:
-    counts: dict = {}
-    try:
-        from app.modules.documents.models import Document
-        from app.modules.examples.models import Example
-        from app.modules.projects.models import ProjectNote
-        from app.modules.rdp.models import RdpConnection
-        from app.modules.secrets.models import Secret
-
-        with db_module.SessionLocal() as session:
-            counts["documents"] = _count(
-                session,
-                Document,
-                Document.project_id == project_id,
-                Document.archived.is_(False),
-                Document.deleted_at.is_(None),
-            )
-            counts["examples"] = _count(
-                session,
-                Example,
-                Example.project_id == project_id,
-                Example.archived.is_(False),
-            )
-            counts["secrets"] = _count(
-                session,
-                Secret,
-                Secret.project_id == project_id,
-                Secret.archived.is_(False),
-                Secret.deleted_at.is_(None),
-            )
-            counts["rdp"] = _count(
-                session,
-                RdpConnection,
-                RdpConnection.project_id == project_id,
-                RdpConnection.archived.is_(False),
-                RdpConnection.deleted_at.is_(None),
-            )
-            counts["notes"] = _count(session, ProjectNote, ProjectNote.project_id == project_id)
-    except Exception:
-        logger.opt(exception=True).warning("counters project block failed")
-    try:
-        from app.modules.mail.service.providers import card_provider
-
-        with db_module.SessionLocal() as session:
-            counts["mail"] = int(card_provider(session, project_id, None).get("new_mail") or 0)
-    except Exception:
-        logger.opt(exception=True).warning("counters project mail failed")
-    return counts
+def _compute_projects() -> dict[int, dict]:
+    merged: dict[int, dict] = {}
+    for module, handler in list(_project_providers.items()):
+        try:
+            with db_module.SessionLocal() as session:
+                counts = handler(session) or {}
+        except Exception:
+            logger.opt(exception=True).warning("counters project provider failed module={}", module)
+            continue
+        if not isinstance(counts, dict):
+            continue
+        for project_id, fields in counts.items():
+            if isinstance(fields, dict):
+                merged.setdefault(int(project_id), {}).update(fields)
+    return merged

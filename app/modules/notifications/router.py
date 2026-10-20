@@ -9,7 +9,9 @@ from app.core.events_catalog import ALL_EVENTS
 from app.core.models import User
 from app.core.outbox import subscribe
 from app.core.bridge import register_home_block
+from app.core.counters import register_global_counters
 from app.core.scheduler import register_job
+from app.modules.notifications.service import counters as counters_service
 from app.core.settings_store import register_defs
 from app.modules.notifications import service
 from app.modules.notifications.settings import DEFS
@@ -57,6 +59,7 @@ def mark_read(
 
 def setup(app) -> None:
     register_defs(DEFS)
+    register_global_counters("notifications", counters_service.global_counts)
     for event_type in ALL_EVENTS:
         subscribe(event_type, service.handle)
     register_home_block("notifications", service.home_items)
