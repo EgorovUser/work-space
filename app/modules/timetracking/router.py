@@ -12,6 +12,7 @@ from app.core.models import User
 from app.core.scheduler import register_job
 from app.core.settings_store import register_defs
 from app.modules.projects.models import Project
+from app.modules.timetracking import overview as overview_service
 from app.modules.timetracking import service
 from app.modules.timetracking.settings import DEFS
 
@@ -44,6 +45,15 @@ class EntryPatch(BaseModel):
     started_at: str | None = None
     ended_at: str | None = None
     minutes: int | None = None
+
+
+@router.get("/api/time/overview")
+def time_overview(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+) -> dict:
+    """Сводка по всем проектам сразу (патч S): текущая и прошлая недели."""
+    return overview_service.overview(db)
 
 
 @router.get("/api/projects/{project_id}/time")

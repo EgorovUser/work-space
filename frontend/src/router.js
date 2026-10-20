@@ -12,6 +12,8 @@ const router = createRouter({
     { path: "/mail", component: () => import("./views/Mailbox.vue"), meta: { auth: true } },
     // Письмо открывается прямо в «Почте»: список слева, читалка справа.
     { path: "/mail/:messageId", component: () => import("./views/Mailbox.vue"), meta: { auth: true } },
+    // Учёт времени по всем проектам: две недели рядом (патч S).
+    { path: "/time", component: () => import("./views/TimeGlobal.vue"), meta: { auth: true } },
     // Общий список секретов всех проектов — свой раздел рядом с почтой.
     { path: "/secrets", component: () => import("./views/SecretsGlobal.vue"), meta: { auth: true } },
     // Корзина (патч N): мягко удалённые задачи/документы/секреты/RDP.

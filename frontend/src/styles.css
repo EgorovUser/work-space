@@ -688,6 +688,29 @@ input[type="color"] { width: 72px; height: 36px; padding: 2px; }
 
 .today-date { text-transform: capitalize; }
 
+/* Сводка времени по всем проектам (патч S): две карточки недель рядом,
+   выбранная подсвечена; на телефоне складываются в столбец. */
+.week-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.week-card { margin: 0; }
+
+.week-card.active { border-color: var(--accent); }
+
+.week-range { margin: 0; }
+
+.week-hours {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 6px 0;
+}
+
+
 .kanban-cols {
   display: flex;
   gap: 10px;
@@ -1188,7 +1211,7 @@ textarea.mono { min-height: 220px; }
   .project-wrap.board-page { padding-bottom: 12px; }
   .kanban-col { flex: 1 0 240px; min-width: 240px; width: auto; }
   .add-col { flex: 0 0 240px; width: 240px; min-width: 240px; }
-  .home-grid, .today-grid, .settings-grid, .split, .board-fill-grid { grid-template-columns: 1fr; }
+  .home-grid, .today-grid, .settings-grid, .split, .board-fill-grid, .week-grid { grid-template-columns: 1fr; }
   .home-grid > :first-child, .today-grid > :first-child, .split > .card:has(.chart-box), .board-fill-grid > .card.wide { grid-column: auto; }
   .compact-grid { grid-template-columns: 1fr 1fr; }
   .project-tabs {

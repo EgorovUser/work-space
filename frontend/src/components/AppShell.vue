@@ -6,6 +6,7 @@
         <router-link to="/">Сегодня</router-link>
         <router-link to="/projects">Проекты</router-link>
         <router-link to="/mail">Почта<span v-if="mailBadge" class="rail-badge">{{ mailBadge }}</span></router-link>
+        <router-link to="/time">Время</router-link>
         <router-link to="/secrets">Секреты</router-link>
         <router-link to="/trash">Корзина</router-link>
         <router-link to="/notifications">Уведомления</router-link>
@@ -74,6 +75,7 @@ export default {
       if (route.path === "/") return "Сегодня"
       if (route.path.startsWith("/projects")) return "Проекты"
       if (route.path.startsWith("/mail")) return "Почта"
+      if (route.path.startsWith("/time")) return "Учёт времени"
       if (route.path.startsWith("/secrets")) return "Секреты"
       if (route.path.startsWith("/trash")) return "Корзина"
       if (route.path.startsWith("/notifications")) return "Уведомления"
