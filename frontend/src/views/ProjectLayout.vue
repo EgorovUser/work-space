@@ -2,14 +2,20 @@
   <AppShell bare>
     <div class="project-wrap" :class="{ 'board-page': isBoard }">
       <nav v-if="project" class="project-tabs" aria-label="Разделы проекта">
-        <router-link
-          v-for="link in links"
-          :key="link.to"
-          :to="link.to"
-          :class="{ 'router-link-active': link.exact ? route.path === link.to : route.path.startsWith(link.to + '/') }"
-        >
-          {{ link.label }}
-        </router-link>
+        <!-- Свои <a> вместо дефолтных router-link: vue-router считает ссылку
+             на индекс-маршрут (/projects/N) активной на ЛЮБОМ дочернем
+             разделе — и «Доска» подсвечивалась рядом с текущей вкладкой.
+             Активность считаем сами (isTabActive). -->
+        <template v-for="link in links" :key="link.to">
+          <router-link :to="link.to" custom v-slot="{ href, navigate }">
+            <a
+              :href="href"
+              :class="{ 'router-link-active': isTabActive(link) }"
+              :aria-current="isTabActive(link) ? 'page' : null"
+              @click="navigate"
+            >{{ link.label }}</a>
+          </router-link>
+        </template>
       </nav>
       <header v-if="project && (project.description || project.archived)" class="project-bar">
         <p v-if="project.description" class="muted clip">{{ project.description }}</p>
@@ -63,6 +69,16 @@ export default {
       ]
     })
 
+    // «Доска» горит только на самой доске — и на страницах её задач
+    // (/tasks/:id открываются с доски). Остальные разделы — на своём корне
+    // и на подстраницах: документ, письмо, секрет.
+    function isTabActive(link) {
+      if (link.exact) {
+        return route.path === link.to || route.path.startsWith(link.to + "/tasks/")
+      }
+      return route.path === link.to || route.path.startsWith(link.to + "/")
+    }
+
     async function load() {
       error.value = ""
       unavailable.value = false
@@ -82,7 +98,7 @@ export default {
     watch(projectId, load)
     onMounted(load)
     onBeforeUnmount(() => chrome.clear())
-    return { route, project, error, unavailable, links, load, isBoard }
+    return { route, project, error, unavailable, links, load, isBoard, isTabActive }
   },
 }
 </script>

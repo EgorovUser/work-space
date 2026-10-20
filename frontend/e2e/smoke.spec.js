@@ -61,6 +61,10 @@ test("разделы проекта переключаются горизонт�
   await tabs.locator("a", { hasText: "Документы" }).click()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/documents$`))
   await expect(tabs.locator("a", { hasText: "Документы" })).toHaveClass(/router-link-active/)
+  // «Доска» — индекс-маршрут: раньше vue-router подсвечивал её
+  // (router-link-active) на любом дочернем разделе — вместе с текущей
+  // вкладкой. Теперь горит только один таб.
+  await expect(tabs.locator("a", { hasText: "Доска" })).not.toHaveClass(/router-link-active/)
 })
 
 test("глобальный поиск находит задачу и ведёт на неё", async ({ page }) => {
@@ -74,12 +78,25 @@ test("глобальный поиск находит задачу и ведёт 
   })
 
   await login(page)
+  // Поле поиска занимает всю ширину контейнера (регрессия: input[type=search]
+  // не попадал в базовые стили полей и оставался узким, ~20 символов).
+  // Шапка дозагружает заголовок — раскладка ширин дышит, поэтому опрашиваем,
+  // а не мерим один раз.
+  await expect
+    .poll(async () => {
+      const fieldBox = await page.locator(".topbar-search input").boundingBox()
+      const wrapBox = await page.locator(".topbar-search").boundingBox()
+      return wrapBox.width - fieldBox.width
+    })
+    .toBeLessThan(2)
   await page.getByPlaceholder("Поиск: задачи, письма, заметки…", { exact: false }).fill(word)
   const group = page.locator(".search-group", { hasText: "Задачи" })
   const hit = group.locator(".search-item-title", { hasText: `Задача ${word}` })
   await expect(hit).toBeVisible()
   await hit.click()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/tasks/\\d+`))
+  // Страница задачи открывается с доски — вкладка «Доска» остаётся подсвеченной.
+  await expect(page.locator(".project-tabs a", { hasText: "Доска" })).toHaveClass(/router-link-active/)
 })
 
 test("тёмная тема переключается и переживает перезагрузку", async ({ page }) => {

@@ -1,5 +1,5 @@
 <template>
-  <div class="topbar-search" ref="root">
+  <div class="topbar-search" :class="{ 'search-idle': !query }" ref="root">
     <input
       ref="input"
       v-model="query"

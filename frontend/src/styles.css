@@ -367,6 +367,7 @@ input[type="password"],
 input[type="number"],
 input[type="date"],
 input[type="datetime-local"],
+input[type="search"],
 textarea,
 select {
   width: 100%;
@@ -1216,7 +1217,13 @@ textarea.mono { min-height: 220px; }
 /* Строка поиска забирает свободную ширину шапки и при фокусе (или открытом
    выпадающем списке) расширяется ещё сильнее — длинные запросы видны целиком. */
 .topbar-search:focus-within { max-width: 920px; }
-.topbar-search input { padding: 8px 14px; border-radius: 8px; background: var(--field); }
+/* Поле растягивается на весь контейнер: без width:100% оно оставалось
+   узким (браузерный размер по умолчанию ~20 символов) — заметно шире
+   свободного места в шапке. Пустое поле хранит справа место под бейдж
+   «Ctrl K», чтобы плейсхолдер не забегал под него (имя search-idle не
+   занимает: .search-empty уже занят пустым состоянием палитры). */
+.topbar-search input { width: 100%; padding: 8px 14px; border-radius: 8px; background: var(--field); }
+.topbar-search.search-idle input { padding-right: 68px; }
 .search-drop {
   position: absolute;
   top: calc(100% + 6px);
@@ -1289,6 +1296,8 @@ textarea.mono { min-height: 220px; }
 @media (max-width: 800px) {
   .search-kbd { display: none; }
   .search-hints { display: none; }
+  /* Бейджа на телефоне нет — отступ под него не нужен. */
+  .topbar-search.search-idle input { padding-right: 14px; }
 }
 .search-group + .search-group { margin-top: 4px; }
 .search-group-label {
