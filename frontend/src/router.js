@@ -31,6 +31,10 @@ const router = createRouter({
         { path: "settings", component: () => import("./views/ProjectSettings.vue") },
       ],
     },
+    // Неизвестный путь раньше рендерил белый экран: нет совпадений — нет
+    // компонентов. Уводим на главный экран (анонима гвард сам отправит
+    // на логин).
+    { path: "/:pathMatch(.*)*", redirect: "/" },
   ],
 })
 

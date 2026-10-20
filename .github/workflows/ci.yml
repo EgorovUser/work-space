@@ -45,3 +45,38 @@ jobs:
 
       - name: Тесты
         run: npm test
+
+  e2e:
+    name: Дымовые e2e (Playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Установка зависимостей бэкенда
+        run: pip install -r ../requirements.txt
+
+      - name: Установка зависимостей фронтенда
+        run: npm ci
+
+      - name: Браузер Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Дымовые тесты
+        run: npm run test:e2e
+        env:
+          # В CI питон из setup-python, а не из .venv репозитория.
+          E2E_PYTHON: python
