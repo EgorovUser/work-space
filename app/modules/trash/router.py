@@ -122,6 +122,11 @@ def restore_item(
     if row is None or row.deleted_at is None:
         raise HTTPException(status_code=404, detail="Запись не найдена в корзине")
     restored = _dispatch_restore(db, kind, row.project_id, user.id, item_id)
+    # Коммитим до ответа: FastAPI разматывает yield-зависимости ПОСЛЕ отправки
+    # ответа, и мгновенный перезапрос списка от фронта успевал увидеть ещё
+    # не закоммиченное состояние — восстановленная запись выглядела
+    # пропавшей (та же гонка, что чинили в import_raw почты).
+    db.commit()
     with log_scope("trash", "restore", user_id=user.id):
         logger.info("trash restored kind={} id={}", kind, item_id)
     return {"kind": kind, "item": restored}
@@ -141,6 +146,9 @@ def purge_item(
         raise HTTPException(status_code=404, detail="Запись не найдена в корзине")
     project_id = row.project_id
     _dispatch_purge(db, kind, project_id, user.id, item_id)
+    # Коммит до ответа — см. restore_item: перезапрос корзины не должен
+    # видеть ещё не закоммиченное удаление.
+    db.commit()
     with log_scope("trash", "purge", user_id=user.id):
         logger.info("trash purged kind={} id={}", kind, item_id)
 
@@ -164,6 +172,9 @@ def purge_all(db: Session = Depends(get_db), user: User = Depends(require_user))
         for row in rows:
             _dispatch_purge(db, kind, row.project_id, user.id, row.id)
             removed += 1
+    # Коммит до ответа — см. restore_item: счётчик корзины и повторный
+    # запрос списка должны видеть уже очищенную корзину.
+    db.commit()
     with log_scope("trash", "purge-all", user_id=user.id):
         logger.info("trash purged all count={}", removed)
     return {"purged": removed}
