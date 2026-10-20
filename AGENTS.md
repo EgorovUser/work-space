@@ -24,13 +24,19 @@
   Pinia, свой CSS. Прокси `/api` и `/healthz` на порт 8000. «Почта» —
   master-detail: список и читалка рядом (`views/Mailbox.vue` + компонент
   `components/MailReader.vue`), выбранное письмо живёт в маршруте `/mail/:id`.
+  «Задачи» проекта — доска или календарь (`components/TaskBoard.vue` /
+  `components/TaskCalendar.vue`, вид в URL: `?view=calendar`). Повторяющиеся
+  задачи (daily/weekly/monthly/yearly, «каждые N», граница «до даты»)
+  при закрытии создают следующее вхождение — логика в
+  `app/modules/tasks/service/recurrence.py`, событие ленты `recur`, уведомление
+  `task.recurred`.
 - **Миграции** — Alembic (`alembic/versions/`). `0001` — baseline-заглушка
   (схема = `create_all`); дальше — реальные миграции. Новые изменения моделей
   оформлять миграцией, а не правкой `create_all`.
-- **Тесты** — `tests/` (unittest, 59 проверок; запускаются на временной базе)
-  и `frontend/e2e/` (Playwright против настоящего uvicorn, 9 сценариев:
+- **Тесты** — `tests/` (unittest, 62 проверки; запускаются на временной базе)
+  и `frontend/e2e/` (Playwright против настоящего uvicorn, 11 сценариев:
   `cd frontend && npm run test:e2e`, нужен собранный `dist`). Юнит-тесты
-  фронтенда — `cd frontend && npm test` (27 проверок, node --test).
+  фронтенда — `cd frontend && npm test` (33 проверки, node --test).
 - **Скрипты** — `scripts/backup.sh` (бэкап SQLite через `.backup` + `data/files`
   + `.env`; запускается на хосте, не в контейнере).
 

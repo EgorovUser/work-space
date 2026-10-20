@@ -11,6 +11,7 @@ CHECKLIST = "checklist"
 DEADLINE = "deadline"
 ATTACHMENT = "attachment"
 UPDATED = "updated"
+RECUR = "recur"
 
 
 def register() -> None:

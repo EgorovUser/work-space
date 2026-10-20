@@ -2,9 +2,28 @@
   <div class="board-stage" :class="{ scroll: tab !== 'tasks' }">
     <Tabs v-model="tab" :tabs="pageTabs" />
 
-    <!-- v-show, а не v-if: доска не размонтируется при переключении вкладки,
-         черновики в композерах и скролл колонок переживают уход и возврат. -->
-    <TaskBoard v-show="tab === 'tasks'" :project="project" />
+    <template v-if="tab === 'tasks'">
+      <!-- Доска или календарь — один экран задач. Выбор живёт в URL
+           (?view=calendar), чтобы ссылкой можно было поделиться. -->
+      <div class="view-switch" role="group" aria-label="Вид задач">
+        <button
+          v-for="option in VIEWS"
+          :key="option.id"
+          class="view-btn"
+          type="button"
+          :class="{ active: view === option.id }"
+          :aria-pressed="view === option.id"
+          @click="setView(option.id)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+
+      <!-- v-show, а не v-if: доска не размонтируется при переключении вида,
+           черновики в композерах и скролл колонок переживают уход и возврат. -->
+      <TaskBoard v-show="view === 'board'" :project="project" />
+      <TaskCalendar v-show="view === 'calendar'" :project="project" />
+    </template>
 
     <div v-if="tab === 'summary'" class="board-fill">
       <p v-if="error" class="error">{{ error }}</p>
@@ -95,9 +114,11 @@
 
 <script>
 import { computed, ref, watch } from "vue"
+import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
 import { useWhen } from "../composables/useWhen"
 import TaskBoard from "../components/TaskBoard.vue"
+import TaskCalendar from "../components/TaskCalendar.vue"
 import TrendChart from "../components/TrendChart.vue"
 import ModuleNote from "../components/ModuleNote.vue"
 import Tabs from "../components/Tabs.vue"
@@ -110,12 +131,19 @@ const LABELS = [
   ["secrets", "Секреты"],
 ]
 
+const VIEWS = [
+  { id: "board", label: "Доска" },
+  { id: "calendar", label: "Календарь" },
+]
+
 export default {
-  components: { ModuleNote, Tabs, TaskBoard, TrendChart },
+  components: { ModuleNote, Tabs, TaskBoard, TaskCalendar, TrendChart },
   props: {
     project: { type: Object, required: true },
   },
   setup(props) {
+    const route = useRoute()
+    const router = useRouter()
     const board = ref(null)
     const error = ref("")
     const query = ref("")
@@ -128,6 +156,15 @@ export default {
       { id: "search", label: "Поиск" },
     ]
     const { settings, when } = useWhen()
+
+    // Вид задач читаем из URL, а не из памяти: возврат по истории и
+    // закладки открывают тот же вид, что был при сохранении ссылки.
+    const view = computed(() => (route.query.view === "calendar" ? "calendar" : "board"))
+
+    function setView(value) {
+      if (value === view.value) return
+      router.replace({ query: { ...route.query, view: value === "board" ? undefined : value } })
+    }
 
     const groupList = computed(() => {
       if (!groups.value) return []
@@ -156,7 +193,7 @@ export default {
     }
 
     watch(() => props.project && props.project.id, load, { immediate: true })
-    return { board, error, query, groups, groupList, searchError, tab, pageTabs, runSearch, when }
+    return { board, error, query, groups, groupList, searchError, tab, pageTabs, runSearch, when, VIEWS, view, setView }
   },
 }
 </script>

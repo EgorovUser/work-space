@@ -11,6 +11,7 @@ TASK_DEADLINE_SOON = "task.deadline_soon"
 TASK_OVERDUE = "task.overdue"
 TASK_COMMENT = "task.comment"
 TASK_DELETED = "task.deleted"
+TASK_RECURRED = "task.recurred"
 TASK_CHECKLIST_ADDED = "task.checklist_added"
 TASK_CHECKLIST_DONE = "task.checklist_done"
 TASK_FILE = "task.file"
@@ -57,6 +58,7 @@ ALL_EVENTS = (
     TASK_OVERDUE,
     TASK_COMMENT,
     TASK_DELETED,
+    TASK_RECURRED,
     TASK_CHECKLIST_ADDED,
     TASK_CHECKLIST_DONE,
     TASK_FILE,

@@ -162,6 +162,16 @@ DEFS: tuple[SettingDef, ...] = (
         max_value=864000,
     ),
     _s(
+        key="repeat.interval.max",
+        value_type="int",
+        default=999,
+        label="Максимальный интервал повтора",
+        description="Насколько большим может быть «каждые N» у повторяющейся задачи.",
+        ui_hint="number",
+        min_value=1,
+        max_value=10000,
+    ),
+    _s(
         key="board.max_tasks",
         value_type="int",
         default=500,

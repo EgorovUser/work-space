@@ -39,6 +39,24 @@
             <input v-model="form.deadline" type="datetime-local" />
           </label>
           <label class="tight">
+            Повтор
+            <select v-model="form.repeat_kind">
+              <option value="">Нет</option>
+              <option value="daily">Ежедневно</option>
+              <option value="weekly">Еженедельно</option>
+              <option value="monthly">Ежемесячно</option>
+              <option value="yearly">Ежегодно</option>
+            </select>
+          </label>
+          <label v-if="form.repeat_kind" class="tight">
+            Интервал, каждые
+            <input v-model.number="form.repeat_interval" type="number" min="1" :max="repeatMax" />
+          </label>
+          <label v-if="form.repeat_kind" class="tight">
+            До даты (включительно)
+            <input v-model="form.repeat_until" type="date" />
+          </label>
+          <label class="tight">
             Прогресс
             <select v-model="form.progress_mode">
               <option value="auto">По чеклисту</option>
@@ -49,7 +67,10 @@
             Значение, 0–{{ progressMax }}
             <input v-model.number="form.progress_manual" type="number" min="0" :max="progressMax" />
           </label>
-          <p class="muted">Сейчас {{ task.progress }} из {{ progressMax }}.</p>
+          <p v-if="form.repeat_kind" class="muted">
+          Повтор: {{ repeatLabel(form.repeat_kind, form.repeat_interval) }}. Закрытие задачи создаёт следующее вхождение{{ form.repeat_until ? " до " + form.repeat_until + " включительно" : "" }}.
+        </p>
+        <p class="muted">Сейчас {{ task.progress }} из {{ progressMax }}.</p>
         </div>
         <div class="tag-row">
           <label v-for="tag in tags" :key="tag.id" class="check">
@@ -153,6 +174,7 @@ import { onMounted, reactive, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { api } from "../api"
 import Tabs from "../components/Tabs.vue"
+import { repeatLabel } from "../composables/calendar"
 import { formatWhen } from "../composables/formatDate"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
@@ -166,6 +188,7 @@ const KINDS = {
   deadline: "Дедлайн",
   attachment: "Файл",
   updated: "Правка",
+  recur: "Повтор",
 }
 
 export default {
@@ -204,6 +227,7 @@ export default {
     const spent = reactive({ day: localDay(), minutes: 30, note: "" })
     const priorities = ref([])
     const progressMax = ref(100)
+    const repeatMax = ref(999)
     const form = reactive({
       title: "",
       description: "",
@@ -214,6 +238,9 @@ export default {
       progress_mode: "auto",
       progress_manual: 0,
       tag_ids: [],
+      repeat_kind: "",
+      repeat_interval: 1,
+      repeat_until: "",
     })
 
     function kindLabel(kind) {
@@ -238,6 +265,11 @@ export default {
       form.progress_mode = data.progress_mode
       form.progress_manual = data.progress_manual
       form.tag_ids = (data.tags || []).map((tag) => tag.id)
+      form.repeat_kind = data.repeat_kind || ""
+      form.repeat_interval = data.repeat_interval || 1
+      form.repeat_until = data.repeat_until
+        ? formatWhen(data.repeat_until, "YYYY-MM-DD", settings.get("core", "ui.timezone") || undefined)
+        : ""
     }
 
     async function load() {
@@ -248,6 +280,7 @@ export default {
         const raw = settings.get("tasks", "priorities")
         priorities.value = Array.isArray(raw) ? raw : []
         progressMax.value = Number(settings.get("tasks", "progress.max")) || 100
+        repeatMax.value = Number(settings.get("tasks", "repeat.interval.max")) || 999
         const [statusData, tagData, userData, taskData] = await Promise.all([
           api("/api/projects/" + props.project.id + "/task-statuses"),
           api("/api/projects/" + props.project.id + "/tags"),
@@ -281,6 +314,9 @@ export default {
             progress_mode: form.progress_mode,
             progress_manual: Number(form.progress_manual) || 0,
             tag_ids: form.tag_ids,
+            repeat_kind: form.repeat_kind || "",
+            repeat_interval: form.repeat_kind ? Math.max(1, Number(form.repeat_interval) || 1) : 1,
+            repeat_until: form.repeat_kind ? form.repeat_until || null : null,
           },
         })
         fill(saved)
@@ -534,6 +570,8 @@ export default {
       spent,
       priorities,
       progressMax,
+      repeatMax,
+      repeatLabel,
       form,
       tab,
       pageTabs,

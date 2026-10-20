@@ -94,7 +94,7 @@ def update_status(session: Session, project_id: int, user_id: int, status_id: in
         row.color = _color(fields["color"])
     if "is_closed" in fields and fields["is_closed"] is not None:
         row.is_closed = bool(fields["is_closed"])
-        _sync_closed_flags(session, project_id, row)
+        _sync_closed_flags(session, project_id, row, user_id)
     session.flush()
     touch_project(session, project_id)
     with log_scope("tasks", "status.update", user_id=user_id):
@@ -126,11 +126,16 @@ def order_statuses(session: Session, project_id: int, user_id: int, ids: list[in
     return [_status_out(rows[status_id]) for status_id in ids]
 
 
-def _sync_closed_flags(session: Session, project_id: int, status: TaskStatus) -> None:
+def _sync_closed_flags(session: Session, project_id: int, status: TaskStatus, user_id: int | None = None) -> None:
+    from app.modules.tasks.service import recurrence
+
     rows = session.scalars(select(Task).where(Task.project_id == project_id, Task.status_id == status.id)).all()
     now = utcnow()
     for task in rows:
         if status.is_closed and task.closed_at is None:
             task.closed_at = now
+            # Колонку закрыли целиком: каждая повторяющаяся задача
+            # продолжает серию следующим вхождением.
+            recurrence.spawn_next(session, project_id, user_id, task)
         if not status.is_closed:
             task.closed_at = None

@@ -20,6 +20,7 @@
               <ActionMenu :actions="cardActions" @choose="onCard($event, task)" />
             </div>
             <div class="task-meta">
+              <span v-if="task.repeat_kind" class="repeat-mark" :title="repeatLabel(task.repeat_kind, task.repeat_interval)">↻</span>
               <span v-if="priorityLabel(task)" class="pill">{{ priorityLabel(task) }}</span>
               <span v-if="task.deadline" :class="{ 'bad-text': late(task) }">{{ when(task.deadline) }}</span>
               <span v-if="task.checklist_total">{{ task.checklist_done }}/{{ task.checklist_total }}</span>
@@ -51,6 +52,7 @@ import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import ActionMenu from "./ActionMenu.vue"
 import { api } from "../api"
+import { repeatLabel } from "../composables/calendar"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 import { applyTaskOrders } from "../composables/taskOrder"
@@ -484,7 +486,7 @@ export default {
     })
     return {
       statuses, drafts, columnName, columnClosed, error, unavailable, busy, loading, root, cardActions,
-      tasksOf, priorityLabel, when, late, bar, columnActions, create, addColumn, rename, onCard, onColumn,
+      tasksOf, priorityLabel, repeatLabel, when, late, bar, columnActions, create, addColumn, rename, onCard, onColumn,
     }
   },
 }

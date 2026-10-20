@@ -17,6 +17,8 @@ from app.core.models import User
 from app.core.settings_store import get, get_int, get_str
 from app.modules.tasks.models import ChecklistItem, Task
 
+REPEAT_KINDS = ("", "daily", "weekly", "monthly", "yearly")
+
 
 def _assignee(session: Session, user_id: int | None) -> int | None:
     if user_id is None:
@@ -96,6 +98,30 @@ def _zone():
         return ZoneInfo(name)
     except Exception:
         return datetime.now().astimezone().tzinfo
+
+
+def _repeat_kind(value) -> str:
+    chosen = str(value or "").strip()
+    if chosen not in REPEAT_KINDS:
+        raise HTTPException(status_code=400, detail="Неизвестный тип повтора")
+    return chosen
+
+
+def _repeat_interval(value) -> int:
+    if value is None:
+        return 1
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise HTTPException(status_code=400, detail="Интервал повтора — целое число")
+    limit = get_int("tasks", "repeat.interval.max")
+    if value < 1 or value > limit:
+        raise HTTPException(status_code=400, detail="Интервал повтора вне диапазона 1.." + str(limit))
+    return value
+
+
+def _repeat_until(value) -> datetime | None:
+    if value is None:
+        return None
+    return _deadline(value)
 
 
 def _clean(value: str, key: str, empty: str) -> str:

@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -46,6 +47,7 @@ from app.modules.projects.settings import DEFS as PROJECT_DEFS  # noqa: E402
 from app.modules.secrets import service as secrets  # noqa: E402
 from app.modules.secrets.settings import DEFS as SECRET_DEFS  # noqa: E402
 from app.modules.tasks import service as tasks  # noqa: E402
+from app.modules.tasks.service import recurrence  # noqa: E402
 from app.modules.tasks.settings import DEFS as TASK_DEFS  # noqa: E402
 from app.modules.timetracking.settings import DEFS as TIME_DEFS  # noqa: E402
 from app.seed import seed  # noqa: E402
@@ -142,6 +144,47 @@ class LogicTests(unittest.TestCase):
         self.assertEqual(events[0]["summary"], "Созвон")
         self.assertIsNotNone(events[0]["starts_at"])
 
+    def test_recurrence_advance(self):
+        user_id = _user_id()
+        set_value("core", "ui.timezone", "global", "UTC", actor_id=user_id)
+        daily = recurrence.advance(datetime(2026, 10, 1, 9, 0, tzinfo=timezone.utc), "daily", 3)
+        self.assertEqual(daily, datetime(2026, 10, 4, 9, 0, tzinfo=timezone.utc))
+        # Месяцы идут по календарю: 31 января + 1 = 28 февраля.
+        monthly = recurrence.advance(datetime(2026, 1, 31, 12, 0, tzinfo=timezone.utc), "monthly", 1)
+        self.assertEqual(monthly, datetime(2026, 2, 28, 12, 0, tzinfo=timezone.utc))
+        # 29 февраля + 1 год = 28 февраля.
+        yearly = recurrence.advance(datetime(2024, 2, 29, 10, 0, tzinfo=timezone.utc), "yearly", 1)
+        self.assertEqual(yearly, datetime(2025, 2, 28, 10, 0, tzinfo=timezone.utc))
+
+    def test_recurrence_next_deadline_catches_up(self):
+        from app.modules.tasks.models import Task as TaskRow
+
+        user_id = _user_id()
+        set_value("core", "ui.timezone", "global", "UTC", actor_id=user_id)
+        now = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+        # Дедлайн 1 октября, закрыли 20-го: вхождение не в прошлое, а 22-го.
+        task = TaskRow(deadline=datetime(2026, 10, 1, 9, 0, tzinfo=timezone.utc), repeat_kind="weekly", repeat_interval=1)
+        self.assertEqual(recurrence.next_deadline(task, now), datetime(2026, 10, 22, 9, 0, tzinfo=timezone.utc))
+        # Дедлайн ещё впереди: следующий — ровно на шаг позже, не тот же день.
+        early = TaskRow(deadline=datetime(2026, 10, 26, 18, 0, tzinfo=timezone.utc), repeat_kind="weekly", repeat_interval=1)
+        self.assertEqual(recurrence.next_deadline(early, now), datetime(2026, 11, 2, 18, 0, tzinfo=timezone.utc))
+        # Серия закончилась: граница прошла, повтора нет.
+        ended = TaskRow(
+            deadline=datetime(2026, 10, 26, 18, 0, tzinfo=timezone.utc),
+            repeat_kind="weekly",
+            repeat_interval=1,
+            repeat_until=datetime(2026, 10, 25, 0, 0, tzinfo=timezone.utc),
+        )
+        self.assertIsNone(recurrence.next_deadline(ended, now))
+        # Граница включается календарным днём.
+        last = TaskRow(
+            deadline=datetime(2026, 10, 22, 18, 0, tzinfo=timezone.utc),
+            repeat_kind="weekly",
+            repeat_interval=1,
+            repeat_until=datetime(2026, 10, 29, 0, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(recurrence.next_deadline(last, now), datetime(2026, 10, 29, 18, 0, tzinfo=timezone.utc))
+
 
 class StoreTests(unittest.TestCase):
     def test_project_task_and_column_order(self):
@@ -159,6 +202,65 @@ class StoreTests(unittest.TestCase):
             self.assertEqual([item["id"] for item in ordered], reversed_ids)
             with self.assertRaises(Exception):
                 tasks.order_statuses(session, project_id, user_id, reversed_ids[:-1])
+
+    def test_task_recurrence_spawns_next(self):
+        user_id = _user_id()
+        set_value("core", "ui.timezone", "global", "UTC", actor_id=user_id)
+        with session_scope() as session:
+            card = projects.create_project(session, user_id, "Повторы", "")
+            project_id = card["id"]
+            closed_id = next(item["id"] for item in tasks.list_statuses(session, project_id) if item["is_closed"])
+            tag = tasks.create_tag(session, project_id, user_id, "ритм")
+            due = (datetime.now(timezone.utc) + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+            task = tasks.create_task(
+                session,
+                project_id,
+                user_id,
+                {"title": "Полив", "deadline": due.isoformat(), "repeat_kind": "weekly", "tag_ids": [tag["id"]]},
+            )
+            self.assertEqual(task["repeat_kind"], "weekly")
+            check = tasks.add_check(session, project_id, user_id, task["id"], "Налить воду")
+            tasks.update_check(session, project_id, user_id, task["id"], check["id"], {"done": True})
+
+            closed = tasks.update_task(session, project_id, user_id, task["id"], {"status_id": closed_id})
+            self.assertIsNotNone(closed["closed_at"])
+
+            items = tasks.list_tasks(session, project_id)["items"]
+            spawned = [item for item in items if item["title"] == "Полив" and item["id"] != task["id"]]
+            self.assertEqual(len(spawned), 1)
+            self.assertEqual(spawned[0]["deadline"], (due + timedelta(days=7)).isoformat())
+            self.assertEqual(spawned[0]["repeat_kind"], "weekly")
+
+            fresh = tasks.get_task(session, project_id, spawned[0]["id"])
+            self.assertEqual([item["title"] for item in fresh["checklist"]], ["Налить воду"])
+            self.assertFalse(fresh["checklist"][0]["done"])
+            self.assertEqual([item["name"] for item in fresh["tags"]], ["ритм"])
+            # Лента: у вхождения — «создана» с пометкой, у исходной — «повтор».
+            self.assertEqual([item["kind"] for item in fresh["events"]], ["created"])
+            source = tasks.get_task(session, project_id, task["id"])
+            self.assertIn("recur", [item["kind"] for item in source["events"]])
+
+            # Обычная задача при закрытии ничего не плодит.
+            plain = tasks.create_task(session, project_id, user_id, {"title": "Разовая"})
+            tasks.update_task(session, project_id, user_id, plain["id"], {"status_id": closed_id})
+            items = tasks.list_tasks(session, project_id)["items"]
+            self.assertEqual(len([item for item in items if item["title"] == "Разовая"]), 1)
+
+            # Серия с прошедшей границей не продолжается.
+            finished = tasks.create_task(
+                session,
+                project_id,
+                user_id,
+                {
+                    "title": "Завершённая серия",
+                    "deadline": due.isoformat(),
+                    "repeat_kind": "daily",
+                    "repeat_until": (datetime.now(timezone.utc) - timedelta(days=1)).date().isoformat(),
+                },
+            )
+            tasks.update_task(session, project_id, user_id, finished["id"], {"status_id": closed_id})
+            items = tasks.list_tasks(session, project_id)["items"]
+            self.assertEqual(len([item for item in items if item["title"] == "Завершённая серия"]), 1)
 
     def test_secret_roundtrip_and_file_dedup(self):
         user_id = _user_id()

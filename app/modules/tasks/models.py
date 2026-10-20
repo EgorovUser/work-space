@@ -38,6 +38,11 @@ class Task(Base):
     progress_mode: Mapped[str] = mapped_column(String(20), default="auto")
     progress_manual: Mapped[int] = mapped_column(Integer, default=0)
     deadline: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    # Повторение: kind — daily/weekly/monthly/yearly ("" — не повторяется),
+    # interval — «каждые N», until — дата последнего вхождения серии.
+    repeat_kind: Mapped[str] = mapped_column(String(20), default="")
+    repeat_interval: Mapped[int] = mapped_column(Integer, default=1)
+    repeat_until: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)

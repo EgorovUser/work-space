@@ -27,6 +27,7 @@ from app.core.settings_store import get_int
 from app.modules.projects.service import touch_project
 from app.modules.tasks import events
 from app.modules.tasks.models import ChecklistItem, Tag, Task, TaskEvent, TaskTag
+from app.modules.tasks.service import recurrence
 from app.modules.tasks.service._queries import (
     _checks_by_tasks,
     _next_position,
@@ -36,7 +37,18 @@ from app.modules.tasks.service._queries import (
     _task,
 )
 from app.modules.tasks.service._serialize import _event_payload, _task_brief_from, _task_full
-from app.modules.tasks.service._validators import _assignee, _clean, _deadline, _manual, _priority, _progress_mode, _text
+from app.modules.tasks.service._validators import (
+    _assignee,
+    _clean,
+    _deadline,
+    _manual,
+    _priority,
+    _progress_mode,
+    _repeat_interval,
+    _repeat_kind,
+    _repeat_until,
+    _text,
+)
 
 
 def load_task(session: Session, task_id: int) -> Task | None:
@@ -70,6 +82,9 @@ def create_task(session: Session, project_id: int, user_id: int, fields: dict) -
     manual = _manual(fields.get("progress_manual") or 0)
     assignee = _assignee(session, fields.get("assignee_id"))
     position = _next_position(session, status.id)
+    kind = _repeat_kind(fields.get("repeat_kind"))
+    interval = _repeat_interval(fields.get("repeat_interval")) if kind else 1
+    until = _repeat_until(fields.get("repeat_until")) if kind else None
     task = Task(
         project_id=project_id,
         status_id=status.id,
@@ -80,6 +95,9 @@ def create_task(session: Session, project_id: int, user_id: int, fields: dict) -
         progress_mode=mode,
         progress_manual=manual,
         deadline=_deadline(fields.get("deadline")),
+        repeat_kind=kind,
+        repeat_interval=interval,
+        repeat_until=until,
         position=position,
         created_by=user_id,
         closed_at=utcnow() if status.is_closed else None,
@@ -138,6 +156,26 @@ def update_task(session: Session, project_id: int, user_id: int, task_id: int, f
             task.deadline = deadline
             deadline_changed = True
             events.add_event(session, task.id, user_id, events.DEADLINE)
+    # Правило повтора разбираем до блока колонки: закрытие той же правкой
+    # должно видеть уже обновлённое правило.
+    if "repeat_kind" in fields and fields["repeat_kind"] is not None:
+        kind = _repeat_kind(fields["repeat_kind"])
+        if kind != task.repeat_kind:
+            task.repeat_kind = kind
+            notes.append("повтор")
+        if not kind:
+            task.repeat_interval = 1
+            task.repeat_until = None
+    if "repeat_interval" in fields and fields["repeat_interval"] is not None and task.repeat_kind:
+        interval = _repeat_interval(fields["repeat_interval"])
+        if interval != task.repeat_interval:
+            task.repeat_interval = interval
+            notes.append("повтор")
+    if "repeat_until" in fields and task.repeat_kind:
+        until = _repeat_until(fields["repeat_until"])
+        if until != task.repeat_until:
+            task.repeat_until = until
+            notes.append("повтор")
     if "status_id" in fields and fields["status_id"] is not None and fields["status_id"] != task.status_id:
         status = _status(session, project_id, fields["status_id"])
         task.status_id = status.id
@@ -145,6 +183,8 @@ def update_task(session: Session, project_id: int, user_id: int, task_id: int, f
         task.closed_at = utcnow() if status.is_closed else None
         events.add_event(session, task.id, user_id, events.STATUS, status.name)
         enqueue(session, TASK_STATUS_CHANGED, _event_payload(task, status_id=status.id), user_id=user_id)
+        if status.is_closed:
+            recurrence.spawn_next(session, project_id, user_id, task)
     if "assignee_id" in fields and fields["assignee_id"] != task.assignee_id:
         task.assignee_id = _assignee(session, fields["assignee_id"])
         events.add_event(session, task.id, user_id, events.ASSIGNED)
@@ -235,6 +275,8 @@ def order_tasks(session: Session, project_id: int, user_id: int, status_id: int,
             task.updated_at = utcnow()
             events.add_event(session, task.id, user_id, events.STATUS, status.name)
             enqueue(session, TASK_STATUS_CHANGED, _event_payload(task, status_id=status.id), user_id=user_id)
+            if status.is_closed:
+                recurrence.spawn_next(session, project_id, user_id, task)
     session.flush()
     with log_scope("tasks", "order", user_id=user_id):
         logger.info("tasks ordered project={} status={}", project_id, status.id)

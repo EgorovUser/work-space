@@ -65,6 +65,9 @@ class TaskIn(BaseModel):
     progress_manual: int = 0
     deadline: str | None = None
     tag_ids: list[int] = []
+    repeat_kind: str | None = None
+    repeat_interval: int | None = None
+    repeat_until: str | None = None
 
 
 class TaskPatch(BaseModel):
@@ -79,6 +82,9 @@ class TaskPatch(BaseModel):
     progress_manual: int | None = None
     deadline: str | None = None
     tag_ids: list[int] | None = None
+    repeat_kind: str | None = None
+    repeat_interval: int | None = None
+    repeat_until: str | None = None
 
 
 class CheckIn(BaseModel):

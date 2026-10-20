@@ -17,6 +17,7 @@ _EVENTS = [
     {"id": "task.overdue", "label": "Задача просрочена"},
     {"id": "task.comment", "label": "Комментарий к задаче"},
     {"id": "task.deleted", "label": "Задачу удалили"},
+    {"id": "task.recurred", "label": "Повтор задачи создан"},
     {"id": "task.checklist_added", "label": "Пункт чеклиста добавлен"},
     {"id": "task.checklist_done", "label": "Пункт чеклиста закрыт"},
     {"id": "task.file", "label": "К задаче прикрепили файл"},
