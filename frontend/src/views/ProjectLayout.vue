@@ -1,6 +1,16 @@
 <template>
   <AppShell bare>
     <div class="project-wrap" :class="{ 'board-page': isBoard }">
+      <nav v-if="project" class="project-tabs" aria-label="Разделы проекта">
+        <router-link
+          v-for="link in links"
+          :key="link.to"
+          :to="link.to"
+          :class="{ 'router-link-active': link.exact ? route.path === link.to : route.path.startsWith(link.to + '/') }"
+        >
+          {{ link.label }}
+        </router-link>
+      </nav>
       <header v-if="project && (project.description || project.archived)" class="project-bar">
         <p v-if="project.description" class="muted clip">{{ project.description }}</p>
         <span v-if="project.archived" class="pill warn">Архив</span>
@@ -24,6 +34,9 @@ import AppShell from "../components/AppShell.vue"
 import { api } from "../api"
 import { useChrome } from "../composables/useChrome"
 
+// Разделы проекта — горизонтальная лента табов под шапкой. Раньше они
+// уезжали вторым блоком в рельсу и смешивались с глобальной навигацией;
+// теперь у проекта своё жильё, у приложения — своё.
 export default {
   components: { AppShell },
   setup() {
@@ -62,8 +75,8 @@ export default {
     }
 
     provide("reloadProject", load)
-    watch([project, links], () => {
-      if (project.value) chrome.setProject(project.value.name, links.value)
+    watch([project, projectId], () => {
+      if (project.value) chrome.setProject(project.value.name)
     })
     watch(projectId, load)
     onMounted(load)
@@ -72,4 +85,3 @@ export default {
   },
 }
 </script>
-

@@ -209,6 +209,81 @@ class PasswordChangeTest(unittest.TestCase):
         self.assertIsNotNone(_me_user())
 
 
+class HomeHubTest(unittest.TestCase):
+    """Агрегат /api/home — основа хаба «Сегодня».
+
+    Проверяем контракт: секции с флагами, проекты, и блок уведомлений,
+    который регистрируется на мосту как home-блок (не через inbox —
+    уведомления не делятся по проектам).
+    """
+
+    def setUp(self):
+        _login()
+        self._cleanup()
+
+    def tearDown(self):
+        self._cleanup()
+        client.post("/api/auth/logout")
+        client.cookies.clear()
+
+    def _cleanup(self):
+        from app.core.db import session_scope
+        from app.core.models import User
+        from app.modules.notifications.models import Notification
+        from sqlalchemy import delete, select
+
+        with session_scope() as db:
+            user = db.scalars(select(User).where(User.username == "tester")).first()
+            if user is not None:
+                db.execute(delete(Notification).where(Notification.user_id == user.id))
+
+    def test_home_shape_and_notifications_block(self):
+        response = client.get("/api/home")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        for key in ("projects", "tasks", "mail", "events", "notifications", "sections"):
+            self.assertIn(key, body)
+        sections = body["sections"]
+        for key in ("tasks", "mail", "events", "notifications"):
+            self.assertIn(key, sections)
+            self.assertIsInstance(sections[key], bool)
+
+    def test_home_lists_user_notifications(self):
+        from app.core.db import session_scope
+        from app.core.models import User
+        from app.modules.notifications.models import Notification
+        from sqlalchemy import select
+
+        with session_scope() as db:
+            user = db.scalars(select(User).where(User.username == "tester")).first()
+            db.add(
+                Notification(
+                    user_id=user.id,
+                    event_type="task.deadline_soon",
+                    title="Срок задачи близко",
+                    body="Задача «Проверить патч»",
+                    link="/projects/1/tasks/1",
+                    show_browser=True,
+                    read=False,
+                )
+            )
+
+        response = client.get("/api/home")
+        self.assertEqual(response.status_code, 200)
+        notes = response.json()["notifications"]
+        self.assertTrue(any("Срок задачи близко" in item["title"] for item in notes))
+        item = next(item for item in notes if "Срок задачи близко" in item["title"])
+        self.assertEqual(item["link"], "/projects/1/tasks/1")
+        self.assertFalse(item["read"])
+        # Лёгкая лента хаба не тянет доставки (тяжёлый _out не используется).
+        self.assertNotIn("deliveries", item)
+
+    def test_home_requires_auth(self):
+        client.post("/api/auth/logout")
+        client.cookies.clear()
+        self.assertEqual(client.get("/api/home").status_code, 401)
+
+
 @unittest.skipUnless(DIST_READY, "нужен собранный frontend/dist")
 class PwaFilesTest(unittest.TestCase):
     """Раздача PWA-файлов: манифест, сервис-воркер, иконки.

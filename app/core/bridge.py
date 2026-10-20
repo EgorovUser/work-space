@@ -18,6 +18,7 @@ _dashboard: dict = {}
 _search: dict = {}
 _inbox: dict = {}
 _materialize: dict = {}
+_home_blocks: dict = {}
 
 
 def on_project_created(handler) -> None:
@@ -38,6 +39,27 @@ def register_search(module: str, handler) -> None:
 
 def register_inbox(module: str, handler) -> None:
     _inbox[module] = handler
+
+
+def register_home_block(name: str, handler) -> None:
+    """Блок для хаба «Сегодня»: модуль отдаёт ленту без проектного охвата.
+
+    В отличие от inbox, блок главной привязан к пользователю, а не к списку
+    проектов — уведомления не делятся по проектам. Лимит блок читает из
+    собственных настроек модуля.
+    """
+    _home_blocks[name] = handler
+
+
+def home_block(name: str, session, user_id: int | None) -> list:
+    handler = _home_blocks.get(name)
+    if handler is None:
+        return []
+    try:
+        return list(handler(session, user_id) or [])
+    except Exception:
+        logger.exception("home block failed name={}", name)
+        return []
 
 
 def register_materialize(kind: str, handler) -> None:

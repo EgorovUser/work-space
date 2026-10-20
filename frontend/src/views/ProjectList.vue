@@ -1,44 +1,5 @@
 <template>
   <AppShell>
-    <div class="home-grid">
-      <section v-if="sections.events" class="card">
-        <h2>Сегодня</h2>
-        <p v-if="!events.length" class="muted">Событий из почты на сегодня нет</p>
-        <div v-for="item in events" :key="item.id" class="status-row">
-          <div>
-            <router-link :to="'/mail/' + item.message_id">{{ item.summary }}</router-link>
-            <div v-if="item.location" class="muted">{{ item.location }}</div>
-          </div>
-          <span class="muted">{{ when(item.starts_at) }}</span>
-        </div>
-      </section>
-      <section v-if="sections.tasks" class="card">
-        <h2>Горящие задачи</h2>
-        <p v-if="!hot.length" class="muted">Нет задач со сроком</p>
-        <div v-for="item in hot" :key="item.id" class="status-row">
-          <div>
-            <router-link :to="'/projects/' + item.project_id + '/tasks/' + item.id">{{ item.title }}</router-link>
-            <div class="muted">{{ item.project_name }}</div>
-          </div>
-          <span :class="item.overdue ? 'bad-text' : 'muted'">{{ when(item.deadline) }}</span>
-        </div>
-      </section>
-      <section v-if="sections.mail" class="card">
-        <h2>Новые письма</h2>
-        <p v-if="!letters.length" class="muted">Непрочитанных нет</p>
-        <div v-for="item in letters" :key="item.id" class="status-row">
-          <div>
-            <router-link :to="'/mail/' + item.id">{{ item.title }}</router-link>
-            <span v-if="item.thread_count > 1" class="muted"> · {{ item.thread_count }} в переписке</span>
-            <div class="muted">
-              {{ item.project_name }}
-              <span v-if="item.attachment_count"> · вложения {{ item.attachment_count }}</span>
-            </div>
-          </div>
-          <span class="muted">{{ when(item.received_at) }}</span>
-        </div>
-      </section>
-    </div>
     <div class="page-head">
       <h1>Проекты</h1>
       <label class="check">
@@ -85,14 +46,12 @@ import SkeletonList from "../components/SkeletonList.vue"
 import { api } from "../api"
 import { useWhen } from "../composables/useWhen"
 
+// Чистый список проектов. Сводка «что горит» переехала на главную «Сегодня»,
+// здесь осталась только работа с самими проектами.
 export default {
   components: { AppShell, SkeletonList },
   setup() {
     const items = ref([])
-    const hot = ref([])
-    const letters = ref([])
-    const events = ref([])
-    const sections = ref({ tasks: true, mail: true, events: true })
     const name = ref("")
     const description = ref("")
     const error = ref("")
@@ -101,7 +60,7 @@ export default {
     const includeArchived = ref(false)
     const busy = ref(false)
     const loading = ref(true)
-    const { settings, when } = useWhen()
+    const { when } = useWhen()
     const router = useRouter()
 
     function stat(value) {
@@ -122,20 +81,6 @@ export default {
       } finally {
         loading.value = false
       }
-      // Лента «Сегодня/Горящие/Новые письма» — второстепенный виджет: если он
-      // упал, список проектов всё равно должен работать.
-      api("/api/home")
-        .then((home) => {
-          hot.value = home.tasks || []
-          letters.value = home.mail || []
-          events.value = home.events || []
-          sections.value = home.sections || { tasks: true, mail: true, events: true }
-        })
-        .catch(() => {
-          hot.value = []
-          letters.value = []
-          events.value = []
-        })
     }
 
     async function create() {
@@ -155,7 +100,7 @@ export default {
     }
 
     onMounted(load)
-    return { items, hot, letters, events, sections, name, description, error, createError, unavailable, includeArchived, busy, loading, when, stat, load, create }
+    return { items, name, description, error, createError, unavailable, includeArchived, busy, loading, when, stat, load, create }
   },
 }
 </script>

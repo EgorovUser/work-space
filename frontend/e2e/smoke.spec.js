@@ -23,21 +23,44 @@ async function apiLogin() {
   return context
 }
 
-test("логин ведёт на список проектов", async ({ page }) => {
+test("логин ведёт на экран «Сегодня»", async ({ page }) => {
   await page.goto("/")
   await expect(page).toHaveURL(/\/login/)
   await login(page)
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByRole("heading", { name: "Проекты" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Сегодня", exact: true })).toBeVisible()
 })
 
 test("проект создаётся и открывается доска задач", async ({ page }) => {
   await login(page)
+  // Список проектов — отдельный раздел: добираемся через рельсу.
+  // exact: иначе «Все проекты →» из хаба тоже попадает под имя.
+  await page.getByRole("link", { name: "Проекты", exact: true }).click()
+  await expect(page).toHaveURL(/\/projects$/)
   const name = "E2E проект " + Date.now()
   await page.getByPlaceholder("Новый проект").fill(name)
   await page.getByRole("button", { name: "Создать" }).click()
   await expect(page).toHaveURL(/\/projects\/\d+/)
   await expect(page.getByText(name).first()).toBeVisible()
+})
+
+test("разделы проекта переключаются горизонтальными табами", async ({ page }) => {
+  const api = await apiLogin()
+  const project = await (
+    await api.post("/api/projects", { data: { name: "Табы " + Date.now() } })
+  ).json()
+
+  await login(page)
+  await page.goto(`/projects/${project.id}`)
+  const tabs = page.locator(".project-tabs")
+  await expect(tabs).toBeVisible()
+  // Восемь разделов, включая доску.
+  await expect(tabs.locator("a")).toHaveCount(8)
+  await expect(tabs.locator("a", { hasText: "Доска" })).toHaveClass(/router-link-active/)
+  // Переход в соседний раздел без участия рельсы.
+  await tabs.locator("a", { hasText: "Документы" }).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/documents$`))
+  await expect(tabs.locator("a", { hasText: "Документы" })).toHaveClass(/router-link-active/)
 })
 
 test("глобальный поиск находит задачу и ведёт на неё", async ({ page }) => {

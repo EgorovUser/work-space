@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.bridge import card_summary, dashboard_blocks, inbox_items, run_project_created, search_groups
+from app.core.bridge import card_summary, dashboard_blocks, home_block, inbox_items, run_project_created, search_groups
 from app.core.db import utcnow
 from app.core.events_catalog import PROJECT_ARCHIVED, PROJECT_CREATED, PROJECT_UPDATED
 from app.core.logging import log_scope, logger
@@ -44,9 +44,13 @@ def home(session: Session, user_id: int) -> dict:
     show_tasks = get_bool("projects", "home.show_tasks")
     show_mail = get_bool("projects", "home.show_mail")
     show_events = get_bool("projects", "home.show_events")
+    show_notifications = get_bool("projects", "home.show_notifications")
     tasks = inbox_items("tasks", session, user_id, get_int("projects", "home.task_limit"), ids) if show_tasks else []
     mail = inbox_items("mail", session, user_id, get_int("projects", "home.mail_limit"), ids) if show_mail else []
     events = inbox_items("events", session, user_id, get_int("projects", "home.event_limit"), ids) if show_events else []
+    # Уведомления не делятся по проектам — это пользовательская лента,
+    # поэтому идёт отдельным блоком, а не через inbox.
+    notifications = home_block("notifications", session, user_id) if show_notifications else []
     for item in tasks:
         item["project_name"] = names.get(item.get("project_id"), "")
     for item in mail:
@@ -56,7 +60,13 @@ def home(session: Session, user_id: int) -> dict:
         "tasks": tasks,
         "mail": mail,
         "events": events,
-        "sections": {"tasks": show_tasks, "mail": show_mail, "events": show_events},
+        "notifications": notifications,
+        "sections": {
+            "tasks": show_tasks,
+            "mail": show_mail,
+            "events": show_events,
+            "notifications": show_notifications,
+        },
     }
 
 

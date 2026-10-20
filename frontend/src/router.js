@@ -5,7 +5,10 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/login", component: () => import("./views/Login.vue") },
-    { path: "/", component: () => import("./views/ProjectList.vue"), meta: { auth: true } },
+    // «Сегодня» — главная: всё горящее и свежее по всем проектам одним
+    // экраном. Список проектов переехал на отдельный адрес /projects.
+    { path: "/", component: () => import("./views/Today.vue"), meta: { auth: true } },
+    { path: "/projects", component: () => import("./views/ProjectList.vue"), meta: { auth: true } },
     { path: "/mail", component: () => import("./views/Mailbox.vue"), meta: { auth: true } },
     // Письмо открывается прямо в «Почте»: список слева, читалка справа.
     { path: "/mail/:messageId", component: () => import("./views/Mailbox.vue"), meta: { auth: true } },

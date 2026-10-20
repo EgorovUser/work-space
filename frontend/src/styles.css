@@ -134,15 +134,6 @@ a { color: var(--accent); }
 .rail-nav a:hover { background: rgba(255, 255, 255, 0.06); }
 .rail-nav a.router-link-active { background: rgba(255, 255, 255, 0.12); color: #fff; }
 
-.rail-label {
-  padding: 10px 10px 2px;
-  color: var(--rail-muted);
-  font-size: 0.75rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .rail-foot {
   margin-top: auto;
   display: grid;
@@ -295,23 +286,28 @@ a { color: var(--accent); }
   white-space: nowrap;
 }
 
-.section-nav {
+/* Разделы проекта — горизонтальные табы под шапкой. На телефоне лента
+   скроллится вбок, чтобы не съедать экран второй строкой. */
+.project-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
-  margin-top: 10px;
+  margin-bottom: 14px;
   border-bottom: 1px solid var(--line);
 }
 
-.section-nav a {
+.project-tabs a {
   text-decoration: none;
   color: var(--muted);
   padding: 8px 12px;
   margin-bottom: -1px;
   border-bottom: 2px solid transparent;
+  white-space: nowrap;
 }
 
-.section-nav a.active {
+.project-tabs a:hover { color: var(--ink); }
+
+.project-tabs a.router-link-active {
   color: var(--accent);
   border-bottom-color: var(--accent);
   font-weight: 650;
@@ -668,6 +664,19 @@ input[type="color"] { width: 72px; height: 36px; padding: 2px; }
 }
 
 .home-grid > :first-child { grid-column: 1 / -1; }
+
+/* Сетка хаба «Сегодня»: просроченные — на всю ширину, остальное — в два
+   столбца; на телефоне всё складывается в один. */
+.today-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.today-grid > :first-child { grid-column: 1 / -1; }
+
+.today-date { text-transform: capitalize; }
 
 .kanban-cols {
   display: flex;
@@ -1087,9 +1096,18 @@ textarea.mono { min-height: 220px; }
   .project-wrap.board-page { padding-bottom: 12px; }
   .kanban-col { flex: 1 0 240px; min-width: 240px; width: auto; }
   .add-col { flex: 0 0 240px; width: 240px; min-width: 240px; }
-  .home-grid, .settings-grid, .split, .board-fill-grid { grid-template-columns: 1fr; }
-  .home-grid > :first-child, .split > .card:has(.chart-box), .board-fill-grid > .card.wide { grid-column: auto; }
+  .home-grid, .today-grid, .settings-grid, .split, .board-fill-grid { grid-template-columns: 1fr; }
+  .home-grid > :first-child, .today-grid > :first-child, .split > .card:has(.chart-box), .board-fill-grid > .card.wide { grid-column: auto; }
   .compact-grid { grid-template-columns: 1fr 1fr; }
+  .project-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .project-tabs::-webkit-scrollbar { display: none; }
+  .project-tabs a { padding: 10px 10px 12px; }
 }
 
 /* — Скелетоны: заглушки на время загрузки списков — */
@@ -1298,9 +1316,9 @@ textarea.mono { min-height: 220px; }
 .bottom-nav { display: none; }
 
 @media (max-width: 800px) {
-  /* Пять главных адресов — внизу, под большим пальцем. Основная навигация
-     рельса на телефоне спрятана (дублируется этой панелью), проектная
-     навигация и выход остаются сверху. */
+  /* Пять главных адресов — внизу, под большим пальцем. Глобальная навигация
+     рельса на телефоне спрятана (дублируется этой панелью); сверху остаются
+     бренд, табы проекта и выход. */
   .bottom-nav {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -1358,10 +1376,11 @@ textarea.mono { min-height: 220px; }
   /* Тач-таргеты не меньше 44px и без 300-мс задержки двойного тапа. */
   .btn, .tab, .view-btn { min-height: 44px; }
   .rail-nav a { min-height: 44px; display: inline-flex; align-items: center; }
-  .btn, .tab, .view-btn, .bottom-link, .rail-nav a, .check, .task-card a, .plain-list a {
+  .project-tabs a { min-height: 44px; display: inline-flex; align-items: center; }
+  .btn, .tab, .view-btn, .bottom-link, .rail-nav a, .project-tabs a, .check, .task-card a, .plain-list a {
     touch-action: manipulation;
   }
-  .btn, .tab, .view-btn, .bottom-link, .rail-nav a, .check { -webkit-tap-highlight-color: transparent; }
+  .btn, .tab, .view-btn, .bottom-link, .rail-nav a, .project-tabs a, .check { -webkit-tap-highlight-color: transparent; }
 
   /* Поля ввода 16px — iOS не приближает страницу при фокусе. */
   .app input, .app select, .app textarea,

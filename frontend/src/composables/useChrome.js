@@ -1,18 +1,18 @@
 import { ref } from "vue"
 
+// Заголовок шапки для вложенных экранов (например, имя проекта).
+// Проектные ссылки больше не живут в рельсе — они рисуются табами в
+// ProjectLayout, так что хранить здесь нечего, кроме подписи.
 const caption = ref("")
-const extra = ref([])
 
 export function useChrome() {
-  function setProject(name, links) {
+  function setProject(name) {
     caption.value = name || "Проект"
-    extra.value = links || []
   }
 
   function clear() {
     caption.value = ""
-    extra.value = []
   }
 
-  return { caption, extra, setProject, clear }
+  return { caption, setProject, clear }
 }

@@ -59,7 +59,8 @@ test("на телефоне основная навигация уезжает �
   // Пять адресов, у каждого — подпись и иконка.
   await expect(nav.locator(".bottom-link")).toHaveCount(5)
   await expect(nav.locator(".bottom-label")).toHaveCount(5)
-  // Вкладка «Проекты» активна.
+  // Первая вкладка — «Сегодня», она и активна на главной.
+  await expect(nav.locator(".bottom-label").first()).toHaveText("Сегодня")
   await expect(nav.locator(".bottom-link").first()).toHaveClass(/active/)
 
   // Переход по нижней навигации ведёт в почту.

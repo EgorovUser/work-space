@@ -112,6 +112,7 @@ DEFS: tuple[SettingDef, ...] = (
     _s(key="error.max_chars", value_type="int", default=300, label="Сколько символов ошибки доставки хранить", ui_hint="number", min_value=40, max_value=2000),
     _s(key="list.limit", value_type="int", default=50, label="Уведомлений в списке", allowed_scopes=("global", "user"), ui_hint="number", min_value=1, max_value=500),
     _s(key="bell.limit", value_type="int", default=8, label="Уведомлений в колокольчике", allowed_scopes=("global", "user"), ui_hint="number", min_value=1, max_value=50),
+    _s(key="home.limit", value_type="int", default=5, label="Уведомлений на экране «Сегодня»", allowed_scopes=("global", "user"), ui_hint="number", min_value=1, max_value=50),
     _s(key="link.base_url", value_type="str", default="", label="Адрес сайта для ссылок в Telegram и письме", description="Пусто — в текст попадает только путь.", allowed_scopes=("global", "user")),
     _s(key="telegram.api_url", value_type="str", default="https://api.telegram.org", label="Адрес Bot API", allowed_scopes=("global", "user")),
     _s(key="telegram.bot_token", value_type="str", default="", label="Токен бота Telegram", allowed_scopes=("global", "user"), secret=True, ui_hint="secret"),

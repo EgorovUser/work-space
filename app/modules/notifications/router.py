@@ -8,6 +8,7 @@ from app.core.db import get_db
 from app.core.events_catalog import ALL_EVENTS
 from app.core.models import User
 from app.core.outbox import subscribe
+from app.core.bridge import register_home_block
 from app.core.scheduler import register_job
 from app.core.settings_store import register_defs
 from app.modules.notifications import service
@@ -58,6 +59,7 @@ def setup(app) -> None:
     register_defs(DEFS)
     for event_type in ALL_EVENTS:
         subscribe(event_type, service.handle)
+    register_home_block("notifications", service.home_items)
     register_job(
         "notifications.deliver",
         service.deliver_due,

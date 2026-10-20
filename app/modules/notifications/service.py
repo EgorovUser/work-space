@@ -214,6 +214,36 @@ def list_notifications(session: Session, user_id: int, unread_only: bool) -> dic
     return {"items": [_out(session, row, user_id) for row in rows], "unread": _unread_count(session, user_id)}
 
 
+def home_items(session: Session, user_id: int | None) -> list[dict]:
+    """Лента уведомлений для хаба «Сегодня».
+
+    Облегчённый вариант ``_out``: без доставок (и их N+1) — только то, что
+    нужно для строки на главной. Провайдер регистрируется на мосту как блок
+    домашнего экрана и вызывается из проектов, поэтому сигнатура общая.
+    """
+    if user_id is None:
+        return []
+    limit = get_int("notifications", "home.limit", user_id=user_id)
+    rows = session.scalars(
+        select(Notification)
+        .where(Notification.user_id == user_id, Notification.show_browser.is_(True))
+        .order_by(Notification.created_at.desc(), Notification.id.desc())
+        .limit(max(1, limit))
+    ).all()
+    return [
+        {
+            "id": row.id,
+            "event_type": row.event_type,
+            "title": row.title,
+            "body": row.body or "",
+            "link": row.link or "",
+            "read": bool(row.read),
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in rows
+    ]
+
+
 def unread(session: Session, user_id: int) -> dict:
     limit = get_int("notifications", "bell.limit", user_id=user_id)
     rows = session.scalars(
