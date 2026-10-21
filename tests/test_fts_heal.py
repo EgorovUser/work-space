@@ -127,6 +127,18 @@ class FtsHealTest(unittest.TestCase):
         self.assertTrue(fts_integrity_ok(_engine_conn(), "fts_tasks"))
         self.assertGreater(payload["size_bytes"], 0)
 
+    def test_index_init_failure_degrades_to_log(self):
+        # Если создание FTS-индекса падает — приложение обязано жить без
+        # поиска, а не ронять старт. Раньше except-обработчик сам падал
+        # NameError (log_scope/logger не были импортированы) и убивал
+        # create_app() вместо мягкой деградации (патч AN).
+        from unittest.mock import patch
+
+        with patch(
+            "app.core.search.ensure_search_index", side_effect=RuntimeError("boom")
+        ):
+            db_module._ensure_search_index()  # не должен бросить исключение
+
 
 def _engine_conn():
     return db_module._engine.connect().execution_options(isolation_level="AUTOCOMMIT")

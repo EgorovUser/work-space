@@ -122,6 +122,11 @@ def _ensure_search_index() -> None:
         with _engine.begin() as conn:
             ensure_search_index(conn)
     except Exception:
+        # Лениво: logging тянет contextvars ядра, импорт на старте до
+        # bootstrap() невозможен. Без импорта здесь обработчик сам падал
+        # NameError и ронял весь старт приложения вместо мягкой деградации.
+        from app.core.logging import log_scope, logger
+
         with log_scope("core", "search.init"):
             logger.exception("Полнотекстовый индекс не создан — поиск недоступен")
 
