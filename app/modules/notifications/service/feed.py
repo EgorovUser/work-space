@@ -82,16 +82,12 @@ def mark_all_read(session: Session, user_id: int) -> dict:
 
 
 def probe(user_id: int, channel: str) -> dict:
-    if channel == "telegram":
-        status, error = channels.send_telegram(user_id, "Проверка: бот доставляет сообщения из рабочего пространства.")
-    elif channel == "email":
-        status, error = channels.send_email(
-            user_id,
-            "Проверка почты",
-            "Проверка: письмо из рабочего пространства дошло.",
-        )
-    else:
+    item = channels.channel_def(channel)
+    if item is None:
         raise HTTPException(status_code=400, detail="Неизвестный канал")
+    if not item.server_delivery or item.tester is None:
+        raise HTTPException(status_code=400, detail="У канала нет серверской отправки")
+    status, error = item.tester(user_id)
     if status != "sent":
         raise HTTPException(status_code=400, detail=error or "Не отправилось")
     with log_scope("notifications", "probe", user_id=user_id):

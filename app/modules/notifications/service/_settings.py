@@ -24,6 +24,15 @@ def _choices(key: str) -> list[dict]:
             code = item["id"]
             if code not in seen:
                 items.append({"id": code, "label": item["label"]})
+    if key == "channels":
+        # Реестр каналов (патч AQ): канал, зарегистрированный после импорта
+        # настроек, всё равно попадает в каталог и матрицу — дефолт настройки
+        # не должен его прятать.
+        from app.modules.notifications.channels import catalog
+
+        for item in catalog():
+            if item["id"] not in seen:
+                items.append(item)
     return items
 
 

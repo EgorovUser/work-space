@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.core.setting_defs import SettingDef
+from app.modules.notifications.channels import catalog, default_flags
 
 
 def _s(**kwargs) -> SettingDef:
@@ -55,12 +56,7 @@ _EVENTS = [
     {"id": "system.module_error", "label": "Модуль не поднялся"},
     {"id": "system.status", "label": "В состоянии что-то не работает"},
 ]
-_CHANNELS = [
-    {"id": "browser", "label": "В приложении"},
-    {"id": "os", "label": "Системные уведомления"},
-    {"id": "telegram", "label": "Telegram"},
-    {"id": "email", "label": "Почта"},
-]
+_CHANNELS = catalog()
 _STATUSES = [
     {"id": "pending", "label": "Ждёт"},
     {"id": "sending", "label": "Отправляется"},
@@ -68,14 +64,11 @@ _STATUSES = [
     {"id": "failed", "label": "Ошибка"},
     {"id": "skipped", "label": "Пропущено"},
 ]
-# Канал os (патч AO) — тост операционной системы через Web Notifications
-# API. Доставка клиентская: сервер только кладёт флаг os в событие
-# notifications.new для живых вкладок; строк NotificationDelivery канал
-# не создаёт (мимолётный тост нечего ретраить и догонять).
-_MATRIX = {
-    item["id"]: {"browser": True, "os": False, "telegram": False, "email": False}
-    for item in _EVENTS
-}
+# Дефолты каналов — из реестра (патч AQ): browser включён, os/telegram/
+# email — осознанный выбор. Канал os — тост операционной системы у клиента
+# (патч AO): сервер кладёт только флаг os в событие notifications.new,
+# строк очереди доставок канал не создаёт.
+_MATRIX = {item["id"]: default_flags() for item in _EVENTS}
 
 
 DEFS: tuple[SettingDef, ...] = (
@@ -94,7 +87,7 @@ DEFS: tuple[SettingDef, ...] = (
     _s(
         key="matrix.fallback",
         value_type="json",
-        default={"browser": True, "os": False, "telegram": False, "email": False},
+        default=default_flags(),
         label="Каналы для события, которого нет в матрице",
         allowed_scopes=("global", "user"),
         ui_hint="json",

@@ -64,10 +64,10 @@ def handle(message: EventMessage) -> None:
                 session.expunge(row)
                 continue
             for channel, enabled in flags.items():
-                # browser живёт во вкладке (лента/бейдж), os — тост
-                # операционной системы у клиента (патч AO): ни тому, ни
-                # другому серверная очередь доставок не нужна.
-                if channel in ("browser", "os") or not enabled:
+                # Клиентские каналы (browser — лента/бейдж, os — системный
+                # тост, патчи AO/AQ) живут у вкладки: серверную очередь
+                # доставок для них не заводим.
+                if not channels.is_server_channel(channel) or not enabled:
                     continue
                 delivery = NotificationDelivery(
                     notification_id=row.id,
@@ -172,12 +172,9 @@ def send_delivery(delivery_id: int) -> None:
         user_id = note.user_id
         subject = note.title
         text = _outgoing(note)
-    if channel == "telegram":
-        status, error = channels.send_telegram(user_id, text)
-    elif channel == "email":
-        status, error = channels.send_email(user_id, subject, text)
-    else:
-        status, error = "skipped", "Неизвестный канал"
+    # Диспетчер — реестр каналов (патч AQ): новый канал не требует правок
+    # здесь; неизвестный/клиентский канал тихо помечается skipped.
+    status, error = channels.send(channel, user_id, subject, text)
     _finish(delivery_id, status, error, channel)
 
 
@@ -202,7 +199,7 @@ def _catchup_ids() -> list[int]:
                 ).all()
             }
             for channel, enabled in flags.items():
-                if channel in ("browser", "os") or not enabled or channel in existing:
+                if not channels.is_server_channel(channel) or not enabled or channel in existing:
                     continue
                 delivery = NotificationDelivery(
                     notification_id=note.id,
