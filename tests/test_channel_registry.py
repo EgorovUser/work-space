@@ -9,6 +9,10 @@
 - клиентские каналы (browser, os) не считаются серверными — строк
   доставок не создают;
 - send на неизвестный канал тихо помечается skipped;
+- встроенные серверные каналы подписаны под контракт реестра: sender
+  принимает ровно (user_id, subject, text) — регрессия AQ/AV, когда
+  send_telegram с двумя параметрами ронял каждую telegram-доставку
+  TypeError'ом (без токена — честный «failed», без сети);
 - сквозной путь: fake-канал в матрице пользователя → handle() создаёт
   строку доставки → send_delivery зовёт sender реестра → статус sent.
 
@@ -18,6 +22,7 @@ test_app (готовит env и конфиг); при одиночном зап�
 
 from __future__ import annotations
 
+import inspect
 import os
 import tempfile
 import unittest
@@ -104,6 +109,35 @@ class ChannelRegistryTest(unittest.TestCase):
         self.assertEqual(error, "Неизвестный канал")
         status, error = channels.test_channel("browser", 1)
         self.assertEqual(status, "skipped")
+
+    def test_server_senders_match_registry_contract(self):
+        # Реестр диспетчеризует sender(user_id, subject, text) — сигнатура
+        # каждого серверного отправителя обязана принимать ровно три
+        # позиционных аргумента. Регрессия AV: send_telegram(user_id, text)
+        # падал TypeError на первой же telegram-доставке в продакшене.
+        for item in channels.all_channels():
+            if not item.server_delivery or item.sender is None:
+                continue
+            with self.subTest(channel=item.id):
+                params = list(inspect.signature(item.sender).parameters.values())
+                self.assertTrue(
+                    all(p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) for p in params),
+                    f"{item.id}: sender должен принимать позиционные аргументы",
+                )
+                self.assertEqual(len(params), 3, f"{item.id}: ожидается sender(user_id, subject, text)")
+
+    def test_telegram_send_through_registry(self):
+        # Без токена доставка честно отвечает «failed» с понятной причиной —
+        # и больше не взрывается TypeError на входе (сеть не трогаем).
+        status, error = channels.send("telegram", 1, "тема", "текст")
+        self.assertEqual((status, error), ("failed", "Не задан токен бота"))
+        # Кнопка «Проверить» идёт через ту же сигнатуру.
+        status, error = channels.test_channel("telegram", 1)
+        self.assertEqual((status, error), ("failed", "Не задан токен бота"))
+
+    def test_email_send_through_registry(self):
+        status, error = channels.send("email", 1, "тема", "текст")
+        self.assertEqual((status, error), ("skipped", "Не задан сервер, отправитель или получатель"))
 
     def test_registered_channel_reaches_catalog_and_matrix(self):
         channels.register_channel(ChannelDef(id="fake" + MARK, label="Фейк"))

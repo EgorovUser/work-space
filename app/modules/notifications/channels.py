@@ -145,7 +145,13 @@ def _json(response) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def send_telegram(user_id: int, text: str) -> tuple[str, str]:
+def send_telegram(user_id: int, subject: str, text: str) -> tuple[str, str]:
+    """Отправка в Telegram по контракту реестра: sender(user_id, subject, text).
+
+    У сообщения Telegram нет темы, а исходящий текст `_outgoing` уже
+    начинается с заголовка уведомления — subject сознательно не
+    используется (префикс дублировал бы первую строку).
+    """
     token, problem = _bot(user_id)
     chat = get_str("notifications", "telegram.chat_id", user_id=user_id).strip()
     if problem:
@@ -245,7 +251,9 @@ register_channel(
         id="telegram",
         label="Telegram",
         sender=send_telegram,
-        tester=lambda user_id: send_telegram(user_id, "Проверка: бот доставляет сообщения из рабочего пространства."),
+        tester=lambda user_id: send_telegram(
+            user_id, "Проверка канала", "Проверка: бот доставляет сообщения из рабочего пространства."
+        ),
     )
 )
 register_channel(
