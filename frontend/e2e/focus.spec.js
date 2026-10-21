@@ -39,8 +39,17 @@ test("таймер виден в рельсе над именем и остан�
   // Стоп из рельсы: строка уходит, сервер больше не видит таймера.
   await line.locator(".rail-focus-stop").click()
   await expect(line).toHaveCount(0)
-  const check = await api.get("/api/time/running")
-  expect((await check.json()).running).toBeNull()
+  // Строку рельса прячет оптимистично — запрос стопа может ещё ехать,
+  // поэтому проверяем сервер опросом, а не одним выстрелом.
+  await expect
+    .poll(
+      async () => {
+        const check = await api.get("/api/time/running")
+        return (await check.json()).running
+      },
+      { message: "сервер должен увидеть стоп из рельсы" }
+    )
+    .toBeNull()
 })
 
 test("старт помодоро останавливает серверный таймер", async ({ page }) => {

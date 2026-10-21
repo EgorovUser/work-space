@@ -76,6 +76,7 @@ import { useChrome } from "../composables/useChrome"
 import { railCount } from "../composables/countFormat"
 import { useCounters } from "../composables/useCounters"
 import { useEvents } from "../composables/useEvents"
+import { useOsNotify } from "../composables/useOsNotify"
 import { usePomodoro } from "../composables/usePomodoro"
 import { useRunningTimer } from "../composables/useRunningTimer"
 import { useSettings } from "../composables/useSettings"
@@ -114,6 +115,7 @@ export default {
     const counters = useCounters()
     const globalCounts = counters.globalCounts
     const focus = useRunningTimer()
+    const osNotify = useOsNotify()
 
     // Активный фокус в рельсе (патч AL): помодоро или серверный таймер.
     // Часы тикают сами (state.remaining у помодоро, now у таймера),
@@ -193,6 +195,7 @@ export default {
       counters.start()
       counters.refresh()
       focus.start()
+      osNotify.start()
       // Сборка приходит от работающего бэкенда, а не зашита в бандл: если
       // надписи нет — оболочка устарела; если есть — ровно эта версия и
       // крутится (сверяется с curl /healthz).

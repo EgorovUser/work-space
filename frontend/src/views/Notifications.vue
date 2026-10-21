@@ -28,7 +28,7 @@
 
     <section v-show="tab === 'routes'" class="card">
       <h2>Какие события куда слать</h2>
-      <p class="muted">Наберите событие и выберите его. Можно несколько. Щелчок по плашке убирает его. Чтобы Telegram или почта реально ушли, заполните вкладку «Куда писать».</p>
+      <p class="muted">Наберите событие и выберите его. Можно несколько. Щелчок по плашке убирает его. Чтобы Telegram или почта реально ушли, заполните вкладку «Куда писать»; системные тосты показывает само устройство — разрешение и тумблеры там же.</p>
       <div class="split">
         <label v-for="channel in channels" :key="channel.id">
           {{ channel.label }}
@@ -47,19 +47,42 @@
       </div>
     </section>
 
-    <ChannelSetup v-if="tab === 'setup'" />
+    <div v-if="tab === 'setup'">
+      <section class="card">
+        <h2>Системные уведомления</h2>
+        <p class="muted">Тосты самой Windows из браузера: приходят, пока открыта хоть одна вкладка приложения. Какие события так слать — канал «Системные уведомления» на вкладке «Какие события». Тумблеры ниже действуют только на этом устройстве.</p>
+        <p v-if="os.state.permission === 'unsupported'" class="muted">Этот браузер не умеет показывать системные уведомления.</p>
+        <template v-else>
+          <div class="row-actions">
+            <span class="pill">Разрешение: {{ osPermissionLabel }}</span>
+            <button v-if="os.state.permission === 'default'" class="btn" type="button" @click="requestOsPermission">Разрешить уведомления</button>
+          </div>
+          <p v-if="os.state.permission === 'denied'" class="muted">Разрешение заблокировано: снимите блокировку в настройках сайта (значок замка слева от адреса) и обновите страницу.</p>
+          <label class="check">
+            <input :checked="os.state.enabled" type="checkbox" @change="os.applySettings({ enabled: $event.target.checked })" />
+            <span>Показывать системные тосты на этом устройстве</span>
+          </label>
+          <label class="check">
+            <input :checked="os.state.onlyHidden" type="checkbox" @change="os.applySettings({ onlyHidden: $event.target.checked })" />
+            <span>Только когда вкладка не на экране</span>
+          </label>
+        </template>
+      </section>
+      <ChannelSetup />
+    </div>
   </AppShell>
 </template>
 
 <script>
-import { onMounted, ref } from "vue"
+import { computed, onMounted, ref } from "vue"
 import AppShell from "../components/AppShell.vue"
 import MultiSelect from "../components/MultiSelect.vue"
 import ChannelSetup from "../components/ChannelSetup.vue"
 import Tabs from "../components/Tabs.vue"
 import { api } from "../api"
-import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
+import { useOsNotify } from "../composables/useOsNotify"
+import { useWhen } from "../composables/useWhen"
 
 export default {
   components: { AppShell, ChannelSetup, MultiSelect, Tabs },
@@ -82,6 +105,19 @@ export default {
     ]
     const { settings, when } = useWhen()
     const notice = useNotice()
+    const os = useOsNotify()
+    const osPermissionLabel = computed(() => {
+      const labels = {
+        granted: "разрешены",
+        default: "не запрошены",
+        denied: "заблокированы",
+      }
+      return labels[os.state.permission] || "неизвестны"
+    })
+
+    async function requestOsPermission() {
+      await os.requestPermission()
+    }
 
     function line(item) {
       const event = String(item.event_label || "").trim()
@@ -189,6 +225,7 @@ export default {
     return {
       items, events, channels, matrix, error, matrixError, matrixNote, loading, busy, unreadOnly, tab, pageTabs,
       when, line, extra, load, saveMatrix, read, readAll, picked, setChannel,
+      os, osPermissionLabel, requestOsPermission,
     }
   },
 }

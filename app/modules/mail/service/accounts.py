@@ -402,7 +402,7 @@ def _block(session: Session, row: MailAccount, error: str, password: str, user_i
                 "subject": row.name,
                 "error": row.last_error,
                 "link": "/mail",
-                "channels": ["browser", "telegram", "email"],
+                "channels": ["browser", "os", "telegram", "email"],
                 "dedup_key": "mail-auth:" + str(row.id),
             },
             user_id=user_id,

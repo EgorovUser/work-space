@@ -57,6 +57,7 @@ _EVENTS = [
 ]
 _CHANNELS = [
     {"id": "browser", "label": "В приложении"},
+    {"id": "os", "label": "Системные уведомления"},
     {"id": "telegram", "label": "Telegram"},
     {"id": "email", "label": "Почта"},
 ]
@@ -67,7 +68,14 @@ _STATUSES = [
     {"id": "failed", "label": "Ошибка"},
     {"id": "skipped", "label": "Пропущено"},
 ]
-_MATRIX = {item["id"]: {"browser": True, "telegram": False, "email": False} for item in _EVENTS}
+# Канал os (патч AO) — тост операционной системы через Web Notifications
+# API. Доставка клиентская: сервер только кладёт флаг os в событие
+# notifications.new для живых вкладок; строк NotificationDelivery канал
+# не создаёт (мимолётный тост нечего ретраить и догонять).
+_MATRIX = {
+    item["id"]: {"browser": True, "os": False, "telegram": False, "email": False}
+    for item in _EVENTS
+}
 
 
 DEFS: tuple[SettingDef, ...] = (
@@ -86,7 +94,7 @@ DEFS: tuple[SettingDef, ...] = (
     _s(
         key="matrix.fallback",
         value_type="json",
-        default={"browser": True, "telegram": False, "email": False},
+        default={"browser": True, "os": False, "telegram": False, "email": False},
         label="Каналы для события, которого нет в матрице",
         allowed_scopes=("global", "user"),
         ui_hint="json",

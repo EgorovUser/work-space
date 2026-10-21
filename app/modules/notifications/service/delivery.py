@@ -23,6 +23,7 @@ from app.modules.notifications.service._settings import _choices, _clip_error, _
 
 def handle(message: EventMessage) -> None:
     delivery_ids: list[int] = []
+    fresh: list[tuple[int, dict]] = []
     with session_scope() as session:
         already = session.scalars(
             select(Notification.id).where(Notification.outbox_id == message.id)
@@ -63,7 +64,10 @@ def handle(message: EventMessage) -> None:
                 session.expunge(row)
                 continue
             for channel, enabled in flags.items():
-                if channel == "browser" or not enabled:
+                # browser живёт во вкладке (лента/бейдж), os — тост
+                # операционной системы у клиента (патч AO): ни тому, ни
+                # другому серверная очередь доставок не нужна.
+                if channel in ("browser", "os") or not enabled:
                     continue
                 delivery = NotificationDelivery(
                     notification_id=row.id,
@@ -77,12 +81,30 @@ def handle(message: EventMessage) -> None:
                 session.add(delivery)
                 session.flush()
                 delivery_ids.append(delivery.id)
+            # Само уведомление — живым вкладкам пользователя (патч AO):
+            # фронт решает по флагу os и местным тумблерам, показывать ли
+            # системный тост. Адресно: матрица каналов у каждого своя.
+            fresh.append(
+                (
+                    user.id,
+                    {
+                        "id": row.id,
+                        "title": title,
+                        "body": body,
+                        "link": link,
+                        "event_type": message.event_type,
+                        "os": bool(flags.get("os")),
+                    },
+                )
+            )
             created += 1
         if created:
             with log_scope("notifications", "create", user_id=message.user_id):
                 logger.info("notifications created event={} count={}", message.event_type, created)
             # Открытые вкладки пересчитают свой счётчик уведомлений сразу.
             publish_event("notifications.changed")
+            for fresh_user_id, payload in fresh:
+                publish_event("notifications.new", payload, fresh_user_id)
     for delivery_id in delivery_ids:
         send_delivery(delivery_id)
 
@@ -180,7 +202,7 @@ def _catchup_ids() -> list[int]:
                 ).all()
             }
             for channel, enabled in flags.items():
-                if channel == "browser" or not enabled or channel in existing:
+                if channel in ("browser", "os") or not enabled or channel in existing:
                     continue
                 delivery = NotificationDelivery(
                     notification_id=note.id,

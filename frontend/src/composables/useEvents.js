@@ -99,7 +99,7 @@ function open() {
       armRetry()
     }
   }
-  for (const name of ["state", "mail.sync", "mail.changed"]) {
+  for (const name of ["state", "mail.sync", "mail.changed", "notifications.new"]) {
     es.addEventListener(name, (raw) => handleEvent(name, raw))
   }
 }
