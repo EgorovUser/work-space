@@ -102,6 +102,7 @@ def create_app() -> FastAPI:
 
 
 def healthz() -> dict:
+    from app.core import events_bus
     from app.core.outbox import stats
     from app.core.scheduler import job_names
 
@@ -119,6 +120,13 @@ def healthz() -> dict:
         "modules": modules,
         "jobs": job_names(),
         "outbox": outbox_stats,
+        # Шина живых событий: дропы = переполнение очередей вкладок (счётчик
+        # монотонный), подписчики = открытые SSE-каналы. Раньше дропы не
+        # были видны нигде (патч AS).
+        "bus": {
+            "dropped": events_bus.dropped(),
+            "subscribers": events_bus.subscriber_count(),
+        },
     }
 
 

@@ -48,6 +48,17 @@ def register_core_jobs() -> None:
         detail="Удаляет старые файлы журнала",
     )
     register_job(
+        name="outbox.cleanup",
+        fn=cleanup_outbox,
+        module="core",
+        action="job.outbox.cleanup",
+        interval_module="core",
+        interval_key="outbox.cleanup_interval_hours",
+        interval_unit="hours",
+        label="Очередь событий",
+        detail="Удаляет отработанные события старше retention (DONE — дни, FAILED — вчетверо дольше)",
+    )
+    register_job(
         name="system.watch",
         fn=watch,
         module="core",

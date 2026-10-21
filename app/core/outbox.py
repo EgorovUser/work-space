@@ -3,14 +3,16 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
+from datetime import timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from app.core.context import request_id_var
 from app.core.db import session_scope, utcnow
 from app.core.events_catalog import ALL_EVENTS, DONE, FAILED, PENDING, PROCESSING
 from app.core.logging import log_scope, logger
 from app.core.models import OutboxEvent
+from app.core.settings_store import get_int
 
 _handlers: dict[str, list] = {}
 _handlers_lock = threading.Lock()
@@ -114,6 +116,33 @@ def stats() -> dict:
     return {"pending": int(pending or 0), "failed": int(failed or 0)}
 
 
+def cleanup_outbox() -> None:
+    """Удалить отработанные события старше retention (джоба outbox.cleanup).
+
+    DONE живёт outbox.retention_days, FAILED — вчетверо дольше: ошибку
+    хочется рассмотреть и после отпуска, а счётчик failed в /healthz
+    не должен обнуляться раньше, чем её заметят. PENDING и PROCESSING
+    не трогаем никогда — это ещё не доехавшая работа.
+    """
+    days = max(1, get_int("core", "outbox.retention_days"))
+    now = utcnow()
+    with session_scope() as session:
+        removed_done = session.execute(
+            delete(OutboxEvent).where(
+                OutboxEvent.status == DONE,
+                OutboxEvent.created_at < now - timedelta(days=days),
+            )
+        ).rowcount
+        removed_failed = session.execute(
+            delete(OutboxEvent).where(
+                OutboxEvent.status == FAILED,
+                OutboxEvent.created_at < now - timedelta(days=days * 4),
+            )
+        ).rowcount
+    if removed_done or removed_failed:
+        logger.info("outbox cleanup removed done={} failed={}", removed_done, removed_failed)
+
+
 def running() -> bool:
     return _thread is not None and _thread.is_alive()
 
@@ -153,7 +182,7 @@ def _loop() -> None:
     global _next_at
     while not _stop.is_set():
         try:
-            dispatch_once()
+            _drain_tick()
         except Exception:
             with log_scope("outbox", "dispatch"):
                 logger.exception("outbox loop error")
@@ -162,9 +191,24 @@ def _loop() -> None:
         _stop.wait(pause)
 
 
-def _process(message: EventMessage) -> None:
-    from datetime import timedelta
+def _drain_tick() -> int:
+    """Дрен до пустой очереди за один такт (с потолком).
 
+    Раньше такт брал одну партию batch_size и засыпал на poll_seconds:
+    всплеск мутаций растягивался — события (и их уведомления) ждали по
+    5 секунд на каждые 20 штук. Теперь такт крутит партии, пока есть
+    работа; потолок страхует от захвата потока неподъёмным хвостом.
+    """
+    processed = 0
+    for _ in range(50):
+        count = dispatch_once()
+        if count == 0:
+            break
+        processed += count
+    return processed
+
+
+def _process(message: EventMessage) -> None:
     from app.core.settings_store import get_int
 
     with _handlers_lock:
