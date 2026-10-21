@@ -43,7 +43,7 @@ cd ~/work-space
 ```text
 app/                 бэкенд
   core/              конфиг, база, вход, файлы, настройки, очередь, планировщик
-  modules/           projects, tasks, documents, examples, secrets, timetracking, mail, notifications
+  modules/           projects, tasks, documents, examples, secrets, rdp, timetracking, mail, notifications, trash
 alembic/             миграции схемы (Alembic)
 frontend/            Vue-интерфейс
 data/                база, файлы, логи, bootstrap.env (создаётся само)
@@ -76,7 +76,7 @@ npm run dev
 
 ## Тесты
 
-Бэкенд: `pip install -r requirements.txt -r requirements-dev.txt`, затем `python -m unittest discover -s tests` — 43 проверки на временной базе (юнит-ядро, HTTP-слой через TestClient, санитайзер писем).
+Бэкенд: `pip install -r requirements.txt -r requirements-dev.txt`, затем `python -m unittest discover -s tests` — 195 проверок на временной базе (юнит-ядро, HTTP-слой через TestClient, санитайзер писем).
 
 Фронтенд: `cd frontend && npm install && npm test`.
 
