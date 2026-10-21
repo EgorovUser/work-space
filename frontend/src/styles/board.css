@@ -149,8 +149,9 @@ body.dragging-card .task-card { cursor: grabbing; }
 
 .tc-count { font-variant-numeric: tabular-nums; }
 
-.progress { height: 4px; background: var(--line); border-radius: 99px; margin-top: 8px; }
-.progress > span { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+/* (.progress 4px удалён патчем AT: полностью затенён 8px-блоком в
+   feedback.css — тот и рисуется. Если нужна тонкая полоска — задавайте
+   модификатор с более высокой специфичностью.) */
 
 /* Ручной прогресс на карточке (патч AK): число вводится как часы списания —
    компактное поле, Enter сохраняет. Селектор input.tc-progress не слабее

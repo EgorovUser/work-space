@@ -109,6 +109,7 @@ import MailTags from "../components/mail/MailTags.vue"
 import { api } from "../api"
 import { useEvents } from "../composables/useEvents"
 import { tagStyle } from "../composables/mailTagStyle"
+import { fromLine } from "../composables/mailFormat"
 import { neighbors } from "../composables/mailNav"
 import { useWhen } from "../composables/useWhen"
 
@@ -174,11 +175,6 @@ export default {
       if (query.value.trim()) next.q = query.value.trim()
       if (activeTag.value) next.tag = String(activeTag.value)
       router.replace({ query: next }).catch(() => {})
-    }
-
-    function fromLine(item) {
-      if (item.from_name && item.from_addr) return item.from_name + " <" + item.from_addr + ">"
-      return item.from_addr || item.from_name || ""
     }
 
     async function load(append = false) {

@@ -111,6 +111,7 @@ import { repeatLabel } from "../composables/calendar"
 import { formatWhen } from "../composables/formatDate"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
+import { useSoftDelete } from "../composables/useSoftDelete"
 
 // Страница задачи: шапка с названием, форма «О задаче» и вкладки.
 // Чеклист, файлы, лента и списание времени живут в компонентах task/
@@ -125,6 +126,7 @@ export default {
     const router = useRouter()
     const { settings } = useWhen()
     const notice = useNotice()
+    const { softRemove } = useSoftDelete()
     const tab = ref("about")
     const pageTabs = [
       { id: "about", label: "О задаче" },
@@ -236,33 +238,29 @@ export default {
     }
 
     async function remove() {
-      if (!window.confirm("Удалить задачу?")) return
+      // Скелет мягкого удаления — useSoftDelete (патч AT): тост глобальный,
+      // переживает переход на доску; «Отменить» возвращает задачу из
+      // корзины и открывает её снова.
+      const taskId = Number(route.params.taskId)
+      const title = task.value ? task.value.title : "Задача"
       busy.value = true
       try {
-        await api("/api/projects/" + props.project.id + "/tasks/" + route.params.taskId, { method: "DELETE" })
-        const taskId = Number(route.params.taskId)
-        const title = task.value ? task.value.title : "Задача"
-        // Тост глобальный — переживает переход на доску; «Отменить»
-        // возвращает задачу из корзины и открывает её снова.
-        notice.show("Задача «" + title + "» удалена в корзину", {
-          kind: "success",
-          timeout: 9000,
-          action: {
-            label: "Отменить",
-            run: async () => {
-              try {
-                await api("/api/trash/tasks/" + taskId + "/restore", { method: "POST" })
-                notice.show("Задача «" + title + "» восстановлена", { kind: "success" })
-                router.push("/projects/" + props.project.id + "/tasks/" + taskId)
-              } catch (err) {
-                notice.show("Не удалось восстановить задачу. " + (err.message || "Ошибка"))
-              }
-            },
+        const ok = await softRemove({
+          confirm: "Удалить задачу?",
+          url: "/api/projects/" + props.project.id + "/tasks/" + taskId,
+          restoreUrl: "/api/trash/tasks/" + taskId + "/restore",
+          doneText: "Задача «" + title + "» удалена в корзину",
+          restoredText: "Задача «" + title + "» восстановлена",
+          restoreFailText: "Не удалось восстановить задачу. ",
+          afterRestore: () => {
+            router.push("/projects/" + props.project.id + "/tasks/" + taskId)
+          },
+          onError: (err) => {
+            formError.value = err.message || "Не удалилось"
           },
         })
-        router.push("/projects/" + props.project.id)
-      } catch (err) {
-        formError.value = err.message || "Не удалилось"
+        if (ok) router.push("/projects/" + props.project.id)
+      } finally {
         busy.value = false
       }
     }

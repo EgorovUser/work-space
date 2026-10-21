@@ -1,5 +1,5 @@
 /* табы-чипы, мультиселект, поповеры, формы входа/настроек — кусок бывшего styles.css (патч AP). */
-.cards > .card { margin-bottom: 0; }
+/* (.cards удалён патчем AT: класс не рендерится.) */
 
 .split {
   display: grid;
@@ -88,7 +88,6 @@
 }
 .multi-menu button:hover { background: var(--ok-bg); }
 
-.status-list { display: grid; }
 .status-row {
   display: flex;
   justify-content: space-between;
@@ -126,7 +125,6 @@
 }
 .mail-tag.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 input[type="color"] { width: 72px; height: 36px; padding: 2px; }
-.tag-pick { width: auto; flex: 0 1 160px; }
 
 .login-wrap {
   min-height: 100vh;

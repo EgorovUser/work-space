@@ -20,7 +20,7 @@
       >Старее →</button>
     </div>
     <h1>{{ message.title }}</h1>
-    <p class="muted">{{ fromLine }} → {{ message.to_addr || "—" }} · {{ when(message.received_at) }}</p>
+    <p class="muted">{{ fromLine(message) }} → {{ message.to_addr || "—" }} · {{ when(message.received_at) }}</p>
     <div v-if="message.tags && message.tags.length" class="tag-row">
       <button
         v-for="tag in message.tags"
@@ -38,7 +38,7 @@
         <div>
           <strong v-if="item.id === message.id">{{ item.title }}</strong>
           <router-link v-else :class="{ unread: !item.read }" :to="threadLink(item)">{{ item.title }}</router-link>
-          <div class="muted">{{ fromLineOf(item) }} · {{ when(item.received_at) }}<span v-if="item.archived"> · архив</span></div>
+          <div class="muted">{{ fromLine(item) }} · {{ when(item.received_at) }}<span v-if="item.archived"> · архив</span></div>
         </div>
       </div>
       <p v-if="message.thread_total > message.thread.length" class="muted">Показаны последние {{ message.thread.length }} из {{ message.thread_total }}</p>
@@ -103,6 +103,8 @@ import SkeletonList from "./SkeletonList.vue"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
 import { formatSize } from "../composables/formatBytes"
+import { fromLine } from "../composables/mailFormat"
+import { tagStyle } from "../composables/mailTagStyle"
 
 // Читалка письма. Живёт в двух местах: правая панель «Почты» (master-detail,
 // там есть сосед-навигация и «К списку») и отдельная страница письма проекта.
@@ -129,13 +131,6 @@ export default {
     const { settings, when } = useWhen()
     const notice = useNotice()
 
-    const fromLine = computed(() => {
-      const item = message.value
-      if (!item) return ""
-      if (item.from_name && item.from_addr) return item.from_name + " <" + item.from_addr + ">"
-      return item.from_addr || item.from_name || ""
-    })
-
     // Внешние картинки в письме — источник трекинг-пикселей: пока кнопка не
     // нажата, src вырезается и заменяется нейтральным заполнителем. Ссылки
     // открываются в новой вкладке (<base target="_blank"> + allow-popups),
@@ -155,23 +150,9 @@ export default {
       return head + body + "</body></html>"
     })
 
-    function fromLineOf(item) {
-      if (!item) return ""
-      if (item.from_name && item.from_addr) return item.from_name + " <" + item.from_addr + ">"
-      return item.from_addr || item.from_name || ""
-    }
-
     function threadLink(item) {
       if (props.project && props.project.id) return "/projects/" + props.project.id + "/mail/" + item.id
       return "/mail/" + item.id
-    }
-
-    function tagStyle(tag, active) {
-      return {
-        color: active ? "#fff" : tag.color,
-        borderColor: tag.color,
-        background: active ? tag.color : "transparent",
-      }
     }
 
     function path() {
@@ -333,7 +314,7 @@ export default {
       load()
     }, { immediate: true })
 
-    return { message, projects, folderProject, error, formError, busy, savingDoc, showImages, hasImages, fromLine, fromLineOf, frameHtml, tagStyle, threadLink, when, formatSize, toggleRead, toggleArchive, toggleTag, remove, pullFile, saveToDocuments, documentTarget, documentTargetName, place, emit }
+    return { message, projects, folderProject, error, formError, busy, savingDoc, showImages, hasImages, fromLine, frameHtml, tagStyle, threadLink, when, formatSize, toggleRead, toggleArchive, toggleTag, remove, pullFile, saveToDocuments, documentTarget, documentTargetName, place, emit }
   },
 }
 </script>

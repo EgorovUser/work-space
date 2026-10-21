@@ -49,6 +49,7 @@ import { defaultDeadlineISO } from "../composables/deadlineDefault"
 import { useBoardDrag } from "../composables/useBoardDrag"
 import { useWhen } from "../composables/useWhen"
 import { useNotice } from "../composables/useNotice"
+import { useSoftDelete } from "../composables/useSoftDelete"
 
 // Доска задач: колонки, композеры, перетаскивание колонок (SortableJS).
 // Pointer-логика перетаскивания карточек и панорамы — в
@@ -69,6 +70,7 @@ export default {
     const root = ref(null)
     const { settings } = useWhen()
     const notice = useNotice()
+    const { softRemove } = useSoftDelete()
     const router = useRouter()
     const sortables = []
     // Перетаскивание карточек и панорама доски — composable (патч X).
@@ -250,33 +252,25 @@ export default {
     }
 
     async function removeTask(task) {
-      if (!window.confirm("Удалить задачу «" + task.title + "»?")) return
+      // Скелет мягкого удаления — useSoftDelete (патч AT перевёл третью
+      // рукописную копию): подтверждение, DELETE, тост с «Отменить».
+      // Строку снимаем оптимистично: confirm блокирует repaint, отмену
+      // переживает снапшот.
       const snapshot = tasks.value.map((item) => ({ ...item }))
       tasks.value = tasks.value.filter((item) => item.id !== task.id)
-      try {
-        await api("/api/projects/" + props.project.id + "/tasks/" + task.id, { method: "DELETE" })
-        // Удаление мягкое — задача лежит в корзине, поэтому тост несёт
-        // «Отменить»: восстановление возвращает карточку на доску.
-        notice.show("Задача «" + task.title + "» удалена в корзину", {
-          kind: "success",
-          timeout: 9000,
-          action: {
-            label: "Отменить",
-            run: async () => {
-              try {
-                await api("/api/trash/tasks/" + task.id + "/restore", { method: "POST" })
-                notice.show("Задача «" + task.title + "» восстановлена", { kind: "success" })
-                await load()
-              } catch (err) {
-                notice.show("Не удалось восстановить задачу. " + (err.message || "Ошибка"))
-              }
-            },
-          },
-        })
-      } catch (err) {
-        tasks.value = snapshot
-        notice.show("Не удалось удалить карточку. " + (err.message || "Ошибка"))
-      }
+      const ok = await softRemove({
+        confirm: "Удалить задачу «" + task.title + "»?",
+        url: "/api/projects/" + props.project.id + "/tasks/" + task.id,
+        restoreUrl: "/api/trash/tasks/" + task.id + "/restore",
+        doneText: "Задача «" + task.title + "» удалена в корзину",
+        restoredText: "Задача «" + task.title + "» восстановлена",
+        restoreFailText: "Не удалось восстановить задачу. ",
+        afterRestore: load,
+        onError: (err) => {
+          notice.show("Не удалось удалить карточку. " + (err.message || "Ошибка"))
+        },
+      })
+      if (!ok) tasks.value = snapshot
     }
 
     async function removeColumn(status) {

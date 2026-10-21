@@ -3,10 +3,14 @@ import App from "./App.vue"
 import router from "./router"
 import { setUnauthorizedHandler } from "./api"
 import { useAuth } from "./composables/useAuth"
+import { useEvents } from "./composables/useEvents"
 import "./styles.css"
 
 const auth = useAuth()
 setUnauthorizedHandler(() => {
+  // Сессия протухла: мало увести на логин — SSE-канал продолжал бы
+  // переподключаться с нарастающей паузой до перезагрузки страницы.
+  useEvents().stop()
   auth.clear()
   if (router.currentRoute.value.path !== "/login") {
     const current = router.currentRoute.value

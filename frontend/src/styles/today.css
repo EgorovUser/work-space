@@ -1,12 +1,5 @@
 /* сетка «Сегодня» и сводка недель — кусок бывшего styles.css (патч AP). */
-.home-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.home-grid > :first-child { grid-column: 1 / -1; }
+/* (.home-grid удалён патчем AT: остаток старого хаба до Today.vue.) */
 
 /* Сетка хаба «Сегодня»: просроченные — на всю ширину, остальное — в два
    столбца; на телефоне всё складывается в один. */

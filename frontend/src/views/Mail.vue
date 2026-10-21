@@ -83,6 +83,7 @@ import Tabs from "../components/Tabs.vue"
 import SkeletonList from "../components/SkeletonList.vue"
 import { useNotice } from "../composables/useNotice"
 import { useSoftDelete } from "../composables/useSoftDelete"
+import { fromLine } from "../composables/mailFormat"
 import { useWhen } from "../composables/useWhen"
 
 export default {
@@ -98,9 +99,7 @@ export default {
     const messages = ref([])
     const fields = ref([])
     const ops = ref([])
-    const actions = ref([])
     const error = ref("")
-    const accountError = ref("")
     const ruleError = ref("")
     const importError = ref("")
     const importNote = ref("")
@@ -119,22 +118,14 @@ export default {
       { id: "rules", label: "Фильтры" },
     ]
     const file = ref(null)
-    const account = ref({ name: "", host: "", port: 993, use_ssl: true, username: "", password: "", folder: "INBOX" })
     const rule = ref({ name: "", field: "from", op: "contains", value: "", action: "keep" })
     const { settings, when } = useWhen()
-
-    function fromLine(item) {
-      if (item.from_name && item.from_addr) return item.from_name + " <" + item.from_addr + ">"
-      return item.from_addr || item.from_name || ""
-    }
 
     function applyChoices(data) {
       fields.value = data.fields || []
       ops.value = data.ops || []
-      actions.value = data.actions || []
       if (!fields.value.some((item) => item.id === rule.value.field) && fields.value.length) rule.value.field = fields.value[0].id
       if (!ops.value.some((item) => item.id === rule.value.op) && ops.value.length) rule.value.op = ops.value[0].id
-      if (!actions.value.some((item) => item.id === rule.value.action) && actions.value.length) rule.value.action = actions.value[0].id
     }
 
     function syncUrl() {
@@ -191,66 +182,9 @@ export default {
 
     watch(tab, syncUrl)
 
-    async function createAccount() {
-      accountError.value = ""
-      busy.value = true
-      try {
-        await api("/api/projects/" + props.project.id + "/mail/accounts", { method: "POST", body: { ...account.value } })
-        account.value.password = ""
-        account.value.name = ""
-        notice.show("Ящик добавлен", { kind: "success" })
-        await load()
-      } catch (err) {
-        accountError.value = err.message || "Не удалось добавить"
-      } finally {
-        busy.value = false
-      }
-    }
 
-    async function check(item) {
-      error.value = ""
-      busy.value = true
-      try {
-        await api("/api/projects/" + props.project.id + "/mail/accounts/" + item.id + "/check", { method: "POST" })
-        notice.show("Ящик «" + (item.name || item.username) + "» доступен", { kind: "success" })
-        await load()
-      } catch (err) {
-        error.value = err.message || "Проверка не удалась"
-      } finally {
-        busy.value = false
-      }
-    }
 
-    async function fetchMail(item) {
-      error.value = ""
-      busy.value = true
-      try {
-        const data = await api("/api/projects/" + props.project.id + "/mail/accounts/" + item.id + "/fetch", { method: "POST" })
-        notice.show(
-          "Письма забраны" + (data && Number.isFinite(Number(data.fetched)) ? ": " + data.fetched : ""),
-          { kind: "success" },
-        )
-        await load()
-      } catch (err) {
-        error.value = err.message || "Не удалось забрать"
-      } finally {
-        busy.value = false
-      }
-    }
 
-    async function removeAccount(item) {
-      if (!window.confirm("Удалить ящик? Письма останутся.")) return
-      busy.value = true
-      try {
-        await api("/api/projects/" + props.project.id + "/mail/accounts/" + item.id, { method: "DELETE" })
-        notice.show("Ящик «" + (item.name || item.username) + "» удалён", { kind: "success" })
-        await load()
-      } catch (err) {
-        error.value = err.message || "Не удалось удалить"
-      } finally {
-        busy.value = false
-      }
-    }
 
     async function createRule() {
       ruleError.value = ""
@@ -312,9 +246,9 @@ export default {
     }, { immediate: true })
 
     return {
-      accounts, rules, messages, fields, ops, actions, error, accountError, ruleError, importError, importNote,
-      loading, busy, query, unreadOnly, includeArchived, account, rule, tab, pageTabs, moreBusy, hasMore,
-      when, fromLine, load, loadMore, createAccount, check, fetchMail, removeAccount, createRule, removeRule, onFile, importFile,
+      accounts, rules, messages, fields, ops, error, ruleError, importError, importNote,
+      loading, busy, query, unreadOnly, includeArchived, rule, tab, pageTabs, moreBusy, hasMore,
+      when, fromLine, load, loadMore, createRule, removeRule, onFile, importFile,
     }
   },
 }

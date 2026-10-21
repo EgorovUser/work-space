@@ -1,5 +1,5 @@
 /* тосты, колокольчик, бейджи-количества — кусок бывшего styles.css (патч AP). */
-.today-card { margin-bottom: 12px; }
+/* (.today-card удалён патчем AT: класс не рендерится.) */
 
 .snippet {
   white-space: pre-wrap;
@@ -165,10 +165,8 @@
   vertical-align: middle;
 }
 
-.matrix-wrap { overflow-x: auto; max-width: 100%; }
-.matrix { width: 100%; border-collapse: collapse; }
-.matrix th, .matrix td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; }
-.matrix td:not(:first-child), .matrix th:not(:first-child) { text-align: center; width: 7rem; }
+/* (.matrix* удалены патчем AT: матрица подписок рисуется компонентами
+   MultiSelect, табличных классов в разметке нет.) */
 
 /* — RDP-подключения: адрес сервера моноширинно — читается как код — */
 .mono-inline { font-family: var(--mono, monospace); font-size: 0.9rem; }

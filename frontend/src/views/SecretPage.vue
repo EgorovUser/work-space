@@ -72,6 +72,7 @@ import SecretRevisions from "../components/secret/SecretRevisions.vue"
 import { useClipboard } from "../composables/useClipboard"
 import { useConflictedSave } from "../composables/useConflictedSave"
 import { useNotice } from "../composables/useNotice"
+import { useSoftDelete } from "../composables/useSoftDelete"
 import { useWhen } from "../composables/useWhen"
 
 // Страница секрета: форма значений, показ/копирование, генерация, архив,
@@ -93,6 +94,7 @@ export default {
     const touched = ref(false)
     const form = ref({ title: "", kind: "", username: "", url: "", note: "", secret: "" })
     const notice = useNotice()
+    const { softRemove } = useSoftDelete()
     const { onConflict } = useConflictedSave()
     const clipboard = useClipboard()
     const { copied, clipSeconds } = clipboard
@@ -274,33 +276,29 @@ export default {
     }
 
     async function remove() {
-      if (!window.confirm("Удалить секрет?")) return
+      // Скелет мягкого удаления — useSoftDelete (патч AT): «Отменить»
+      // достаёт секрет из корзины и открывает его страницу снова.
+      // История значений сохраняется до purge.
+      const secretId = Number(route.params.secretId)
+      const title = record.value ? record.value.title : "Секрет"
       busy.value = true
       try {
-        await api("/api/projects/" + props.project.id + "/secrets/" + route.params.secretId, { method: "DELETE" })
-        const secretId = Number(route.params.secretId)
-        const title = record.value ? record.value.title : "Секрет"
-        // Удаление мягкое: «Отменить» достаёт секрет из корзины и открывает
-        // его страницу снова. История значений сохраняется до purge.
-        notice.show("Секрет «" + title + "» удалён в корзину", {
-          kind: "success",
-          timeout: 9000,
-          action: {
-            label: "Отменить",
-            run: async () => {
-              try {
-                await api("/api/trash/secrets/" + secretId + "/restore", { method: "POST" })
-                notice.show("Секрет «" + title + "» восстановлен", { kind: "success" })
-                router.push("/projects/" + props.project.id + "/secrets/" + secretId)
-              } catch (err) {
-                notice.show("Не удалось восстановить секрет. " + (err.message || "Ошибка"))
-              }
-            },
+        const ok = await softRemove({
+          confirm: "Удалить секрет?",
+          url: "/api/projects/" + props.project.id + "/secrets/" + secretId,
+          restoreUrl: "/api/trash/secrets/" + secretId + "/restore",
+          doneText: "Секрет «" + title + "» удалён в корзину",
+          restoredText: "Секрет «" + title + "» восстановлен",
+          restoreFailText: "Не удалось восстановить секрет. ",
+          afterRestore: () => {
+            router.push("/projects/" + props.project.id + "/secrets/" + secretId)
+          },
+          onError: (err) => {
+            formError.value = err.message || "Не удалось удалить"
           },
         })
-        router.push("/projects/" + props.project.id + "/secrets")
-      } catch (err) {
-        formError.value = err.message || "Не удалось удалить"
+        if (ok) router.push("/projects/" + props.project.id + "/secrets")
+      } finally {
         busy.value = false
       }
     }
