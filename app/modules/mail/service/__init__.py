@@ -153,7 +153,6 @@ from app.modules.mail.service.providers import (
     search_provider,
 )
 from app.modules.mail.service.rules import create_rule, delete_rule, update_rule
-from app.modules.mail.service.schema import ensure_schema
 
 __all__ = [
     "check_account",
@@ -167,7 +166,6 @@ __all__ = [
     "delete_rule",
     "delete_tag",
     "download_attachment",
-    "ensure_schema",
     "events_today",
     "fetch_account",
     "get_message",

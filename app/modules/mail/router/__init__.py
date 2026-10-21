@@ -31,7 +31,9 @@ router.include_router(project_routes.router)
 
 
 def setup(app) -> None:
-    service.ensure_schema()
+    # Схему больше не допиливаем в рантайме: колонки, которые добавлял
+    # ensure_schema, переехали в миграцию 0010 (патч AR) — контракт
+    # «формат базы только через Alembic» снова честный.
     register_defs(DEFS)
     register_global_counters("mail", counters_service.global_counts)
     register_project_counters("mail", counters_service.project_counts)

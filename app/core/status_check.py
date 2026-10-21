@@ -424,16 +424,13 @@ def watch() -> None:
 
 
 def _note(session, lines: list[str]) -> None:
-    from sqlalchemy import text
-
     from app.core.events_catalog import SYSTEM_STATUS
     from app.core.models import StatusAlert
     from app.core.outbox import enqueue
     from app.core.settings_store import get_int
 
-    names = {row[1] for row in session.execute(text("PRAGMA table_info(status_alerts)")).all()}
-    if "pending" not in names:
-        session.execute(text("ALTER TABLE status_alerts ADD COLUMN pending TEXT NOT NULL DEFAULT ''"))
+    # Колонку pending больше не добавляем на лету: она в миграции 0010
+    # (патч AR) — схема меняется только через Alembic.
     fingerprint = "\n".join(lines)
     row = session.get(StatusAlert, 1)
     if row is None:
