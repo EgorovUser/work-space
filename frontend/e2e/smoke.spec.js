@@ -139,11 +139,21 @@ test("неизвестный маршрут не даёт белого экра�
   await expect(page.locator(".app")).toBeVisible()
 })
 
-test("healthz жив", async ({ request }) => {
+test("healthz жив, модули без ошибок", async ({ request }) => {
   const response = await request.get("/healthz")
   expect(response.status()).toBe(200)
   const payload = await response.json()
-  expect(payload.status).toMatch(/ok|degraded/)
+  // Раньше принимали и «degraded»: мёртвый планировщик (AU — NameError
+  // в register_core_jobs) проживал бы весь e2e-прогон незамеченным,
+  // потому что юнит-тесты lifespan не запускают вовсе.
+  expect(payload.status).toBe("ok")
+  for (const [name, module] of Object.entries(payload.modules || {})) {
+    expect(module.status, `модуль ${name}: ${module.error || "?"}`).toBe("ok")
+  }
+  // Core-джобы регистрирует lifespan: их наличие в списке значит,
+  // что планировщик поднялся целиком.
+  expect(payload.jobs).toContain("outbox.cleanup")
+  expect(payload.jobs).toContain("notifications.deliver")
 })
 
 test("помодоро на «Сегодня»: старт показывает чип в шапке", async ({ page }) => {

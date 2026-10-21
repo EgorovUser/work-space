@@ -33,6 +33,11 @@ def _active_logs(log_dir: Path) -> set[str]:
 
 
 def register_core_jobs() -> None:
+    # Импорты здесь, а не наверху: scheduler подтягивает jobs в своём setup
+    # (цикл), status_check тянет сервисы модулей. outbox — за компанию:
+    # все fn= разрешаются в момент регистрации, забыть импорт значит
+    # уронить весь планировщик в lifespan (юниты его не запускают).
+    from app.core.outbox import cleanup_outbox
     from app.core.scheduler import register_job
     from app.core.status_check import watch
 
