@@ -43,7 +43,7 @@ cd ~/work-space
 ```text
 app/                 бэкенд
   core/              конфиг, база, вход, файлы, настройки, очередь, планировщик
-  modules/           projects, tasks, documents, examples, secrets, rdp, timetracking, mail, notifications, trash
+  modules/           projects, tasks, documents, examples, secrets, rdp, timetracking, mail, notifications, trash, ui
 alembic/             миграции схемы (Alembic)
 frontend/            Vue-интерфейс
 data/                база, файлы, логи, bootstrap.env (создаётся само)
@@ -52,6 +52,8 @@ scripts/             вспомогательные скрипты (backup.sh)
 ```
 
 Настройки бывают трёх областей: общие, проекта и пользователя. Секретные значения (токен бота, пароль SMTP, пароль ящика) в интерфейсе не показываются обратно: пустое поле при сохранении их не затирает.
+
+Страница «Сегодня» настраивается визуальным редактором (кнопка «Настроить»): порядок, ширина, скрытие и заголовки карточек. Конфигурация хранится на сервере (JSON, руки пользователя его не касаются), каждое изменение сохраняет снимок прежней раскладки — откат возможен и после сброса к стандартной.
 
 ## Разработка на Windows
 
@@ -76,7 +78,7 @@ npm run dev
 
 ## Тесты
 
-Бэкенд: `pip install -r requirements.txt -r requirements-dev.txt`, затем `python -m unittest discover -s tests` — 195 проверок на временной базе (юнит-ядро, HTTP-слой через TestClient, санитайзер писем).
+Бэкенд: `pip install -r requirements.txt -r requirements-dev.txt`, затем `python -m unittest discover -s tests` — 211 проверок на временной базе (юнит-ядро, HTTP-слой через TestClient, санитайзер писем, конфигурации страниц интерфейса).
 
 Фронтенд: `cd frontend && npm install && npm test`.
 

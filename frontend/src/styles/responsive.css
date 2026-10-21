@@ -28,8 +28,8 @@
   .project-wrap.board-page { padding-bottom: 12px; }
   .kanban-col { flex: 1 0 240px; min-width: 240px; width: auto; }
   .add-col { flex: 0 0 240px; width: 240px; min-width: 240px; }
-  .home-grid, .today-grid, .settings-grid, .split, .board-fill-grid, .week-grid { grid-template-columns: 1fr; }
-  .home-grid > :first-child, .today-grid > :first-child, .split > .card:has(.chart-box), .board-fill-grid > .card.wide { grid-column: auto; }
+  .home-grid, .settings-grid, .split, .board-fill-grid, .week-grid { grid-template-columns: 1fr; }
+  .home-grid > :first-child, .split > .card:has(.chart-box), .board-fill-grid > .card.wide { grid-column: auto; }
   .compact-grid { grid-template-columns: 1fr 1fr; }
   .project-tabs {
     flex-wrap: nowrap;

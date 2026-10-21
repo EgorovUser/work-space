@@ -1,8 +1,14 @@
 <template>
   <AppShell>
-    <div class="page-head">
+    <div class="page-head today-head">
       <h1>Сегодня</h1>
       <span class="muted today-date">{{ todayLabel }}</span>
+      <button
+        v-if="!loading && !unavailable && !error"
+        class="btn secondary today-edit-toggle"
+        type="button"
+        @click="toggleEditing"
+      >{{ editing ? "Готово" : "Настроить" }}</button>
     </div>
 
     <p v-if="unavailable" class="banner">Модуль недоступен</p>
@@ -10,236 +16,106 @@
     <SkeletonList v-else-if="loading" :rows="6" />
 
     <template v-else>
-      <div class="today-grid">
-        <section v-if="sections.tasks" class="card">
-          <h2>Просроченные <span v-if="overdue.length" class="pill warn">{{ overdue.length }}</span></h2>
-          <p v-if="!overdue.length" class="muted">Просроченных нет — можно выдыхать</p>
-          <div v-for="item in overdue" :key="item.id" class="status-row">
-            <div>
-              <router-link :to="'/projects/' + item.project_id + '/tasks/' + item.id">{{ item.title }}</router-link>
-              <span v-if="priorityLabel(item.priority)" class="pill" :class="priorityClass(item.priority)">{{ priorityLabel(item.priority) }}</span>
-              <div class="muted">{{ item.project_name }}</div>
-            </div>
-            <span class="bad-text">{{ when(item.deadline) }}</span>
-          </div>
-        </section>
+      <p v-if="uiError" class="banner today-config-error">{{ uiError }}</p>
 
-        <section v-if="sections.tasks" class="card">
-          <h2>Ближайшие сроки</h2>
-          <p v-if="!upcoming.length" class="muted">Открытых задач со сроком нет</p>
-          <div v-for="item in upcoming" :key="item.id" class="status-row">
-            <div>
-              <router-link :to="'/projects/' + item.project_id + '/tasks/' + item.id">{{ item.title }}</router-link>
-              <span v-if="priorityLabel(item.priority)" class="pill" :class="priorityClass(item.priority)">{{ priorityLabel(item.priority) }}</span>
-              <div class="muted">{{ item.project_name }}</div>
-            </div>
-            <span class="muted">{{ when(item.deadline) }}</span>
-          </div>
-          <button
-            v-if="moreTasks"
-            class="btn secondary today-more"
-            type="button"
-            :disabled="moreBusy"
-            @click="loadMoreTasks"
-          >{{ moreBusy ? "Загружаем…" : "Показать ещё задачи" }}</button>
-        </section>
-
-        <section class="card today-pomo">
-          <h2>Помодоро</h2>
-          <template v-if="pomo.state.running">
-            <div class="pomo-clock" :class="{ break: pomo.state.phase === 'break' }">{{ pomo.label() }}</div>
-            <p class="muted">
-              <template v-if="pomo.state.task">{{ pomo.state.task.title }} · после фокуса запишется в «Время»</template>
-              <template v-else>Фокус без задачи — просто таймер</template>
-            </p>
-            <div class="row-actions">
-              <button v-if="pomo.state.phase === 'break'" class="btn secondary" type="button" @click="pomo.skipBreak()">Закончить перерыв</button>
-              <button class="btn secondary" type="button" @click="pomo.stop()">Стоп</button>
-            </div>
-          </template>
-          <template v-else>
-            <p class="muted">
-              {{ pomo.state.settings.workMinutes }} минут фокуса, {{ pomo.state.settings.breakMinutes }} отдыха.
-              <span v-if="pomo.state.sessions">Завершено на этой вкладке: {{ pomo.state.sessions }}.</span>
-            </p>
-            <label class="check">
-              <input v-model.number="workMinutes" class="pomo-input" type="number" min="1" max="120" />
-              <span>мин фокуса</span>
-            </label>
-            <label class="check">
-              <input v-model.number="breakMinutes" class="pomo-input" type="number" min="1" max="60" />
-              <span>мин перерыва</span>
-            </label>
-            <label class="check">
-              <input v-model="autoBreak" type="checkbox" />
-              <span>перерыв стартует сам</span>
-            </label>
-            <!-- Патч AM: подписка на системные уведомления о смене фаз —
-                 работают и в фоновой вкладке; включение спрашивает
-                 разрешение браузера. -->
-            <label class="check">
-              <input v-model="phaseNotify" type="checkbox" />
-              <span>уведомлять о смене фаз</span>
-            </label>
-            <div class="row-actions pomo-pick">
-              <TaskPicker v-if="!pomoTask" @select="pomoTask = $event" />
-              <span v-else class="pomo-task-chip" :title="pomoTask.title + ' · ' + pomoTask.project_name">
-                <strong>{{ pomoTask.title }}</strong>
-                <span class="muted">{{ pomoTask.project_name }}</span>
-                <button
-                  class="text-btn pomo-task-clear"
-                  type="button"
-                  title="Сбросить: фокус без задачи"
-                  @click="pomoTask = null"
-                >✕</button>
-              </span>
-              <button class="btn" type="button" @click="startPomo()">Старт</button>
-            </div>
-          </template>
-        </section>
-
-        <section v-if="sections.events" class="card">
-          <h2>События на сегодня</h2>
-          <p v-if="!events.length" class="muted">Событий из почты на сегодня нет</p>
-          <div v-for="item in events" :key="item.id" class="status-row">
-            <div>
-              <router-link :to="'/mail/' + item.message_id">{{ item.summary }}</router-link>
-              <div v-if="item.location" class="muted">{{ item.location }}</div>
-            </div>
-            <span class="muted">{{ when(item.starts_at) }}</span>
-          </div>
-        </section>
-
-        <section v-if="sections.mail" class="card">
-          <h2>Новые письма</h2>
-          <p v-if="!letters.length" class="muted">Непрочитанных нет</p>
-          <div v-for="item in letters" :key="item.id" class="status-row">
-            <div>
-              <router-link :to="'/mail/' + item.id">{{ item.title }}</router-link>
-              <span v-if="item.thread_count > 1" class="muted"> · {{ item.thread_count }} в переписке</span>
-              <div class="muted">
-                {{ item.project_name }}
-                <span v-if="item.attachment_count"> · вложения {{ item.attachment_count }}</span>
-              </div>
-            </div>
-            <span class="muted">{{ when(item.received_at) }}</span>
-          </div>
-        </section>
-
-        <section v-if="sections.notifications" class="card">
-          <h2>Уведомления</h2>
-          <p v-if="!notifications.length" class="muted">Уведомлений нет</p>
-          <div v-for="item in notifications" :key="item.id" class="status-row">
-            <div>
-              <router-link v-if="item.link" :to="item.link">{{ item.title }}</router-link>
-              <strong v-else :class="{ unread: !item.read }">{{ item.title }}</strong>
-              <div v-if="item.body" class="muted clip">{{ item.body }}</div>
-            </div>
-            <span class="muted">{{ when(item.created_at) }}</span>
-          </div>
-        </section>
+      <!-- Патч AW: страница собрана из элементов реестра — сеткой рулит
+           конфигурация (ui_configs на бэкене), правится визуальным
+           редактором. Данные страницы прежние: один агрегат /api/home. -->
+      <div class="today-designer" :class="{ editing }">
+        <div class="today-canvas">
+          <PageRenderer
+            :items="items"
+            :catalog="catalog"
+            :context="context"
+            :editing="editing"
+            :selected="selected"
+            @select="onSelect"
+          />
+        </div>
+        <PropertyPanel
+          v-if="editing"
+          :items="items"
+          :catalog="catalog"
+          :selected="selected"
+          :busy="pending"
+          :save-error="saveError"
+          :is-default="isDefault"
+          :revisions="revisions"
+          @close="toggleEditing"
+          @select="onSelect"
+          @update-prop="updateProp"
+          @move="moveElement"
+          @remove="removeElement"
+          @add="addElement"
+          @reset="onReset"
+          @restore="onRestore"
+          @retry-save="flush"
+          @refresh-revisions="refreshRevisions"
+        />
       </div>
-
-      <section class="card">
-        <div class="page-head">
-          <h2>Проекты</h2>
-          <router-link to="/projects" class="text-btn">Все проекты →</router-link>
-        </div>
-        <p v-if="!projects.length" class="muted">
-          Проектов пока нет —
-          <router-link to="/projects">создайте первый</router-link>.
-        </p>
-        <div v-else class="list">
-          <router-link v-for="project in projects" :key="project.id" class="list-row" :to="'/projects/' + project.id">
-            <strong>{{ project.name }}</strong>
-            <span v-if="project.description" class="muted clip">{{ project.description }}</span>
-            <span class="stats">
-              <span v-if="project.card.show_open_tasks">Открытые {{ project.open_tasks ?? "—" }}</span>
-              <span v-if="project.card.show_overdue && project.overdue_tasks">Просроченные {{ project.overdue_tasks }}</span>
-              <span v-if="project.card.show_new_mail && project.new_mail">Письма {{ project.new_mail }}</span>
-            </span>
-          </router-link>
-        </div>
-      </section>
     </template>
   </AppShell>
 </template>
 
 <script>
-import { computed, onMounted, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { useRoute, useRouter } from "vue-router"
 import AppShell from "../components/AppShell.vue"
 import SkeletonList from "../components/SkeletonList.vue"
-import TaskPicker from "../components/TaskPicker.vue"
+import PageRenderer from "../components/ui/PageRenderer.vue"
+import PropertyPanel from "../components/ui/PropertyPanel.vue"
 import { api } from "../api"
-import { usePomodoro } from "../composables/usePomodoro"
-import { useWhen } from "../composables/useWhen"
+import { useUiConfig } from "../composables/useUiConfig"
+import { fallbackItems } from "../ui/todayElements.js"
 
 // Хаб «Сегодня»: один экран вместо утреннего обхода разделов. Данные —
-// агрегат /api/home по всем проектам; ленты второстепенные, падение блока
-// не должно ронять остальные.
+// агрегат /api/home по всем проектам.
 //
-// Патч N: приоритетные метки у задач (важное видно сразу), «Показать ещё»
-// для задач и карточка помодоро — фокус по задаче из списка дня.
-const PRIORITIES = {
-  high: "важная",
-  normal: "обычная",
-  low: "низкая",
-}
-
+// Патч AW: секции хаба стали элементами реестра (components/today/),
+// порядок и видимость — персональная конфигурация страницы
+// (useUiConfig + визуальный редактор с панелью свойств). Кто ни разу
+// не открывал редактор, видит прежнюю раскладку: дефолт конфига
+// повторяет каталог и уважает старые настройки home.show_*.
 export default {
-  components: { AppShell, SkeletonList, TaskPicker },
+  components: { AppShell, SkeletonList, PageRenderer, PropertyPanel },
   setup() {
     const projects = ref([])
     const tasks = ref([])
     const letters = ref([])
     const events = ref([])
     const notifications = ref([])
-    const sections = ref({ tasks: true, mail: true, events: true, notifications: true })
     const error = ref("")
     const unavailable = ref(false)
     const loading = ref(true)
     const moreTasks = ref(false)
     const moreBusy = ref(false)
-    const { when } = useWhen()
-    const pomo = usePomodoro()
+
+    const route = useRoute()
+    const router = useRouter()
+
+    const ui = useUiConfig("today", { fallback: fallbackItems() })
+    const {
+      items, catalog, isDefault, loaded, error: uiError, editing, selected,
+      pending, saveError, revisions, updateProp, addElement, removeElement,
+      moveElement, reset, restore, flush, refreshRevisions,
+    } = ui
 
     const overdue = computed(() => tasks.value.filter((item) => item.overdue))
     const upcoming = computed(() => tasks.value.filter((item) => !item.overdue))
 
-    // Патч AF: задача для помодоро выбирается живым поиском по всем открытым
-    // задачам (TaskPicker + /api/tasks/search) — раньше список ограничивался
-    // тридцатью задачами со сроками со сводки дня.
-    const pomoTask = ref(null)
-    const workMinutes = ref(pomo.state.settings.workMinutes)
-    const breakMinutes = ref(pomo.state.settings.breakMinutes)
-    const autoBreak = ref(pomo.state.settings.autoBreak)
-    const phaseNotify = ref(pomo.state.settings.notify)
-
-    watch(workMinutes, (value) => pomo.updateSettings({ workMinutes: value }))
-    watch(breakMinutes, (value) => pomo.updateSettings({ breakMinutes: value }))
-    watch(autoBreak, (value) => pomo.updateSettings({ autoBreak: value }))
-    // Включение подписки спрашивает разрешение браузера один раз; отказ
-    // не мешает — останутся звук и заголовок вкладки.
-    watch(phaseNotify, (value) => {
-      pomo.updateSettings({ notify: value })
-      if (value && typeof Notification !== "undefined" && Notification.permission === "default") {
-        Notification.requestPermission().catch(() => {})
-      }
-    })
-
-    function startPomo() {
-      pomo.start(pomoTask.value)
-    }
-
-    function priorityLabel(value) {
-      return PRIORITIES[value] || ""
-    }
-
-    function priorityClass(value) {
-      if (value === "high") return "warn"
-      if (value === "low") return "low"
-      return ""
-    }
+    // Элементы «Сегодня» питаются контекстом страницы: данными сводки
+    // и колбэками пагинации. Помодоро — самостоятельный синглтон.
+    const context = computed(() => ({
+      projects: projects.value,
+      overdue: overdue.value,
+      upcoming: upcoming.value,
+      letters: letters.value,
+      events: events.value,
+      notifications: notifications.value,
+      moreTasks: moreTasks.value,
+      moreBusy: moreBusy.value,
+      loadMoreTasks,
+    }))
 
     const todayLabel = computed(() => {
       const now = new Date()
@@ -269,7 +145,6 @@ export default {
         letters.value = data.mail || []
         events.value = data.events || []
         notifications.value = data.notifications || []
-        sections.value = data.sections || sections.value
         taskLimit = Number(data.task_limit) || taskLimit
         moreTasks.value = (data.tasks || []).length >= taskLimit
       } catch (err) {
@@ -286,13 +161,69 @@ export default {
       load(tasks.value.length, true)
     }
 
-    onMounted(() => load())
+    // Режим правки живёт в адресе (?edit=1): глубокая ссылка, e2e и
+    // честная кнопка «назад» без магии.
+    watch(
+      () => route.query.edit,
+      (value) => {
+        editing.value = value === "1"
+        if (editing.value) refreshRevisions()
+      },
+      { immediate: true }
+    )
+
+    function toggleEditing() {
+      const next = !editing.value
+      const query = { ...route.query }
+      if (next) query.edit = "1"
+      else delete query.edit
+      router.replace({ query })
+    }
+
+    function onSelect(element) {
+      selected.value = element
+    }
+
+    async function onReset() {
+      try {
+        await reset()
+      } catch (err) {
+        saveError.value = "Не получилось: " + (err.message || "ошибка")
+      }
+    }
+
+    async function onRestore(revisionId) {
+      try {
+        await restore(revisionId)
+      } catch (err) {
+        saveError.value = "Не получилось: " + (err.message || "ошибка")
+      }
+    }
+
+    // Esc выходит из редактора — как из палитры.
+    function onKeydown(event) {
+      if (event.key === "Escape" && editing.value) toggleEditing()
+    }
+
+    const loadingAll = computed(() => loading.value || !loaded.value)
+
+    onMounted(() => {
+      window.addEventListener("keydown", onKeydown)
+      ui.start()
+      load()
+    })
+    onBeforeUnmount(() => {
+      window.removeEventListener("keydown", onKeydown)
+      ui.stop()
+    })
+
     return {
-      projects, overdue, upcoming, letters, events, notifications, sections,
-      error, unavailable, loading, when, todayLabel, load,
-      moreTasks, moreBusy, loadMoreTasks,
-      pomo, pomoTask, workMinutes, breakMinutes, autoBreak, phaseNotify, startPomo,
-      priorityLabel, priorityClass,
+      projects, overdue, upcoming, letters, events, notifications,
+      error, unavailable, loading: loadingAll, todayLabel,
+      moreTasks, moreBusy, loadMoreTasks, context,
+      items, catalog, isDefault, uiError, editing, selected, pending, saveError, revisions,
+      updateProp, addElement, removeElement, moveElement,
+      toggleEditing, onSelect, onReset, onRestore, flush, refreshRevisions,
     }
   },
 }

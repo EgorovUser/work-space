@@ -1,0 +1,247 @@
+/* Визуальный редактор страницы (патч AW): сетка элементов со span-классами,
+   панель свойств, режим правки. Новая секция — новый файл (правило патча AP);
+   точка перелома 800px общая с остальным приложением (responsive.css). */
+
+/* Сетка страницы: четыре колонки, ширина элемента — span в колонках
+   (не пиксели — адаптив гарантирован). Карточки внутри ячеек без
+   собственных отступов: расстояния задаёт gap. */
+.ui-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  margin-bottom: 20px;
+}
+
+.ui-item { position: relative; min-width: 0; }
+
+.ui-item > .card { margin: 0; height: 100%; }
+
+.ui-span-1 { grid-column: span 1; }
+.ui-span-2 { grid-column: span 2; }
+.ui-span-3 { grid-column: span 3; }
+.ui-span-4 { grid-column: span 4; }
+
+/* Планшет: две колонки; четверти и половины схлопываются в половину,
+   три четверти и целая — в целую. */
+@media (min-width: 801px) and (max-width: 1100px) {
+  .ui-grid { grid-template-columns: repeat(2, 1fr); }
+  .ui-span-1, .ui-span-2 { grid-column: span 1; }
+  .ui-span-3, .ui-span-4 { grid-column: span 2; }
+}
+
+/* Телефон: один столбец, любая ширина — на всю строку. */
+@media (max-width: 800px) {
+  .ui-grid { grid-template-columns: 1fr; }
+  .ui-span-1, .ui-span-2, .ui-span-3, .ui-span-4 { grid-column: 1 / -1; }
+}
+
+/* Плотность строк (свойство density у карточек-списков): те же строки,
+   что обычно, только теснее. */
+.card.density-compact h2 { margin-bottom: 4px; }
+
+.card.density-compact .status-row { padding: 4px 0; }
+
+.card.density-compact .list-row { padding: 6px 8px; }
+
+/* Режим правки: элементы подсвечиваются, клик выделяет, содержимое
+   закрыто прозрачной плёнкой — ссылки и кнопки внутри не срабатывают. */
+.ui-editing .ui-item {
+  cursor: pointer;
+  outline: 1px dashed var(--line-2);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+.ui-editing .ui-item:hover { outline-color: var(--focus); }
+
+.ui-item.ui-selected { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.ui-editing .ui-item.ui-hidden-item { opacity: 0.45; }
+
+.ui-item-cover { position: absolute; inset: 0; z-index: 2; }
+
+.ui-item-badge {
+  position: absolute;
+  top: -11px;
+  left: 10px;
+  z-index: 3;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.ui-item-flag {
+  position: absolute;
+  top: -11px;
+  right: 10px;
+  z-index: 3;
+  background: var(--paper-2);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 999px;
+}
+
+/* Заглушка неизвестного элемента — стиль Home Assistant «card not found»:
+   конфиг сохранён, страница живая. */
+.ui-stub { border: 1px dashed var(--line-2); }
+
+/* Раскладка «страница + панель» в режиме правки. */
+.today-designer { display: block; }
+
+.today-designer.editing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+.today-designer.editing .today-canvas { min-width: 0; }
+
+.today-designer.editing .today-canvas .ui-grid { margin-bottom: 0; }
+
+.designer-panel {
+  position: sticky;
+  top: 12px;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.designer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.designer-head h2 { margin: 0; }
+
+.designer-error { margin: 0; }
+
+.designer-saving { margin: 0; font-size: 0.9rem; }
+
+/* Список элементов страницы: клик выбирает, стрелки двигают. */
+.designer-list { display: flex; flex-direction: column; gap: 2px; }
+
+.designer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.designer-row:hover { background: var(--hover); }
+
+.designer-row.active { border-color: var(--accent); background: var(--accent-soft); }
+
+.designer-row-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.designer-row-tools { display: flex; gap: 2px; flex: none; }
+
+.designer-row-tools button { padding: 2px 6px; }
+
+.designer-row-tools button:disabled { opacity: 0.35; cursor: default; }
+
+/* Свойства выбранного элемента — по группам из схемы каталога. */
+.designer-props { border-top: 1px solid var(--line); padding-top: 10px; }
+
+.designer-props-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.designer-remove { color: var(--danger); }
+
+.designer-group { margin-bottom: 8px; }
+
+.designer-group-name {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.designer-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.designer-field-label { flex: 1; min-width: 0; }
+
+.designer-field select { max-width: 60%; }
+
+.designer-field input[type="text"] { max-width: 60%; }
+
+.designer-hint { margin: 4px 0; }
+
+.designer-actions { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+
+.designer-picker { display: flex; flex-direction: column; gap: 4px; }
+
+.designer-picker .muted { margin: 0; font-size: 0.85rem; }
+
+.designer-picker-item {
+  padding: 8px 10px;
+  text-align: left;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.designer-picker-item:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+/* История: снимки прежних раскладок с кнопкой «Вернуть». */
+.designer-history { border-top: 1px solid var(--line); padding-top: 10px; }
+
+.designer-history summary { cursor: pointer; color: var(--muted); }
+
+.designer-rev {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.designer-rev:last-child { border-bottom: 0; }
+
+.designer-rev-info { font-size: 0.88rem; color: var(--muted); }
+
+/* Узкие экраны: панель уходит под сетку, прилипание выключено. */
+@media (max-width: 1100px) {
+  .today-designer.editing { grid-template-columns: 1fr; }
+  .designer-panel { position: static; }
+}
+
+/* Кнопка входа в редактор — рядом с заголовком страницы. */
+.today-head { gap: 10px; }
+
+.today-head .today-date { margin-right: auto; }
+
+.today-config-error { margin-bottom: 12px; }

@@ -16,6 +16,7 @@ def import_models() -> None:
         "app.modules.timetracking.models",
         "app.modules.mail.models",
         "app.modules.notifications.models",
+        "app.modules.ui.models",
     ):
         try:
             __import__(name)
@@ -36,6 +37,7 @@ def setup_modules(app) -> None:
     from app.modules.tasks.router import setup as setup_tasks
     from app.modules.trash.router import setup as setup_trash
     from app.modules.timetracking.router import setup as setup_timetracking
+    from app.modules.ui.router import setup as setup_ui
 
     modules = (
         ("projects", setup_projects),
@@ -49,6 +51,8 @@ def setup_modules(app) -> None:
         ("notifications", setup_notifications),
         # Корзина — витрина поверх чужих таблиц, своих моделей не имеет.
         ("trash", setup_trash),
+        # Конфигурации страниц интерфейса (визуальный редактор, патч AW).
+        ("ui", setup_ui),
     )
     for name, setup in modules:
         try_register(name, lambda app=app, setup=setup: setup(app))
