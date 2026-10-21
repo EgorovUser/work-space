@@ -23,6 +23,17 @@ from app.modules.ui.catalog import PageDef, element
 _MISSING = object()
 
 
+def normalize_settings(page: PageDef, raw: object) -> dict:
+    """Настройки страницы по той же схеме, что и элементы: ключей из
+    схемы нет — долой, новые — дефолты, мусорные значения — дефолты."""
+    if not isinstance(raw, dict):
+        return {prop.key: prop.default for prop in page.settings}
+    out: dict = {}
+    for prop in page.settings:
+        out[prop.key] = _prop_value(prop, raw.get(prop.key, _MISSING))
+    return out
+
+
 def normalize_items(page: PageDef, raw: object) -> list[dict]:
     if not isinstance(raw, list):
         return []
@@ -40,6 +51,7 @@ def normalize_items(page: PageDef, raw: object) -> list[dict]:
                 {
                     "element": name,
                     "span": _int_or(entry.get("span"), 4, 1, 4),
+                    "height": _height_or(entry.get("height")),
                     "hidden": _bool_or(entry.get("hidden"), False),
                 }
             )
@@ -54,9 +66,11 @@ def normalize_items(page: PageDef, raw: object) -> list[dict]:
     return items
 
 
-def items_equal(left: list[dict], right: list[dict]) -> bool:
-    """Сравнение на «реальное изменение»: порядок важен, лишние ключи нет."""
-    return [dict(item) for item in left] == [dict(item) for item in right]
+def configs_equal(left: dict, right: dict) -> bool:
+    """Сравнение конфига на «реальное изменение»: и настройки страницы,
+    и элементы; порядок элементов важен, лишние ключи сравниваемых
+    нормализованных конфигов нет."""
+    return left.get("settings") == right.get("settings") and left.get("items") == right.get("items")
 
 
 def _prop_value(prop, value) -> object:
@@ -77,6 +91,12 @@ def _prop_value(prop, value) -> object:
             cleaned = cleaned[: prop.max_length]
         return cleaned
     return prop.default
+
+
+def _height_or(value) -> str:
+    if value in ("auto", "low", "medium", "tall"):
+        return value
+    return "auto"
 
 
 def _int_or(value, fallback: int, low: int, high: int) -> int:

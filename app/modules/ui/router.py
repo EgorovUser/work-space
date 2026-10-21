@@ -18,6 +18,10 @@ class UiConfigPut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[dict[str, object]]
+    # Настройки страницы (максимум высоты блоков и будущее) — обязательны:
+    # клиент всегда шлёт полный конфиг, «частичный» PUT молча сбрасывал бы
+    # настройки тем, кто прислал только элементы.
+    settings: dict[str, object]
 
 
 def _require_page(page_name: str) -> None:
@@ -43,7 +47,7 @@ def put_ui_page(
     user: User = Depends(require_user),
 ) -> dict:
     _require_page(page)
-    return service.save_config(db, user.id, page, body.items, user.id)
+    return service.save_config(db, user.id, page, body.items, body.settings, user.id)
 
 
 @router.post("/api/ui/{page}/reset")

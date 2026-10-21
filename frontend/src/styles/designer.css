@@ -11,9 +11,14 @@
   gap: 12px;
   align-items: stretch;
   margin-bottom: 20px;
+  /* Максимум высоты блока — настройка страницы (вкладка «Страница»
+     инспектора); рендерер привозит её CSS-переменной. */
+  --ui-max-h: 480px;
 }
 
-.ui-item { position: relative; min-width: 0; }
+/* inline-size: раскладка внутренних строк подстраивается под ширину
+   самого блока (container query ниже), а не окна. */
+.ui-item { position: relative; min-width: 0; container-type: inline-size; }
 
 .ui-item > .card { margin: 0; height: 100%; }
 
@@ -21,6 +26,66 @@
 .ui-span-2 { grid-column: span 2; }
 .ui-span-3 { grid-column: span 3; }
 .ui-span-4 { grid-column: span 4; }
+
+/* Высота блока: уровни — доли максимума страницы, пикселей в конфиге
+   нет. Фиксированная высота не растягивает карточку по содержимому:
+   содержимое прокручивается внутри .card-body. */
+.ui-height-low { height: calc(var(--ui-max-h) * 0.5); }
+.ui-height-medium { height: calc(var(--ui-max-h) * 0.75); }
+.ui-height-tall { height: var(--ui-max-h); }
+
+.ui-item[class*="ui-height-"] { display: flex; flex-direction: column; }
+
+.ui-item[class*="ui-height-"] > .card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Тело карточки — единственная скролящая область: вниз при
+   фиксированной высоте, вбок при контенте шире блока. За границы
+   блока не выходит ничто: ни строки, ни широкие элементы. */
+.card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: 100%;
+  overflow: auto;
+}
+
+/* Прибита к низу карточки («Показать ещё») и не прокручивается
+   вместе со списком. */
+.card-foot { flex: none; margin-top: 10px; }
+
+/* Внутренние элементы (строки карточек-списков). База — «как до
+   настройки»: одна колонка на всю ширину, строки со своими рамками
+   из списковых стилей. Модификаторы вешает itemsClasses за явные
+   выборы в инспекторе. */
+.ui-items { display: grid; grid-template-columns: 1fr; align-items: stretch; min-width: 0; }
+
+.ui-items--cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; }
+.ui-items--cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 12px; }
+
+.ui-items--align-center { justify-items: center; }
+.ui-items--align-start { justify-items: start; }
+
+.ui-items--gap-compact .status-row { padding: 3px 0; }
+.ui-items--gap-compact .list-row { padding: 4px 8px; }
+
+.ui-items--gap-spacious { row-gap: 12px; }
+.ui-items--gap-spacious .status-row { padding: 12px 0; }
+.ui-items--gap-spacious .list-row { padding: 12px; }
+
+/* Разделители строк есть в базовых стилях списков; управляем только
+   выключением. */
+.ui-items--no-dividers .status-row,
+.ui-items--no-dividers .list-row { border-bottom: 0; }
+
+/* В узком блоке несколько колонок не читаются — схлопываем в одну
+   по ширине самого блока, не окна. */
+@container (max-width: 420px) {
+  .ui-items--cols-2,
+  .ui-items--cols-3 { grid-template-columns: 1fr; column-gap: 0; }
+}
 
 /* Планшет: две колонки; четверти и половины схлопываются в половину,
    три четверти и целая — в целую. */
@@ -123,6 +188,33 @@
 }
 
 .designer-head h2 { margin: 0; }
+
+/* Вкладки инспектора: элементы ↔ настройки самой страницы. */
+.designer-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--paper-2);
+  border-radius: 10px;
+}
+
+.designer-tab {
+  flex: none;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  padding: 5px 12px;
+}
+
+.designer-tab.active {
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 650;
+  box-shadow: var(--shadow);
+}
+
+.designer-note { margin: 8px 0 0; font-size: 0.85rem; }
 
 .designer-error { margin: 0; }
 

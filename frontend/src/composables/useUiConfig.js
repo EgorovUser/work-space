@@ -1,7 +1,7 @@
 import { computed, ref } from "vue"
 import { api } from "../api"
 import { useEvents } from "./useEvents"
-import { addItem, moveItem, removeItem, sameItems, setItemProp } from "../ui/items"
+import { addItem, moveItem, removeItem, sameConfig, setItemProp } from "../ui/items"
 
 // Конфигурация редактируемой страницы (патч AW): состояние + каталог
 // свойств с бэкенда, правки с автосохранением (дебаунс), живая
@@ -17,6 +17,8 @@ const SAVE_DEBOUNCE_MS = 700
 
 export function useUiConfig(page, { fallback = [] } = {}) {
   const items = ref([...fallback])
+  // Настройки страницы (не элементов): максимум высоты блоков и будущее.
+  const settings = ref({})
   const catalog = ref({ elements: [] })
   const isDefault = ref(true)
   const loaded = ref(false)
@@ -51,20 +53,24 @@ export function useUiConfig(page, { fallback = [] } = {}) {
       // показывает «card not found», только тут весь конфиг.
       error.value = err.message || "Не удалось загрузить конфигурацию страницы"
       loaded.value = true
-      // Аварийная раскладка считается «подтверждённой»: без правок
+      // Аварийное состояние считается «подтверждённым»: без правок
       // пользователя никаких сохранений не будет.
-      lastAck.value = JSON.stringify(items.value)
+      lastAck.value = JSON.stringify({ items: items.value, settings: settings.value })
     }
   }
 
   function applyRemote(data) {
-    const next = data.items || []
+    const nextItems = data.items || []
+    const nextSettings = data.settings || {}
     if (data.catalog) catalog.value = data.catalog
     if (data.is_default !== undefined) isDefault.value = !!data.is_default
     // Локальные несохранённые правки не затираем: подтверждённое
     // состояние доедет следующим сохранением.
-    if (!dirty()) items.value = next
-    lastAck.value = JSON.stringify(next)
+    if (!dirty()) {
+      items.value = nextItems
+      settings.value = nextSettings
+    }
+    lastAck.value = JSON.stringify({ items: nextItems, settings: nextSettings })
   }
 
   function scheduleSave() {
@@ -77,13 +83,13 @@ export function useUiConfig(page, { fallback = [] } = {}) {
       clearTimeout(saveTimer)
       saveTimer = null
     }
-    const payload = items.value
+    const payload = { items: items.value, settings: settings.value }
     const acked = lastAck.value ? JSON.parse(lastAck.value) : null
-    if (sameItems(payload, acked)) return
+    if (sameConfig(payload, acked)) return
     saving.value = true
     saveError.value = ""
     try {
-      const data = await api("/api/ui/" + page, { method: "PUT", body: { items: payload } })
+      const data = await api("/api/ui/" + page, { method: "PUT", body: payload })
       applyRemote(data)
     } catch (err) {
       saveError.value = "Не сохранилось: " + (err.message || "ошибка сети")
@@ -97,6 +103,13 @@ export function useUiConfig(page, { fallback = [] } = {}) {
   // с дебаунсом, чтобы серия движений ручки не плодила запросы.
   function updateProp(element, key, value) {
     items.value = setItemProp(items.value, element, key, value)
+    scheduleSave()
+  }
+
+  // Настройка страницы (вкладка «Страница» инспектора) едет тем же
+  // автосохранением, что и раскладка.
+  function updateSetting(key, value) {
+    settings.value = { ...settings.value, [key]: value }
     scheduleSave()
   }
 
@@ -152,7 +165,12 @@ export function useUiConfig(page, { fallback = [] } = {}) {
   // Есть несохранённые изменения: правка ещё в дебаунсе или запрос уже
   // летит. Индикатор в панели живёт от ручки до подтверждения, а не
   // мигает на время полёта — и человеку, и e2e видно честное «Сохраняем…».
-  const pending = computed(() => !sameItems(items.value, lastAck.value ? JSON.parse(lastAck.value) : null))
+  const pending = computed(() =>
+    !sameConfig(
+      { items: items.value, settings: settings.value },
+      lastAck.value ? JSON.parse(lastAck.value) : null
+    )
+  )
 
   function start() {
     // ui.changed от другой вкладки (или от этой — SSE-эхо нашего же
@@ -178,6 +196,7 @@ export function useUiConfig(page, { fallback = [] } = {}) {
 
   return {
     items,
+    settings,
     catalog,
     isDefault,
     loaded,
@@ -194,6 +213,7 @@ export function useUiConfig(page, { fallback = [] } = {}) {
     load,
     flush,
     updateProp,
+    updateSetting,
     addElement,
     removeElement,
     moveElement,

@@ -29,6 +29,7 @@
             :context="context"
             :editing="editing"
             :selected="selected"
+            :settings="settings"
             @select="onSelect"
           />
         </div>
@@ -36,6 +37,7 @@
           v-if="editing"
           :items="items"
           :catalog="catalog"
+          :settings="settings"
           :selected="selected"
           :busy="pending"
           :save-error="saveError"
@@ -44,6 +46,7 @@
           @close="toggleEditing"
           @select="onSelect"
           @update-prop="updateProp"
+          @update-setting="updateSetting"
           @move="moveElement"
           @remove="removeElement"
           @add="addElement"
@@ -95,8 +98,8 @@ export default {
 
     const ui = useUiConfig("today", { fallback: fallbackItems() })
     const {
-      items, catalog, isDefault, loaded, error: uiError, editing, selected,
-      pending, saveError, revisions, updateProp, addElement, removeElement,
+      items, settings, catalog, isDefault, loaded, error: uiError, editing, selected,
+      pending, saveError, revisions, updateProp, updateSetting, addElement, removeElement,
       moveElement, reset, restore, flush, refreshRevisions,
     } = ui
 
@@ -221,8 +224,8 @@ export default {
       projects, overdue, upcoming, letters, events, notifications,
       error, unavailable, loading: loadingAll, todayLabel,
       moreTasks, moreBusy, loadMoreTasks, context,
-      items, catalog, isDefault, uiError, editing, selected, pending, saveError, revisions,
-      updateProp, addElement, removeElement, moveElement,
+      items, settings, catalog, isDefault, uiError, editing, selected, pending, saveError, revisions,
+      updateProp, updateSetting, addElement, removeElement, moveElement,
       toggleEditing, onSelect, onReset, onRestore, flush, refreshRevisions,
     }
   },

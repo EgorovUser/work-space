@@ -54,12 +54,20 @@ class PageDef:
     title: str
     schema_version: int
     elements: tuple[ElementDef, ...] = field(default_factory=tuple)
+    # Свойства самой страницы (не элементов): инспектор показывает их
+    # во вкладке «Страница». Сегодня это максимум высоты блока, от
+    # которого считаются уровни «низкий/средний/высокий».
+    settings: tuple[PropDef, ...] = field(default_factory=tuple)
 
 
-def _common(*, span: int, density: bool = False) -> tuple[PropDef, ...]:
-    """Общие свойства всех элементов: ширина, скрытие, свой заголовок.
+def _common(*, span: int, density: bool = False, items: bool = False) -> tuple[PropDef, ...]:
+    """Общие свойства всех элементов: ширина, высота, скрытие, заголовок.
 
     ``density`` — у карточек-списков (строки можно рисовать плотнее).
+    ``items`` — у карточек-списков есть внутренние элементы (строки),
+    и их раскладка тоже настраивается: колонки, выравнивание, отступы,
+    разделители. Дефолты подобраны как «до настройки» — карточка, у
+    которой ничего не трогали, выглядит ровно как раньше.
     """
     props = [
         PropDef(
@@ -70,6 +78,15 @@ def _common(*, span: int, density: bool = False) -> tuple[PropDef, ...]:
             label="Ширина",
             group="Раскладка",
             ui_hint="span",
+        ),
+        PropDef(
+            key="height",
+            type="enum",
+            options=("auto", "low", "medium", "tall"),
+            default="auto",
+            label="Высота",
+            group="Раскладка",
+            ui_hint="height",
         ),
         PropDef(key="hidden", type="bool", default=False, label="Скрыть на странице", group="Раскладка"),
         PropDef(key="title", type="str", default="", label="Свой заголовок", group="Вид", max_length=80),
@@ -85,6 +102,45 @@ def _common(*, span: int, density: bool = False) -> tuple[PropDef, ...]:
                 group="Вид",
             )
         )
+    if items:
+        props.extend(
+            (
+                PropDef(
+                    key="columns",
+                    type="enum",
+                    options=(1, 2, 3),
+                    default=1,
+                    label="Колонки",
+                    group="Внутренние элементы",
+                    ui_hint="columns",
+                ),
+                PropDef(
+                    key="align",
+                    type="enum",
+                    options=("stretch", "center", "start"),
+                    default="stretch",
+                    label="Выравнивание",
+                    group="Внутренние элементы",
+                    ui_hint="items_align",
+                ),
+                PropDef(
+                    key="gap",
+                    type="enum",
+                    options=("normal", "compact", "spacious"),
+                    default="normal",
+                    label="Отступ между строками",
+                    group="Внутренние элементы",
+                    ui_hint="gap",
+                ),
+                PropDef(
+                    key="dividers",
+                    type="bool",
+                    default=True,
+                    label="Разделители строк",
+                    group="Внутренние элементы",
+                ),
+            )
+        )
     return tuple(props)
 
 
@@ -92,14 +148,25 @@ TODAY = PageDef(
     name="today",
     title="Сегодня",
     schema_version=1,
+    settings=(
+        PropDef(
+            key="max_block_height",
+            type="enum",
+            options=(360, 420, 480, 560, 640, 720),
+            default=480,
+            label="Максимальная высота блока",
+            group="Страница",
+            ui_hint="height_max",
+        ),
+    ),
     elements=(
-        ElementDef(name="overdue-tasks", title="Просроченные", span=4, props=_common(span=4, density=True)),
-        ElementDef(name="upcoming-tasks", title="Ближайшие сроки", span=2, props=_common(span=2, density=True)),
+        ElementDef(name="overdue-tasks", title="Просроченные", span=4, props=_common(span=4, density=True, items=True)),
+        ElementDef(name="upcoming-tasks", title="Ближайшие сроки", span=2, props=_common(span=2, density=True, items=True)),
         ElementDef(name="pomodoro", title="Помодоро", span=2, props=_common(span=2)),
-        ElementDef(name="mail-events", title="События на сегодня", span=2, props=_common(span=2, density=True)),
-        ElementDef(name="new-mail", title="Новые письма", span=2, props=_common(span=2, density=True)),
-        ElementDef(name="notifications", title="Уведомления", span=2, props=_common(span=2, density=True)),
-        ElementDef(name="projects", title="Проекты", span=4, props=_common(span=4, density=True)),
+        ElementDef(name="mail-events", title="События на сегодня", span=2, props=_common(span=2, density=True, items=True)),
+        ElementDef(name="new-mail", title="Новые письма", span=2, props=_common(span=2, density=True, items=True)),
+        ElementDef(name="notifications", title="Уведомления", span=2, props=_common(span=2, density=True, items=True)),
+        ElementDef(name="projects", title="Проекты", span=4, props=_common(span=4, density=True, items=True)),
     ),
 )
 
@@ -140,6 +207,7 @@ def catalog_payload(page: PageDef) -> dict:
         "name": page.name,
         "title": page.title,
         "schema_version": page.schema_version,
+        "settings": [prop_payload(p) for p in page.settings],
         "elements": [
             {"name": item.name, "title": item.title, "span": item.span, "props": [prop_payload(p) for p in item.props]}
             for item in page.elements

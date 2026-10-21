@@ -4,10 +4,11 @@
 - ``normalize.py`` — whitelist-нормализация по каталогу.
 """
 
-from app.modules.ui.service.normalize import items_equal, normalize_items
+from app.modules.ui.service.normalize import configs_equal, normalize_items, normalize_settings
 from app.modules.ui.service.store import (
     UI_CHANGED,
     default_items,
+    default_settings,
     list_revisions,
     page_state,
     reset_config,
@@ -17,10 +18,12 @@ from app.modules.ui.service.store import (
 
 __all__ = [
     "UI_CHANGED",
+    "configs_equal",
     "default_items",
-    "items_equal",
+    "default_settings",
     "list_revisions",
     "normalize_items",
+    "normalize_settings",
     "page_state",
     "reset_config",
     "restore_revision",

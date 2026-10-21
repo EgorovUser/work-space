@@ -89,46 +89,76 @@ class UiConfigTest(unittest.TestCase):
         # достраивает дефолты сам.
         for item in state["items"]:
             self.assertIn("span", item)
+            self.assertIn("height", item)
             self.assertIn("hidden", item)
             self.assertIn("title", item)
             if item["element"] != "pomodoro":
                 self.assertIn("density", item)
-        # Каталог для инспектора: элементы и схемы свойств.
+                # У карточек-списков настраиваются и внутренние строки.
+                self.assertIn("columns", item)
+                self.assertIn("align", item)
+                self.assertIn("gap", item)
+                self.assertIn("dividers", item)
+        # Дефолты «как до настройки»: высота не фиксирована, строки в одну
+        # колонку на всю ширину, с разделителями.
+        first = state["items"][0]
+        self.assertEqual(first["height"], "auto")
+        self.assertEqual(first["columns"], 1)
+        self.assertEqual(first["align"], "stretch")
+        self.assertEqual(first["dividers"], True)
+        # Настройки страницы: максимум высоты блоков.
+        self.assertEqual(state["settings"], {"max_block_height": 480})
+        # Каталог для инспектора: элементы, схемы свойств и настройки страницы.
         elements = {element["name"]: element for element in state["catalog"]["elements"]}
         self.assertEqual(len(elements), 7)
         prop_keys = [prop["key"] for prop in elements["pomodoro"]["props"]]
         self.assertIn("span", prop_keys)
+        self.assertIn("height", prop_keys)
         self.assertIn("hidden", prop_keys)
         self.assertIn("title", prop_keys)
         self.assertNotIn("density", prop_keys)  # у помодоро нет плотности
+        self.assertNotIn("columns", prop_keys)  # …и внутренних строк
+        self.assertEqual(
+            [prop["key"] for prop in state["catalog"]["settings"]],
+            ["max_block_height"],
+        )
 
     def test_unknown_page_404(self):
         self.assertEqual(client.get("/api/ui/nope").status_code, 404)
-        self.assertEqual(client.put("/api/ui/nope", json={"items": []}).status_code, 404)
+        self.assertEqual(
+            client.put("/api/ui/nope", json={"items": [], "settings": {}}).status_code, 404
+        )
         self.assertEqual(client.post("/api/ui/nope/reset").status_code, 404)
 
     def test_save_normalizes_and_persists(self):
         saved = client.put(
             "/api/ui/today",
             json={
+                "settings": {"max_block_height": 640, "junk": 1},
                 "items": [
-                    # span вне списка → дефолт элемента; мусорные ключи долой,
-                    # отсутствующие свойства — дефолты.
-                    {"element": "projects", "span": 99, "junk": "x"},
+                    # span/height вне списка → дефолт элемента; мусорные ключи
+                    # долой, отсутствующие свойства — дефолты.
+                    {"element": "projects", "span": 99, "junk": "x", "height": "huge", "columns": 9, "dividers": "да"},
                     {"element": "pomodoro", "span": 4, "hidden": "yes"},
-                    {"element": "new-mail", "span": 3, "title": "  Почта  ", "density": "tight"},
-                ]
+                    {"element": "new-mail", "span": 3, "title": "  Почта  ", "density": "tight", "align": "left"},
+                ],
             },
         ).json()
         self.assertFalse(saved["is_default"])
+        # Настройки страницы: значение из списка, мусор долой.
+        self.assertEqual(saved["settings"], {"max_block_height": 640})
         by_name = {item["element"]: item for item in saved["items"]}
         self.assertEqual(by_name["projects"]["span"], 4)  # дефолт projects
         self.assertEqual(by_name["projects"].get("junk"), None)
         self.assertFalse(by_name["projects"]["hidden"])
+        self.assertEqual(by_name["projects"]["height"], "auto")  # не из списка
+        self.assertEqual(by_name["projects"]["columns"], 1)  # 9 → дефолт
+        self.assertTrue(by_name["projects"]["dividers"])  # не bool → дефолт True
         self.assertEqual(by_name["pomodoro"]["span"], 4)
         self.assertFalse(by_name["pomodoro"]["hidden"])  # "yes" не bool → дефолт
         self.assertEqual(by_name["new-mail"]["title"], "Почта")  # обрезан и очишен
         self.assertEqual(by_name["new-mail"]["density"], "normal")  # не из списка
+        self.assertEqual(by_name["new-mail"]["align"], "stretch")  # не из списка
         self.assertEqual(by_name["new-mail"]["span"], 3)
         # Порядок сохранён как присланный.
         self.assertEqual(
@@ -138,17 +168,22 @@ class UiConfigTest(unittest.TestCase):
         # Пережило перечитывание.
         again = client.get("/api/ui/today").json()
         self.assertEqual(again["items"], saved["items"])
+        self.assertEqual(again["settings"], {"max_block_height": 640})
 
     def test_unknown_element_saved_as_stub(self):
         # Стиль Home Assistant «card not found»: незнакомый элемент не
         # выбрасывается — хранится заглушкой с общими свойствами раскладки.
         saved = client.put(
             "/api/ui/today",
-            json={"items": [{"element": "future-card", "span": 2, "custom": 1}]},
+            json={
+                "settings": {},
+                "items": [{"element": "future-card", "span": 2, "custom": 1, "height": "tall"}],
+            },
         ).json()
         stub = saved["items"][0]
         self.assertEqual(stub["element"], "future-card")
         self.assertEqual(stub["span"], 2)
+        self.assertEqual(stub["height"], "tall")  # уровень высоты переживает неизвестность
         self.assertFalse(stub["hidden"])
         self.assertNotIn("custom", stub)
 
@@ -156,13 +191,14 @@ class UiConfigTest(unittest.TestCase):
         saved = client.put(
             "/api/ui/today",
             json={
+                "settings": {},
                 "items": [
                     {"element": 42},  # не строка — элемент пропускается
                     {"element": "pomodoro"},
                     {"element": "pomodoro", "span": 4},  # дубль — выброшен
                     {"no_element": True},
                     {"element": "notifications", "span": 4},
-                ]
+                ],
             },
         ).json()
         self.assertEqual(
@@ -173,22 +209,33 @@ class UiConfigTest(unittest.TestCase):
 
     def test_revisions_snapshot_and_restore(self):
         # Первый сейв: сохранять нечего — ревизий нет.
-        first = client.put("/api/ui/today", json={"items": [{"element": "pomodoro", "span": 2}]}).json()
+        first = client.put(
+            "/api/ui/today",
+            json={"settings": {"max_block_height": 420}, "items": [{"element": "pomodoro", "span": 2}]},
+        ).json()
         self.assertEqual(client.get("/api/ui/today/revisions").json()["items"], [])
         # Второй сейв меняет раскладку — прежняя становится снимком.
-        second = client.put("/api/ui/today", json={"items": [{"element": "pomodoro", "span": 4}]}).json()
+        second = client.put(
+            "/api/ui/today",
+            json={"settings": {"max_block_height": 640}, "items": [{"element": "pomodoro", "span": 4}]},
+        ).json()
         revisions = client.get("/api/ui/today/revisions").json()["items"]
         self.assertEqual(len(revisions), 1)
         self.assertEqual(revisions[0]["elements"], ["pomodoro"])
         # Повтор того же сейва — реальных изменений нет, история не растёт.
-        client.put("/api/ui/today", json={"items": [{"element": "pomodoro", "span": 4}]}).json()
+        client.put(
+            "/api/ui/today",
+            json={"settings": {"max_block_height": 640}, "items": [{"element": "pomodoro", "span": 4}]},
+        ).json()
         self.assertEqual(len(client.get("/api/ui/today/revisions").json()["items"]), 1)
         # Откат не разрушающий: текущее (span 4) тоже станет снимком,
-        # страница вернётся к span 2.
+        # страница вернётся к span 2 — и настройка страницы вернётся со
+        # снимком: она едет в том же снимке, что и раскладка.
         restored = client.post(
             "/api/ui/today/revisions/{}/restore".format(revisions[0]["id"])
         ).json()
         self.assertEqual(restored["items"][0]["span"], 2)
+        self.assertEqual(restored["settings"], {"max_block_height": 420})
         after = client.get("/api/ui/today/revisions").json()["items"]
         self.assertEqual(len(after), 2)
         self.assertEqual(after[0]["elements"], ["pomodoro"])  # снимок span 4
@@ -198,12 +245,41 @@ class UiConfigTest(unittest.TestCase):
         )
         client.post("/api/ui/today/reset")
 
+    def test_settings_only_change_is_real_change(self):
+        # Изменилась только настройка страницы (элементы те же) — это
+        # реальное изменение: снимок, сигнал вкладкам, откат возвращает.
+        client.put(
+            "/api/ui/today",
+            json={"settings": {}, "items": [{"element": "pomodoro", "span": 2}]},
+        ).json()
+        with events_bus.subscribe(self.user_id) as q:
+            client.put(
+                "/api/ui/today",
+                json={"settings": {"max_block_height": 720}, "items": [{"element": "pomodoro", "span": 2}]},
+            )
+            event = q.get(timeout=2)
+        self.assertEqual(event.type, "ui.changed")
+        revisions = client.get("/api/ui/today/revisions").json()["items"]
+        self.assertEqual(len(revisions), 1)
+        # Текущее состояние — 720; снимок хранит прежние пустые настройки,
+        # нормализованные в дефолт 480.
+        self.assertEqual(
+            client.get("/api/ui/today").json()["settings"], {"max_block_height": 720}
+        )
+        restored = client.post(
+            "/api/ui/today/revisions/{}/restore".format(revisions[0]["id"])
+        ).json()
+        self.assertEqual(restored["settings"], {"max_block_height": 480})
+        client.post("/api/ui/today/reset")
+
     def test_reset_keeps_history_restorable(self):
-        client.put("/api/ui/today", json={"items": [{"element": "pomodoro", "span": 1}]})
-        client.put("/api/ui/today", json={"items": [{"element": "notifications", "span": 2}]})
+        client.put("/api/ui/today", json={"settings": {}, "items": [{"element": "pomodoro", "span": 1}]})
+        client.put("/api/ui/today", json={"settings": {}, "items": [{"element": "notifications", "span": 2}]})
         reset = client.post("/api/ui/today/reset").json()
         self.assertTrue(reset["is_default"])
         self.assertEqual([item["element"] for item in reset["items"]], DEFAULT_ELEMENTS)
+        # Сброс вернул и настройку страницы — дефолт из каталога.
+        self.assertEqual(reset["settings"], {"max_block_height": 480})
         # История пережила сброс: снимок прежней раскладки доступен и после
         # удаления строки конфига.
         revisions = client.get("/api/ui/today/revisions").json()["items"]
@@ -243,7 +319,10 @@ class UiConfigTest(unittest.TestCase):
 
     def test_save_publishes_ui_changed(self):
         with events_bus.subscribe(self.user_id) as q:
-            client.put("/api/ui/today", json={"items": [{"element": "pomodoro", "span": 3}]})
+            client.put(
+                "/api/ui/today",
+                json={"settings": {}, "items": [{"element": "pomodoro", "span": 3}]},
+            )
             event = q.get(timeout=2)
         self.assertEqual(event.type, "ui.changed")
         self.assertEqual(event.payload, {"page": "today"})
@@ -259,7 +338,10 @@ class UiConfigTest(unittest.TestCase):
         client.put("/api/settings", json={"module": "ui", "key": "history.keep_revisions", "scope": "global", "value": 2})
         try:
             for span in (1, 2, 3, 4):
-                client.put("/api/ui/today", json={"items": [{"element": "pomodoro", "span": span}]})
+                client.put(
+                    "/api/ui/today",
+                    json={"settings": {}, "items": [{"element": "pomodoro", "span": span}]},
+                )
             revisions = client.get("/api/ui/today/revisions").json()["items"]
             self.assertEqual(len(revisions), 2)
         finally:

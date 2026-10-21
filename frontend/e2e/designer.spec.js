@@ -142,8 +142,8 @@ test("сброс к стандартной и история изменений"
   // Два сохранения подряд: второе меняет первое — в истории появляется
   // снимок «одна карточка» (первое сохранение снимков не создаёт: прежде
   // сохранять нечего).
-  await api.put("/api/ui/today", { data: { items: [{ element: "pomodoro", span: 2 }] } })
-  const put = await api.put("/api/ui/today", { data: { items: [{ element: "pomodoro", span: 4 }] } })
+  await api.put("/api/ui/today", { data: { items: [{ element: "pomodoro", span: 2 }], settings: {} } })
+  const put = await api.put("/api/ui/today", { data: { items: [{ element: "pomodoro", span: 4 }], settings: {} } })
   expect(put.ok()).toBeTruthy()
 
   await login(page)
@@ -163,15 +163,77 @@ test("сброс к стандартной и история изменений"
   await expect(page.locator(".ui-grid .ui-item")).toHaveCount(1)
 })
 
+test("высота блока настраивается уровнем, страница — максимумом", async ({ page }) => {
+  await login(page)
+  await openEditor(page)
+  // Вкладка «Страница»: максимум высоты блоков.
+  await page.getByRole("button", { name: "Страница" }).click()
+  await expect(page.locator(".designer-page")).toBeVisible()
+  await page.locator(".designer-field", { hasText: "Максимальная высота блока" }).locator("select").selectOption("640")
+  await expect(page.locator(".designer-saving")).toBeVisible()
+  await expect(page.locator(".designer-saving")).toHaveCount(0)
+  // Переменная приехала на сетку страницы.
+  const cssVar = await page.locator(".ui-grid").evaluate((el) => el.style.getPropertyValue("--ui-max-h"))
+  expect(cssVar).toBe("640px")
+  // «Средний» = три четверти максимума = ровно 480px. «Авто» ничего
+  // не фиксирует — высоту даёт только выбранный уровень.
+  await page.getByRole("button", { name: "Элементы" }).click()
+  await selectElement(page, "Просроченные")
+  const card = page.locator(".ui-item[data-element='overdue-tasks']")
+  await expect(card).not.toHaveClass(/ui-height/)
+  await page.locator(".designer-field", { hasText: "Высота" }).locator("select").selectOption("medium")
+  await expect(card).toHaveClass(/ui-height-medium/)
+  await expect(card).toHaveCSS("height", "480px")
+  // Блок не растёт: содержимое скроллится внутри тела карточки.
+  await expect(card.locator(".card-body")).toHaveCSS("overflow-y", "auto")
+  await expect(page.locator(".designer-saving")).toBeVisible()
+  await expect(page.locator(".designer-saving")).toHaveCount(0)
+  // Переживает перезагрузку: конфиг на бэкенде, не в localStorage.
+  await page.reload()
+  await expect(page.locator(".ui-item[data-element='overdue-tasks']")).toHaveCSS("height", "480px")
+})
+
+test("внутренние элементы: колонки, выравнивание, отступы, разделители", async ({ page }) => {
+  const api = await apiLogin()
+  // Строки «Проектов» появляются только с данными: создаём проект.
+  await api.post("/api/projects", { data: { name: "Раскладка " + Date.now() } })
+
+  await login(page)
+  await openEditor(page)
+  await selectElement(page, "Проекты")
+  const list = page.locator(".ui-item[data-element='projects'] .ui-items")
+  // База — как до настройки: контейнер без модификаторов.
+  await expect(list).toBeVisible()
+  await expect(list).not.toHaveClass(/ui-items--/)
+  // Две колонки.
+  await page.locator(".designer-field", { hasText: "Колонки" }).locator("select").selectOption("2")
+  await expect(list).toHaveClass(/ui-items--cols-2/)
+  // Выравнивание по центру — строки сжимаются к середине.
+  await page.locator(".designer-field", { hasText: "Выравнивание" }).locator("select").selectOption("center")
+  await expect(list).toHaveClass(/ui-items--align-center/)
+  // Отступ свободный, разделители выкл.
+  await page.locator(".designer-field", { hasText: "Отступ между строками" }).locator("select").selectOption("spacious")
+  await page.locator(".designer-field", { hasText: "Разделители строк" }).locator("input").uncheck()
+  await expect(list).toHaveClass(/ui-items--gap-spacious/)
+  await expect(list).toHaveClass(/ui-items--no-dividers/)
+  await expect(page.locator(".designer-saving")).toBeVisible()
+  await expect(page.locator(".designer-saving")).toHaveCount(0)
+  // Переживает перезагрузку.
+  await page.reload()
+  await expect(page.locator(".ui-item[data-element='projects'] .ui-items")).toHaveClass(/ui-items--cols-2/)
+})
+
 test("конфиг страницы не ломается мусором с клиента", async ({ page }) => {
   const api = await apiLogin()
   // Прямая запись мусора через API (минуя нормализацию нельзя — но
-  // проверяем конверт): посторонние ключи долой, span вне списка —
-  // дефолт, дубль отброшен, неизвестный элемент жив заглушкой.
+  // проверяем конверт): посторонние ключи долой, span и height вне
+  // списка — дефолт, дубль отброшен, неизвестный элемент жив заглушкой,
+  // настройка страницы из списка не выпала — дефолт.
   const put = await api.put("/api/ui/today", {
     data: {
+      settings: { max_block_height: "очень" },
       items: [
-        { element: "pomodoro", span: 99, junk: "x" },
+        { element: "pomodoro", span: 99, junk: "x", height: "огромный" },
         { element: "pomodoro", span: 1 },
         { element: "legacy-card", span: 3 },
       ],
@@ -180,9 +242,10 @@ test("конфиг страницы не ломается мусором с кл
   expect(put.ok()).toBeTruthy()
   const state = await (await api.get("/api/ui/today")).json()
   expect(state.items).toEqual([
-    { element: "pomodoro", span: 2, hidden: false, title: "" },
-    { element: "legacy-card", span: 3, hidden: false },
+    { element: "pomodoro", span: 2, hidden: false, title: "", height: "auto" },
+    { element: "legacy-card", span: 3, hidden: false, height: "auto" },
   ])
+  expect(state.settings).toEqual({ max_block_height: 480 })
   // Страница рендерится: знакомая карточка + заглушка неизвестного.
   await login(page)
   await page.goto("/")

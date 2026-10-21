@@ -22,11 +22,13 @@ defineElement({ name: "notifications", title: "Уведомления", span: 2,
 defineElement({ name: "projects", title: "Проекты", span: 4, component: ProjectsCard })
 
 // Аварийная раскладка: реестр знает имена, подписи и ширины — этого
-// хватает, чтобы страница жила без сервера конфигураций.
+// хватает, чтобы страница жила без сервера конфигураций. Высота «авто»:
+// без конфига фиксировать нечего, карточки растут по содержимому.
 export function fallbackItems() {
   return allElements().map((element) => ({
     element: element.name,
     span: element.span,
+    height: "auto",
     hidden: false,
     title: "",
   }))

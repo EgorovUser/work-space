@@ -23,7 +23,7 @@ from app.core.logging import log_scope, logger
 from app.core.settings_store import get_bool, get_int
 from app.modules.ui import catalog
 from app.modules.ui.models import UiConfig, UiConfigRevision
-from app.modules.ui.service.normalize import items_equal, normalize_items
+from app.modules.ui.service.normalize import configs_equal, normalize_items, normalize_settings
 
 UI_CHANGED = "ui.changed"
 
@@ -42,23 +42,39 @@ _TODAY_OMIT_BY_SETTING = {
 
 
 def page_state(session: Session, user_id: int, page_name: str) -> dict:
-    """Эффективная конфигурация страницы + каталог для инспектора."""
+    """Эффективная конфигурация страницы (настройки + элементы) и каталог
+    для инспектора."""
     page = catalog.get_page(page_name)
     if page is None:
         raise LookupError("Неизвестная страница")
     row = _row(session, user_id, page_name)
     if row is None:
-        items = default_items(page_name)
+        config = {"settings": default_settings(page), "items": default_items(page_name)}
         is_default = True
     else:
-        items = normalize_items(page, _load(row.data_json, page_name))
+        config = _effective(page, row.data_json)
         is_default = False
     return {
         "page": page_name,
         "schema_version": page.schema_version,
         "is_default": is_default,
-        "items": items,
+        "settings": config["settings"],
+        "items": config["items"],
         "catalog": catalog.catalog_payload(page),
+    }
+
+
+def default_settings(page) -> dict:
+    """Настройки страницы по умолчанию — из каталога."""
+    return {prop.key: prop.default for prop in page.settings}
+
+
+def _effective(page, raw: str) -> dict:
+    """Нормализованный конфиг из сохранённой строки."""
+    loaded = _load(raw)
+    return {
+        "settings": normalize_settings(page, loaded["settings"]),
+        "items": normalize_items(page, loaded["items"]),
     }
 
 
@@ -83,21 +99,33 @@ def default_items(page_name: str) -> list[dict]:
     return items
 
 
-def save_config(session: Session, user_id: int, page_name: str, raw_items: object, actor_id: int | None) -> dict:
-    """Сохранить конфиг: нормализация, снимок прежнего, сигнал вкладкам."""
+def save_config(
+    session: Session,
+    user_id: int,
+    page_name: str,
+    raw_items: object,
+    raw_settings: object,
+    actor_id: int | None,
+) -> dict:
+    """Сохранить конфиг: нормализация, снимок прежнего, сигнал вкладкам.
+
+    Форма хранилища — ``{"settings": …, "items": …}``: настройка страницы
+    (например, максимум высоты блоков) едет в том же снимке, что и
+    раскладка, — откат из истории возвращает и её.
+    """
     page = catalog.get_page(page_name)
     if page is None:
         raise LookupError("Неизвестная страница")
-    items = normalize_items(page, raw_items)
+    config = {"settings": normalize_settings(page, raw_settings), "items": normalize_items(page, raw_items)}
     row = _row(session, user_id, page_name)
     if row is not None:
-        if items_equal(normalize_items(page, _load(row.data_json, page_name)), items):
+        if configs_equal(_effective(page, row.data_json), config):
             # Реальных изменений нет — снимок не создаём, вкладки не дёргаем.
             with log_scope("ui", "save.noop", user_id=actor_id):
                 logger.info("ui config unchanged page={}", page_name)
             return page_state(session, user_id, page_name)
-        _add_revision(session, page_name, user_id, actor_id, _load(row.data_json, page_name))
-        row.data_json = json.dumps(items, ensure_ascii=False)
+        _add_revision(session, page_name, user_id, actor_id, _load(row.data_json))
+        row.data_json = _dump(config)
         row.schema_version = page.schema_version
         row.updated_by = actor_id
         row.updated_at = utcnow()
@@ -106,7 +134,7 @@ def save_config(session: Session, user_id: int, page_name: str, raw_items: objec
             UiConfig(
                 page=page_name,
                 user_id=user_id,
-                data_json=json.dumps(items, ensure_ascii=False),
+                data_json=_dump(config),
                 schema_version=page.schema_version,
                 updated_by=actor_id,
                 updated_at=utcnow(),
@@ -115,7 +143,7 @@ def save_config(session: Session, user_id: int, page_name: str, raw_items: objec
     session.flush()
     _publish(page_name, user_id)
     with log_scope("ui", "save", user_id=actor_id):
-        logger.info("ui config saved page={} items={}", page_name, len(items))
+        logger.info("ui config saved page={} items={}", page_name, len(config["items"]))
     return page_state(session, user_id, page_name)
 
 
@@ -128,7 +156,7 @@ def reset_config(session: Session, user_id: int, page_name: str, actor_id: int |
         raise LookupError("Неизвестная страница")
     row = _row(session, user_id, page_name)
     if row is not None:
-        _add_revision(session, page_name, user_id, actor_id, _load(row.data_json, page_name))
+        _add_revision(session, page_name, user_id, actor_id, _load(row.data_json))
         session.delete(row)
         session.flush()
     _publish(page_name, user_id)
@@ -151,13 +179,17 @@ def list_revisions(session: Session, user_id: int, page_name: str) -> dict:
     )
     items = []
     for row in rows:
-        saved = _load(row.data_json, page_name)
+        saved = _load(row.data_json)
         items.append(
             {
                 "id": row.id,
                 "created_at": row.created_at.isoformat(),
-                "items_count": len(saved),
-                "elements": [entry.get("element", "?") for entry in saved if isinstance(entry, dict)],
+                "items_count": len(saved["items"]),
+                "elements": [
+                    entry.get("element", "?")
+                    for entry in saved["items"]
+                    if isinstance(entry, dict)
+                ],
             }
         )
     return {"items": items}
@@ -178,11 +210,11 @@ def restore_revision(session: Session, user_id: int, page_name: str, revision_id
     ).one_or_none()
     if revision is None:
         raise LookupError("Ревизия не найдена")
-    restored = _load(revision.data_json, page_name)
+    restored = _load(revision.data_json)
     row = _row(session, user_id, page_name)
     if row is not None:
-        _add_revision(session, page_name, user_id, actor_id, _load(row.data_json, page_name))
-        row.data_json = json.dumps(restored, ensure_ascii=False)
+        _add_revision(session, page_name, user_id, actor_id, _load(row.data_json))
+        row.data_json = _dump(restored)
         row.schema_version = revision.schema_version
         row.updated_by = actor_id
         row.updated_at = utcnow()
@@ -191,7 +223,7 @@ def restore_revision(session: Session, user_id: int, page_name: str, revision_id
             UiConfig(
                 page=page_name,
                 user_id=user_id,
-                data_json=json.dumps(restored, ensure_ascii=False),
+                data_json=_dump(restored),
                 schema_version=revision.schema_version,
                 updated_by=actor_id,
                 updated_at=utcnow(),
@@ -210,12 +242,12 @@ def _row(session: Session, user_id: int, page_name: str) -> UiConfig | None:
     ).one_or_none()
 
 
-def _add_revision(session: Session, page_name: str, user_id: int, actor_id: int | None, items: list[dict]) -> None:
+def _add_revision(session: Session, page_name: str, user_id: int, actor_id: int | None, config: dict) -> None:
     session.add(
         UiConfigRevision(
             page=page_name,
             user_id=user_id,
-            data_json=json.dumps(items, ensure_ascii=False),
+            data_json=_dump(config),
             schema_version=catalog.get_page(page_name).schema_version,
             created_by=actor_id,
             created_at=utcnow(),
@@ -248,11 +280,31 @@ def _publish(page_name: str, user_id: int) -> None:
     _bus_publish(UI_CHANGED, {"page": page_name}, user_id)
 
 
-def _load(raw: str, page_name: str = "?") -> list:
+def _dump(config: dict) -> str:
+    return json.dumps(config, ensure_ascii=False)
+
+
+def _load(raw: str) -> dict:
+    """Сохранённая строка → конфиг ``{"settings": …, "items": …}``.
+
+    Форма менялась (до настроек страницы хранился голый список
+    элементов) и вообще может оказаться мусором — читаем без падения:
+    кривой конфиг не ломает страницу, нормализация вольёт дефолты.
+    """
     try:
         value = json.loads(raw)
     except Exception:
         with log_scope("ui", "read"):
-            logger.warning("ui config ignored page={}", page_name)
-        return []
-    return value if isinstance(value, list) else []
+            logger.warning("ui config ignored")
+        return {"settings": {}, "items": []}
+    if isinstance(value, dict):
+        settings = value.get("settings")
+        entries = value.get("items")
+        return {
+            "settings": settings if isinstance(settings, dict) else {},
+            "items": entries if isinstance(entries, list) else [],
+        }
+    if isinstance(value, list):
+        # Старая форма хранения: только элементы, настроек не было.
+        return {"settings": {}, "items": value}
+    return {"settings": {}, "items": []}

@@ -1,5 +1,5 @@
 <template>
-  <div class="ui-grid" :class="{ 'ui-editing': editing }">
+  <div class="ui-grid" :class="{ 'ui-editing': editing }" :style="gridStyle">
     <div
       v-for="item in renderItems"
       :key="item.element"
@@ -32,11 +32,13 @@
 <script>
 import { computed } from "vue"
 import { getElement } from "../../ui/elements.js"
-import { catalogMap, spanClass } from "../../ui/items.js"
+import { catalogMap, heightClass, spanClass } from "../../ui/items.js"
 
 // Рендерер редактируемой страницы (патч AW): сетка из элементов реестра,
 // ширина — span-классами из конфига. В режиме правки добавляет селекцию
 // и плёнку поверх содержимого; вне его — рисует только видимые элементы.
+// Настройки страницы (максимум высоты блоков) приезжают CSS-переменной
+// --ui-max-h: от неё считаются фиксированные уровни высоты карточек.
 export default {
   name: "PageRenderer",
   props: {
@@ -45,6 +47,7 @@ export default {
     context: { type: Object, required: true },
     editing: { type: Boolean, default: false },
     selected: { type: String, default: null },
+    settings: { type: Object, default: null },
   },
   emits: ["select"],
   setup(props, { emit }) {
@@ -52,6 +55,11 @@ export default {
       props.editing ? props.items : props.items.filter((item) => !item.hidden)
     )
     const byName = computed(() => catalogMap(props.catalog))
+
+    // Аварийный фолбэк (нет конфига вообще) — как дефолт настройки.
+    const gridStyle = computed(() => ({
+      "--ui-max-h": ((props.settings && Number(props.settings.max_block_height)) || 480) + "px",
+    }))
 
     function componentOf(item) {
       const element = getElement(item.element)
@@ -66,6 +74,7 @@ export default {
     function itemClasses(item) {
       return [
         spanClass(item.span),
+        heightClass(item.height),
         {
           "ui-selected": props.editing && props.selected === item.element,
           "ui-hidden-item": props.editing && item.hidden,
@@ -77,7 +86,7 @@ export default {
       if (props.editing) emit("select", item.element)
     }
 
-    return { renderItems, componentOf, badgeTitle, itemClasses, onItemClick }
+    return { renderItems, byName, gridStyle, componentOf, badgeTitle, itemClasses, onItemClick }
   },
 }
 </script>
