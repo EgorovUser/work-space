@@ -1,0 +1,88 @@
+/* помодоро и выбор задачи, rdp-инструменты — кусок бывшего styles.css (патч AP). */
+/* — Инструменты шапки: тема + уведомления — */
+.topbar-tools { display: flex; align-items: center; gap: 8px; }
+/* Помодоро (патч N): живой чип в шапке, клик ведёт на «Сегодня». */
+.pomo-chip {
+  border: 1px solid var(--accent-strong);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.pomo-chip.break { border-color: var(--ok-line); background: var(--ok-bg); color: var(--ok); }
+/* Чип серверного таймера (патч AL): спокойный контур — он сообщает,
+   а не требует внимания; цифры моноширинные, чтобы не прыгали. */
+.pomo-chip.timer {
+  border-color: var(--line-2);
+  background: var(--paper);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+/* Карточка помодоро на «Сегодня». */
+.today-pomo .pomo-clock {
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  color: var(--accent-strong);
+}
+.today-pomo .pomo-clock.break { color: var(--ok); }
+.pomo-input { width: 72px; }
+/* Выбор задачи поиском (патч AF): поле живёт в ряду со «Старт», результаты —
+   выпадающим списком под ним; выбранная задача — чип с крестиком. */
+.pomo-pick { position: relative; }
+.pomo-pick .task-picker { flex: 1 1 200px; min-width: 0; }
+.task-picker { position: relative; }
+.task-picker input { width: 100%; }
+.task-picker-drop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  padding: 4px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  max-height: 300px;
+  overflow: auto;
+}
+.task-picker-empty { padding: 12px 10px; text-align: center; font-size: 0.9rem; }
+.task-picker-item {
+  width: 100%;
+  display: grid;
+  gap: 1px;
+  border: 0;
+  background: transparent;
+  border-radius: 7px;
+  padding: 7px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.task-picker-item.active { background: var(--hover); outline: 1px solid var(--line); }
+.task-picker-title { color: var(--ink); overflow-wrap: anywhere; }
+.task-picker-proj { color: var(--muted); font-size: 0.8rem; }
+.pomo-task-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 200px;
+  min-width: 0;
+  border: 1px solid var(--accent-strong);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 4px 6px 4px 12px;
+  font-size: 0.88rem;
+}
+.pomo-task-chip strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pomo-task-chip .muted { flex: none; font-size: 0.78rem; }
+.pomo-task-clear { flex: none; font-size: 0.95rem; padding: 2px 6px; }
+.today-more { margin-top: 8px; }
+/* RDP: строка с пингом и меню. */
+.rdp-tools { display: flex; align-items: center; gap: 8px; flex: none; }
+.theme-btn-icon { font-size: 1.05rem; line-height: 1; }

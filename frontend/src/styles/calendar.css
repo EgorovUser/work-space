@@ -1,0 +1,110 @@
+/* календарь задач — кусок бывшего styles.css (патч AP). */
+/* ===== Календарь задач ===== */
+.view-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  margin-bottom: 12px;
+}
+.view-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 5px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.view-btn:hover { background: var(--hover); color: var(--ink); }
+.view-btn.active { background: var(--accent); color: var(--accent-ink); font-weight: 650; }
+.repeat-mark {
+  color: var(--accent);
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.cal-title { margin: 0; font-size: 1.1rem; font-weight: 650; }
+.cal-closed-toggle { margin-left: auto; white-space: nowrap; }
+.cal-skeleton { padding: 4px; }
+.cal-empty { margin-top: 12px; }
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cal-dow, .cal-cell { border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.cal-grid > :nth-child(-n + 7) { border-top: none; }
+.cal-grid > :nth-child(7n + 1) { border-left: none; }
+.cal-dow {
+  padding: 7px 10px;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--paper-2);
+}
+.cal-cell {
+  min-height: 96px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+}
+.cal-cell.out { background: var(--paper-2); }
+.cal-cell.out .cal-day { opacity: 0.55; }
+.cal-day {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: right;
+  padding: 0 4px 1px;
+}
+.cal-cell.today .cal-day {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-radius: 999px;
+  align-self: flex-end;
+  min-width: 22px;
+  text-align: center;
+  padding: 1px 6px;
+}
+.cal-chip {
+  font-size: 0.82rem;
+  line-height: 1.25;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--paper-2);
+  color: var(--ink);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-chip:hover { background: var(--accent-soft); }
+.cal-time { color: var(--muted); margin-right: 4px; font-variant-numeric: tabular-nums; }
+.cal-chip.overdue { background: var(--danger-bg); color: var(--danger); }
+.cal-chip.closed { text-decoration: line-through; color: var(--muted); }
+.cal-more { font-size: 0.75rem; color: var(--muted); padding: 0 6px; }
+
+@media (max-width: 800px) {
+  .cal-cell { min-height: 64px; padding: 3px; }
+  .cal-chip { font-size: 0.74rem; padding: 2px 5px; }
+  .cal-day { font-size: 0.7rem; }
+  .cal-title { font-size: 1rem; }
+}

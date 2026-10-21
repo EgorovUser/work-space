@@ -1,0 +1,82 @@
+/* нижняя навигация PWA и тач-таргеты — кусок бывшего styles.css (патч AP). */
+/* ===== PWA: нижняя навигация и удобные тач-таргеты ===== */
+.bottom-nav { display: none; }
+
+@media (max-width: 800px) {
+  /* Шесть главных адресов — внизу, под большим пальцем. Глобальная навигация
+     рельса на телефоне спрятана (дублируется этой панелью); сверху остаются
+     бренд, табы проекта и выход. */
+  .bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    background: var(--paper);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -4px 16px rgba(20, 24, 28, 0.08);
+    /* Чёлнок iPhone: не залезаем под домашний индикатор. */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .bottom-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 56px;
+    min-width: 44px;
+    padding: 6px 2px 8px;
+    color: var(--muted);
+    text-decoration: none;
+    position: relative;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bottom-link.active { color: var(--accent); font-weight: 650; }
+  .bottom-ico { width: 22px; height: 22px; display: flex; }
+  .bottom-ico svg { width: 100%; height: 100%; }
+  .bottom-label { font-size: 0.68rem; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bottom-badge {
+    position: absolute;
+    top: 4px;
+    left: calc(50% + 10px);
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--line);
+    color: var(--ink);
+    font-size: 0.66rem;
+    font-weight: 600;
+    line-height: 17px;
+    text-align: center;
+  }
+
+  /* Контент не прячется под фиксированной панелью. */
+  .app .app-body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+
+  /* Основная навигация рельса ушла вниз; проектная и выход — сверху. */
+  .rail > .rail-nav:first-of-type { display: none; }
+
+  /* Тач-таргеты не меньше 44px и без 300-мс задержки двойного тапа. */
+  .btn, .tab, .view-btn { min-height: 44px; }
+  .rail-nav a { min-height: 44px; display: inline-flex; align-items: center; }
+  .project-tabs a { min-height: 44px; display: inline-flex; align-items: center; }
+  .btn, .tab, .view-btn, .bottom-link, .rail-nav a, .project-tabs a, .check, .task-card a, .plain-list a {
+    touch-action: manipulation;
+  }
+  .btn, .tab, .view-btn, .bottom-link, .rail-nav a, .project-tabs a, .check { -webkit-tap-highlight-color: transparent; }
+
+  /* Поля ввода 16px — iOS не приближает страницу при фокусе. */
+  .app input, .app select, .app textarea,
+  .login-card input, .login-card select, .login-card textarea {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .bottom-label { font-size: 0.62rem; letter-spacing: 0; }
+  .bottom-ico { width: 20px; height: 20px; }
+}

@@ -1,0 +1,97 @@
+/* токены тем (:root, dark) и ресет — кусок бывшего styles.css (патч AP). */
+:root {
+  color-scheme: light;
+  /* Поверхности и текст */
+  --bg: #f3f4f6;
+  --paper: #ffffff;
+  --paper-2: #eef0f3;
+  --ink: #1c2127;
+  --muted: #5d6772;
+  --line: #e1e4e8;
+  --line-2: #c5cdd4;
+  --hover: #f6f7f8;
+  --field: #ffffff;
+  /* Акцент и состояния */
+  --accent: #0e6b54;
+  --accent-ink: #f3faf7;
+  --accent-strong: #0c5c48;
+  --accent-soft: rgba(14, 107, 84, 0.1);
+  --focus: #9bb5ac;
+  --danger: #8d2e2e;
+  --danger-bg: #f8ecea;
+  --danger-line: #e4c4bc;
+  --ok: #0e6b54;
+  --ok-bg: #e7f3ee;
+  --ok-line: #c5ddd2;
+  --ok-strong: #2e7d32;
+  --warn: #8a5a12;
+  --warn-bg: #f8efd8;
+  --warn-line: #ead7a8;
+  --badge: #c4473a;
+  /* Тёмная боковая панель — одинакова в обеих темах */
+  --rail: #1c2421;
+  --rail-ink: #e8eeea;
+  --rail-muted: #93a39b;
+  --rail-line: rgba(255, 255, 255, 0.08);
+  /* Тени */
+  --shadow: 0 1px 2px rgba(20, 24, 28, 0.04);
+  --shadow-lg: 0 12px 32px rgba(20, 24, 28, 0.16);
+  /* Скелетоны */
+  --skel-a: #e7eaee;
+  --skel-b: #f4f6f8;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+/* Тёмная тема: html[data-theme] всегда light или dark (auto разрешается
+   в useTheme/index.html до первой отрисовки — без белой вспышки). */
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #10161a;
+  --paper: #1a2126;
+  --paper-2: #232b31;
+  --ink: #e4e8ec;
+  --muted: #97a3ad;
+  --line: #2c353c;
+  --line-2: #3a444c;
+  --hover: #232c33;
+  --field: #1e262c;
+  --accent: #35a585;
+  --accent-ink: #08130f;
+  --accent-strong: #46b895;
+  --accent-soft: rgba(53, 165, 133, 0.16);
+  --focus: #3f6c5e;
+  --danger: #e08585;
+  --danger-bg: #33201f;
+  --danger-line: #4a2f2c;
+  --ok: #35a585;
+  --ok-bg: #14231e;
+  --ok-line: #2c4a3d;
+  --ok-strong: #4cb98a;
+  --warn: #d9a55c;
+  --warn-bg: #2a2314;
+  --warn-line: #4a3d22;
+  --badge: #d05a4c;
+  --rail: #151b18;
+  --rail-ink: #dfe7e2;
+  --rail-muted: #8a9a92;
+  --rail-line: rgba(255, 255, 255, 0.08);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --skel-a: #232b31;
+  --skel-b: #2b343b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button, a { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a { color: var(--accent); }

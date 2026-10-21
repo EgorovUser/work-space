@@ -1,0 +1,44 @@
+/* сетка «Сегодня» и сводка недель — кусок бывшего styles.css (патч AP). */
+.home-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.home-grid > :first-child { grid-column: 1 / -1; }
+
+/* Сетка хаба «Сегодня»: просроченные — на всю ширину, остальное — в два
+   столбца; на телефоне всё складывается в один. */
+.today-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.today-grid > :first-child { grid-column: 1 / -1; }
+
+.today-date { text-transform: capitalize; }
+
+/* Сводка времени по всем проектам (патч S): две карточки недель рядом,
+   выбранная подсвечена; на телефоне складываются в столбец. */
+.week-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.week-card { margin: 0; }
+
+.week-card.active { border-color: var(--accent); }
+
+.week-range { margin: 0; }
+
+.week-hours {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 6px 0;
+}

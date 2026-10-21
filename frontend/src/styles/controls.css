@@ -1,0 +1,153 @@
+/* карточки, кнопки, поля, списочные строки — кусок бывшего styles.css (патч AP). */
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+
+h1, h2, h3 { font-weight: 650; line-height: 1.25; margin: 0 0 8px; }
+h1 { font-size: 1.35rem; letter-spacing: -0.02em; }
+h2 { font-size: 1.02rem; }
+h3 { font-size: 0.95rem; }
+
+.muted { color: var(--muted); }
+
+.error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  padding: 8px 10px;
+  border: 1px solid var(--danger-line);
+  border-radius: 6px;
+  margin: 8px 0;
+}
+
+.ok-text { color: var(--ok); }
+.bad-text { color: var(--danger); }
+
+.banner {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid var(--warn-line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 8px 0;
+}
+
+.stack { display: grid; gap: 10px; }
+label { display: grid; gap: 4px; font-size: 0.92rem; }
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="search"],
+textarea,
+select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+}
+
+input:focus, textarea:focus, select:focus { border-color: var(--focus); outline: none; }
+
+textarea { min-height: 88px; resize: vertical; }
+
+.btn {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 7px 14px;
+  border-radius: 8px;
+}
+
+.btn:hover { background: var(--accent-strong); }
+.btn.secondary {
+  background: var(--paper);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.btn.secondary:hover { background: var(--hover); }
+
+.btn:disabled { opacity: 0.55; cursor: default; }
+
+.text-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.menu-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.menu-btn:hover { background: var(--bg); color: var(--ink); }
+
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row-actions input[type="text"],
+.row-actions select,
+.row-actions input[type="file"] { width: auto; flex: 1 1 160px; min-width: 0; }
+
+.check { display: flex; align-items: center; gap: 8px; }
+.check input { width: auto; }
+.hint { margin: 4px 0 0; }
+
+.list {
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.list-row {
+  display: grid;
+  gap: 2px 12px;
+  align-items: center;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.list > :last-child { border-bottom: 0; }
+
+.list-row strong { color: var(--ink); }
+.list-row:hover { background: var(--hover); }
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.inbox-list { margin-top: 8px; }
+.inbox-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+}
+.inbox-row strong { font-weight: 650; }
+.inbox-row .unread { font-weight: 750; }
+.inbox-row .when { color: var(--muted); white-space: nowrap; }
+.inbox-row .inbox-actions { display: flex; gap: 8px; align-items: center; white-space: nowrap; }

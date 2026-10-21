@@ -1,0 +1,165 @@
+/* каркас: рельса, шапка, фокус-строка — кусок бывшего styles.css (патч AP). */
+.app {
+  height: 100vh;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 228px minmax(0, 1fr);
+}
+
+.rail {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 10px 12px;
+  background: var(--rail);
+  color: var(--rail-ink);
+  overflow: auto;
+}
+
+.brand {
+  padding: 4px 10px 8px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.rail-nav { display: grid; gap: 2px; }
+
+.rail-nav a {
+  display: block;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--rail-ink);
+  text-decoration: none;
+}
+
+.rail-nav a:hover { background: rgba(255, 255, 255, 0.06); }
+.rail-nav a.router-link-active { background: rgba(255, 255, 255, 0.12); color: #fff; }
+
+.rail-foot {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rail-line);
+}
+
+/* Активный фокус в рельсе (патч AL): строка над именем пользователя —
+   видна только когда что-то идёт. Часы тикают, подпись — задача или
+   заметка, кнопка — стоп. Помодоро — акцентный, перерыв — зелёный,
+   серверный таймер — спокойный контур. */
+.rail-focus {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px 6px 6px 8px;
+  border: 1px solid var(--rail-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  margin-bottom: 4px;
+}
+.rail-focus-link {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  text-decoration: none;
+}
+.rail-focus-clock {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.rail-focus-sub {
+  color: var(--rail-muted);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail-focus-stop {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--rail-muted);
+  border-radius: 6px;
+  padding: 0 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.rail-focus-stop:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.rail-focus.pomo { border-color: rgba(255, 255, 255, 0.22); }
+.rail-focus.break { border-color: var(--ok-line); }
+.rail-focus.break .rail-focus-clock { color: var(--ok); }
+
+.rail-user {
+  padding: 0 8px;
+  color: var(--rail-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Сборка патча — под кнопкой выхода: быстрый ответ на «какая версия крутится». */
+.rail-build {
+  padding: 0 8px;
+  color: var(--rail-muted);
+  font-size: 0.72rem;
+  text-align: center;
+  user-select: none;
+}
+
+.rail .btn.secondary {
+  border-color: transparent;
+  color: var(--rail-ink);
+  background: transparent;
+  text-align: left;
+}
+
+.rail .btn.secondary:hover { background: rgba(255, 255, 255, 0.08); }
+
+.app-main {
+  min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px 0 20px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.app-body.bare {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}

@@ -1,0 +1,112 @@
+/* страницы, контейнеры, табы проекта — кусок бывшего styles.css (патч AP). */
+.page {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 28px 32px 64px;
+}
+
+.project-wrap {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 24px 32px 56px;
+}
+
+.project-wrap.board-page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  align-self: stretch;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 12px 16px;
+}
+
+.project-wrap,
+.project-body,
+.board-stage,
+.board-stage > section,
+.kanban {
+  min-width: 0;
+}
+
+.project-wrap.board-page .project-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.board-stage {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.board-stage.scroll { overflow: auto; }
+.board-stage > * { width: 100%; min-width: 0; }
+
+.board-fill { width: 100%; }
+.board-fill-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+.board-fill-grid > .card { margin: 0; height: 100%; }
+.board-fill-grid > .card.wide { grid-column: 1 / -1; }
+
+.board-stage:not(.scroll) > section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.page-head h1 { margin: 0; }
+.clip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Разделы проекта — горизонтальные табы под шапкой. На телефоне лента
+   скроллится вбок, чтобы не съедать экран второй строкой. */
+.project-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.project-tabs a {
+  text-decoration: none;
+  color: var(--muted);
+  padding: 8px 12px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+
+.project-tabs a:hover { color: var(--ink); }
+
+.project-tabs a.router-link-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 650;
+}

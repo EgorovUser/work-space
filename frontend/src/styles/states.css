@@ -1,0 +1,44 @@
+/* скелетоны загрузки и пустые состояния — кусок бывшего styles.css (патч AP). */
+/* — Скелетоны: заглушки на время загрузки списков — */
+.skel-list { display: grid; gap: 10px; }
+.skel-row {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.skel {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(100deg, var(--skel-a) 30%, var(--skel-b) 50%, var(--skel-a) 70%);
+  background-size: 200% 100%;
+  animation: ws-skel 1.4s ease-in-out infinite;
+}
+.skel-title { width: 58%; height: 14px; }
+.skel-meta { width: 82%; }
+.skel-meta--short { width: 45%; }
+@keyframes ws-skel {
+  0% { background-position: 150% 0; }
+  100% { background-position: -50% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel { animation: none; }
+}
+
+/* — Пустые состояния: объяснение вместо одинокой строчки — */
+.empty {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 22px 18px;
+  margin: 12px 0;
+  border: 1px dashed var(--line-2);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--muted);
+}
+.empty strong { color: var(--ink); font-weight: 650; }
+.empty span { font-size: 0.92rem; }
